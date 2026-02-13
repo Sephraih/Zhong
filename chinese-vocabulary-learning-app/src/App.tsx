@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { AuthProvider } from "./contexts/AuthContext";
 import { getEnrichedVocabulary } from "./data/mergeExamples";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
@@ -6,14 +7,17 @@ import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
 import { useLearnedState } from "./hooks/useLearnedState";
+import { AuthModal } from "./components/AuthModal";
+import { AuthHeader } from "./components/AuthHeader";
+import { ProfilePage } from "./components/ProfilePage";
 
 const vocabulary = getEnrichedVocabulary();
 
-type ViewMode = "browse" | "flashcards" | "quiz" | "practice";
+type ViewMode = "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
-export function App() {
+function AppContent() {
   const [viewMode, setViewMode] = useState<ViewMode>("browse");
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -23,6 +27,8 @@ export function App() {
   const [flashcardKey, setFlashcardKey] = useState(0);
   const [flashcardStatusFilter, setFlashcardStatusFilter] = useState<FlashcardFilter>("all");
   const [quizKey, setQuizKey] = useState(0);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
 
   const learnedState = useLearnedState();
   const { isLearned, toggleLearned, learnedCount } = learnedState;
@@ -60,6 +66,11 @@ export function App() {
     return vocabulary.filter((w) => w.hskLevel === hskFilter);
   }, [hskFilter]);
 
+  const openAuthModal = (mode: "login" | "signup") => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
@@ -70,7 +81,7 @@ export function App() {
               <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
                 <span className="text-white text-lg font-bold">汉</span>
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-white leading-tight">汉语学习</h1>
                 <p className="text-[10px] text-gray-500 font-medium tracking-wider uppercase">Chinese Learning</p>
               </div>
@@ -98,19 +109,24 @@ export function App() {
               ))}
             </nav>
 
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
+            {/* Auth Section */}
+            <div className="flex items-center gap-2">
+              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
+              
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {mobileMenuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Mobile Nav */}
@@ -194,6 +210,15 @@ export function App() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {viewMode === "profile" && (
+          <ProfilePage
+            totalWords={vocabulary.length}
+            learnedCount={learnedCount}
+            stillLearningCount={stillLearningCount}
+            onBack={() => setViewMode("browse")}
+          />
+        )}
+
         {viewMode === "browse" && (
           <>
             {/* Filters */}
@@ -481,6 +506,21 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode={authModalMode}
+      />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
