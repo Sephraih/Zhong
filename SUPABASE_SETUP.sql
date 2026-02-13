@@ -42,10 +42,16 @@ CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
--- Service role can do anything (needed for backend/webhook updates)
-DROP POLICY IF EXISTS "Service role full access profiles" ON public.profiles;
-CREATE POLICY "Service role full access profiles"
-  ON public.profiles FOR ALL
+-- Allow inserts for new users (from trigger or webhook)
+DROP POLICY IF EXISTS "Allow profile inserts" ON public.profiles;
+CREATE POLICY "Allow profile inserts"
+  ON public.profiles FOR INSERT
+  WITH CHECK (true);
+
+-- Allow updates from service role (webhook updates)
+DROP POLICY IF EXISTS "Allow profile updates" ON public.profiles;
+CREATE POLICY "Allow profile updates"
+  ON public.profiles FOR UPDATE
   USING (true)
   WITH CHECK (true);
 
@@ -56,10 +62,16 @@ CREATE POLICY "Users can view own subscriptions"
   ON public.subscriptions FOR SELECT
   USING (auth.uid() = user_id);
 
--- Service role can do anything (needed for backend/webhook updates)
-DROP POLICY IF EXISTS "Service role full access subscriptions" ON public.subscriptions;
-CREATE POLICY "Service role full access subscriptions"
-  ON public.subscriptions FOR ALL
+-- Allow inserts for subscriptions (from webhook)
+DROP POLICY IF EXISTS "Allow subscription inserts" ON public.subscriptions;
+CREATE POLICY "Allow subscription inserts"
+  ON public.subscriptions FOR INSERT
+  WITH CHECK (true);
+
+-- Allow updates for subscriptions (from webhook)
+DROP POLICY IF EXISTS "Allow subscription updates" ON public.subscriptions;
+CREATE POLICY "Allow subscription updates"
+  ON public.subscriptions FOR UPDATE
   USING (true)
   WITH CHECK (true);
 

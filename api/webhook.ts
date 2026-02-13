@@ -20,14 +20,30 @@ export const config = {
 };
 
 async function setUserPremium(userId: string, isPremium: boolean) {
-  await supabase.auth.admin.updateUserById(userId, {
+  console.log(`🔧 Updating premium status for user ${userId} to ${isPremium}`);
+  
+  // Update auth metadata
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
     app_metadata: { is_premium: isPremium },
   });
+  
+  if (authError) {
+    console.error('❌ Auth metadata update error:', authError);
+  } else {
+    console.log('✅ Auth metadata updated');
+  }
 
-  await supabase
+  // Update profiles table
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({ is_premium: isPremium })
     .eq('id', userId);
+    
+  if (profileError) {
+    console.error('❌ Profile update error:', profileError);
+  } else {
+    console.log('✅ Profile updated');
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -37,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sig = req.headers['stripe-signature'];
   if (!sig) {
+    console.error('❌ Missing Stripe signature');
     return res.status(400).send('Missing signature');
   }
 
@@ -50,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -62,11 +79,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
 
-        if (!userId) break;
+        console.log('💳 Checkout completed for session:', session.id);
+        console.log('👤 User ID from metadata:', userId);
+        console.log('🆔 Customer ID:', session.customer);
 
+        if (!userId) {
+          console.error('❌ No user_id in session metadata!');
+          break;
+        }
+
+        // Ensure profile exists first
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .single();
+
+        if (!existingProfile) {
+          console.log('⚠️ Profile not found, creating one...');
+          const { data: user } = await supabase.auth.admin.getUserById(userId);
+          if (user) {
+            await supabase.from('profiles').insert({
+              id: userId,
+              email: user.user.email,
+              is_premium: false,
+            });
+            console.log('✅ Profile created');
+          }
+        }
+
+        console.log('🔄 Setting user to premium...');
         await setUserPremium(userId, true);
 
-        await supabase.from('subscriptions').insert({
+        console.log('💾 Inserting subscription record...');
+        const { error: subError } = await supabase.from('subscriptions').insert({
           user_id: userId,
           stripe_customer_id: session.customer as string,
           stripe_subscription_id: (session.subscription as string) || null,
@@ -75,6 +121,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status: 'active',
           current_period_start: new Date().toISOString(),
         });
+
+        if (subError) {
+          console.error('❌ Subscription insert error:', subError);
+        } else {
+          console.log('✅ Premium activation complete!');
+        }
         break;
       }
 
