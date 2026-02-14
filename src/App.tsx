@@ -10,15 +10,16 @@ import { useLearnedState } from "./hooks/useLearnedState";
 import { AuthModal } from "./components/AuthModal";
 import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
+import { LandingPage } from "./components/LandingPage";
 
 const vocabulary = getEnrichedVocabulary();
 
-type ViewMode = "browse" | "flashcards" | "quiz" | "practice" | "profile";
+type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
 function AppContent() {
-  const [viewMode, setViewMode] = useState<ViewMode>("browse");
+  const [viewMode, setViewMode] = useState<ViewMode>("home");
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,15 +78,22 @@ function AppContent() {
       <header className="sticky top-0 z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setViewMode("home");
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
+              title="Go to Home"
+            >
               <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
                 <span className="text-white text-lg font-bold">汉</span>
               </div>
-              <div className="hidden sm:block">
+              <div className="hidden sm:block text-left">
                 <h1 className="text-lg font-bold text-white leading-tight">汉语学习</h1>
                 <p className="text-[10px] text-gray-500 font-medium tracking-wider uppercase">Chinese Learning</p>
               </div>
-            </div>
+            </button>
 
             {/* Desktop Nav */}
             <nav className="hidden md:flex items-center gap-1">
@@ -210,6 +218,13 @@ function AppContent() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {viewMode === "home" && (
+          <LandingPage
+            onSelectMode={(mode) => {
+              setViewMode(mode);
+            }}
+          />
+        )}
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
