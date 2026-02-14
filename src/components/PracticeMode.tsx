@@ -9,10 +9,14 @@ interface PracticeModeProps {
   learnedState: LearnedState;
 }
 
+type HskLevelFilter = "all" | 1 | 2;
+
 interface StoredSession {
   ids: number[];
   currentIndex: number;
   cycleCount: number;
+  hskLevel: HskLevelFilter;
+  infoDismissed?: boolean;
 }
 
 const STORAGE_KEY = "hanyu-practice-session";
@@ -23,6 +27,8 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
+  const [hskLevel, setHskLevel] = useState<HskLevelFilter>("all");
+  const [infoDismissed, setInfoDismissed] = useState(false);
 
   const { markAsLearned, markAsStillLearning, isLearned } = learnedState;
 
@@ -35,12 +41,14 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     return a;
   };
 
-  const saveSession = (words: VocabWord[], index: number, cycle: number) => {
+  const saveSession = (words: VocabWord[], index: number, cycle: number, level: HskLevelFilter, dismissed: boolean) => {
     try {
       const payload: StoredSession = {
         ids: words.map((w) => w.id),
         currentIndex: index,
         cycleCount: cycle,
+        hskLevel: level,
+        infoDismissed: dismissed,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
@@ -68,10 +76,10 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     }
   };
 
-  const startNewSession = () => {
-    const unlearned = shuffleArray(allWords.filter((w) => !isLearned(w.id)));
-    const learned = shuffleArray(allWords.filter((w) => isLearned(w.id)));
-
+  const startNewSession = (level: HskLevelFilter = hskLevel) => {
+    const pool = level === "all" ? allWords : allWords.filter((w) => w.hskLevel === level);
+    const unlearned = shuffleArray(pool.filter((w) => !isLearned(w.id)));
+    const learned = shuffleArray(pool.filter((w) => isLearned(w.id)));
     let selectedNew = unlearned.slice(0, 8);
     let selectedOld = learned.slice(0, 2);
 
@@ -90,7 +98,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     setIsFlipped(false);
     setIsFinished(false);
     setCycleCount(0);
-    saveSession(finalSession, 0, 0);
+    saveSession(finalSession, 0, 0, level, infoDismissed);
   };
 
   useEffect(() => {
@@ -98,8 +106,13 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
     const stored = loadSession();
     if (stored && stored.ids.length > 0) {
+      const storedLevel: HskLevelFilter = stored.hskLevel ?? "all";
+      setHskLevel(storedLevel);
+      setInfoDismissed(Boolean(stored.infoDismissed));
+
+      const pool = storedLevel === "all" ? allWords : allWords.filter((w) => w.hskLevel === storedLevel);
       const storedWords = stored.ids
-        .map((id) => allWords.find((w) => w.id === id))
+        .map((id) => pool.find((w) => w.id === id))
         .filter((w): w is VocabWord => Boolean(w));
 
       if (storedWords.length > 0) {
@@ -114,16 +127,16 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     }
 
     if (sessionWords.length === 0 && !isFinished) {
-      startNewSession();
+      startNewSession(hskLevel);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords]);
 
   useEffect(() => {
     if (sessionWords.length > 0 && !isFinished) {
-      saveSession(sessionWords, currentIndex, cycleCount);
+      saveSession(sessionWords, currentIndex, cycleCount, hskLevel, infoDismissed);
     }
-  }, [sessionWords, currentIndex, cycleCount, isFinished]);
+  }, [sessionWords, currentIndex, cycleCount, isFinished, hskLevel, infoDismissed]);
 
   const advanceToNext = (words: VocabWord[], fromIndex: number) => {
     if (words.length === 0) {
@@ -193,7 +206,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         <button
           onClick={() => {
             clearSession();
-            startNewSession();
+            startNewSession(hskLevel);
           }}
           className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2"
         >
@@ -216,6 +229,60 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">HSK:</span>
+          {([
+            { value: "all" as const, label: "All" },
+            { value: 1 as const, label: "HSK 1" },
+            { value: 2 as const, label: "HSK 2" },
+          ] satisfies { value: HskLevelFilter; label: string }[]).map((opt) => (
+            <button
+              key={String(opt.value)}
+              onClick={() => {
+                const next = opt.value;
+                setHskLevel(next);
+                clearSession();
+                setInfoDismissed(false);
+                startNewSession(next);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
+                hskLevel === opt.value
+                  ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
+                  : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {!infoDismissed && (
+          <div className="sm:ml-auto">
+            <div className="relative bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 pr-10 text-sm text-gray-300 max-w-md">
+              <p className="text-gray-400 text-xs leading-relaxed">
+                <span className="font-semibold text-gray-200">How it works:</span> we build a 10-card session with
+                <span className="text-white font-semibold"> 8 Still Learning</span> + <span className="text-white font-semibold">2 Learned</span>
+                (if possible). Use <span className="text-emerald-400 font-semibold">Got it</span> / <span className="text-red-400 font-semibold">Forgot it</span> to update your progress.
+              </p>
+              <button
+                onClick={() => {
+                  setInfoDismissed(true);
+                  saveSession(sessionWords, currentIndex, cycleCount, hskLevel, true);
+                }}
+                className="absolute top-2 right-2 w-7 h-7 inline-flex items-center justify-center rounded-lg text-gray-500 hover:text-white hover:bg-neutral-800 transition-colors"
+                title="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="mb-6">
         <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
           <span>Card {currentIndex + 1} of {sessionWords.length}</span>
@@ -355,7 +422,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         <button
           onClick={() => {
             clearSession();
-            startNewSession();
+            startNewSession(hskLevel);
           }}
           className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors"
         >
