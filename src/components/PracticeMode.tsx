@@ -228,7 +228,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   const isCurrentlyLearned = isLearned(currentWord.id);
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="relative max-w-lg mx-auto">
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
@@ -244,7 +244,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                 const next = opt.value;
                 setHskLevel(next);
                 clearSession();
-                setInfoDismissed(false);
                 startNewSession(next);
               }}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
@@ -259,19 +258,20 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         </div>
 
         {!infoDismissed && (
-          <div className="sm:ml-auto">
-            <div className="relative bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 pr-10 text-sm text-gray-300 max-w-md">
-              <p className="text-gray-400 text-xs leading-relaxed">
-                <span className="font-semibold text-gray-200">How it works:</span> we build a 10-card session with
-                <span className="text-white font-semibold"> 8 Still Learning</span> + <span className="text-white font-semibold">2 Learned</span>
-                (if possible). Use <span className="text-emerald-400 font-semibold">Got it</span> / <span className="text-red-400 font-semibold">Forgot it</span> to update your progress.
-              </p>
+          <div className="hidden lg:block absolute left-full top-0 ml-6 w-[360px]">
+            <div className="relative bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-4 pr-11 shadow-xl">
+              <div className="text-xs leading-relaxed text-gray-400 whitespace-pre-line">
+                <span className="font-semibold text-white">How to:</span>\n
+                Each Practice Session consists of <span className="font-semibold text-white">10 words</span>, out of which <span className="font-semibold text-white">8</span> are <span className="font-semibold text-rose-400">new</span> and <span className="font-semibold text-white">2</span> have been marked as <span className="font-semibold text-emerald-400">learned</span> before to make sure they aren't forgotten. :)\n
+                Click on <span className="font-semibold text-emerald-400">Got it</span> / <span className="font-semibold text-rose-400">Forgot it</span> to cycle through them as many times as you want.\n
+                Select <span className="font-semibold text-emerald-400">Learned it</span>, to <span className="font-semibold text-white">remove</span> the word from the session if you know it for sure. Keep going until you have <span className="font-semibold text-white">no words left</span>!
+              </div>
               <button
                 onClick={() => {
                   setInfoDismissed(true);
                   saveSession(sessionWords, currentIndex, cycleCount, hskLevel, true);
                 }}
-                className="absolute top-2 right-2 w-7 h-7 inline-flex items-center justify-center rounded-lg text-gray-500 hover:text-white hover:bg-neutral-800 transition-colors"
+                className="absolute top-3 right-3 w-8 h-8 inline-flex items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-neutral-800 transition-colors"
                 title="Dismiss"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
