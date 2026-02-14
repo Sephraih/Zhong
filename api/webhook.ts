@@ -47,11 +47,22 @@ async function setUserPremium(userId: string, isPremium: boolean) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS (Stripe doesn't require it, but it doesn't hurt; also allows manual testing)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
+
+  // Stripe will POST, but adding OPTIONS prevents 405s if something sends a preflight.
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const sig = req.headers['stripe-signature'];
+  const sig = (req.headers['stripe-signature'] || req.headers['Stripe-Signature']) as string | string[] | undefined;
   if (!sig) {
     console.error('❌ Missing Stripe signature');
     return res.status(400).send('Missing signature');
@@ -61,9 +72,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const rawBody = await buffer(req);
+    const signature = Array.isArray(sig) ? sig[0] : sig;
     event = stripe.webhooks.constructEvent(
       rawBody,
-      sig,
+      signature!,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err: any) {
