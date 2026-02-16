@@ -1,13 +1,15 @@
--- ============================================================
--- Supabase Database Setup for Premium Features
--- ============================================================
--- Run this in the Supabase SQL Editor:
--- Dashboard > SQL Editor > New query > Paste & Run
--- ============================================================
+-- =====================================================
+-- SUPABASE DATABASE SETUP FOR 汉语学习 (Chinese Learning App)
+-- =====================================================
+-- Run this in your Supabase SQL Editor to set up the required tables
 
--- 1. Create profiles table (linked to auth.users)
+-- =====================================================
+-- 1. PROFILES TABLE
+-- =====================================================
+-- Stores user profile information and premium status
+
 CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT,
   is_premium BOOLEAN DEFAULT FALSE,
   stripe_customer_id TEXT,
@@ -15,67 +17,61 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Create subscriptions table to track payment history
+-- Enable RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Policies for profiles
+CREATE POLICY "Users can view their own profile"
+  ON public.profiles FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+-- Allow service role to manage all profiles (for webhooks)
+CREATE POLICY "Service role can manage all profiles"
+  ON public.profiles FOR ALL
+  USING (auth.role() = 'service_role');
+
+-- =====================================================
+-- 2. SUBSCRIPTIONS TABLE
+-- =====================================================
+-- Stores Stripe subscription information
+
 CREATE TABLE IF NOT EXISTS public.subscriptions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   stripe_customer_id TEXT,
   stripe_subscription_id TEXT,
   stripe_price_id TEXT,
   stripe_session_id TEXT,
-  status TEXT DEFAULT 'active',
+  status TEXT DEFAULT 'inactive',
+  cancel_at_period_end BOOLEAN DEFAULT FALSE,
   current_period_start TIMESTAMP WITH TIME ZONE,
   current_period_end TIMESTAMP WITH TIME ZONE,
-  cancel_at_period_end BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Enable Row Level Security
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- Enable RLS
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 
--- 4. RLS Policies for profiles
--- Users can read their own profile
-DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-CREATE POLICY "Users can view own profile"
-  ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
-
--- Allow inserts for new users (from trigger or webhook)
-DROP POLICY IF EXISTS "Allow profile inserts" ON public.profiles;
-CREATE POLICY "Allow profile inserts"
-  ON public.profiles FOR INSERT
-  WITH CHECK (true);
-
--- Allow updates from service role (webhook updates)
-DROP POLICY IF EXISTS "Allow profile updates" ON public.profiles;
-CREATE POLICY "Allow profile updates"
-  ON public.profiles FOR UPDATE
-  USING (true)
-  WITH CHECK (true);
-
--- 5. RLS Policies for subscriptions
--- Users can read their own subscriptions
-DROP POLICY IF EXISTS "Users can view own subscriptions" ON public.subscriptions;
-CREATE POLICY "Users can view own subscriptions"
+-- Policies for subscriptions
+CREATE POLICY "Users can view their own subscriptions"
   ON public.subscriptions FOR SELECT
   USING (auth.uid() = user_id);
 
--- Allow inserts for subscriptions (from webhook)
-DROP POLICY IF EXISTS "Allow subscription inserts" ON public.subscriptions;
-CREATE POLICY "Allow subscription inserts"
-  ON public.subscriptions FOR INSERT
-  WITH CHECK (true);
+-- Allow service role to manage all subscriptions (for webhooks)
+CREATE POLICY "Service role can manage all subscriptions"
+  ON public.subscriptions FOR ALL
+  USING (auth.role() = 'service_role');
 
--- Allow updates for subscriptions (from webhook)
-DROP POLICY IF EXISTS "Allow subscription updates" ON public.subscriptions;
-CREATE POLICY "Allow subscription updates"
-  ON public.subscriptions FOR UPDATE
-  USING (true)
-  WITH CHECK (true);
+-- =====================================================
+-- 3. AUTO-CREATE PROFILE ON USER SIGNUP
+-- =====================================================
+-- Trigger function to create profile when user signs up
 
--- 6. Auto-create profile on user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -86,13 +82,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Create trigger
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 7. Auto-update the updated_at timestamp
-CREATE OR REPLACE FUNCTION public.handle_updated_at()
+-- =====================================================
+-- 4. UPDATE TIMESTAMP TRIGGER
+-- =====================================================
+-- Automatically update updated_at column
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -100,29 +101,43 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
-CREATE TRIGGER set_profiles_updated_at
+-- Apply to profiles
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-DROP TRIGGER IF EXISTS set_subscriptions_updated_at ON public.subscriptions;
-CREATE TRIGGER set_subscriptions_updated_at
+-- Apply to subscriptions
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON public.subscriptions;
+CREATE TRIGGER update_subscriptions_updated_at
   BEFORE UPDATE ON public.subscriptions
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- 8. Create indexes for faster lookups
-CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer ON public.profiles(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON public.subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON public.subscriptions(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_session ON public.subscriptions(stripe_session_id);
+-- =====================================================
+-- 5. INDEXES FOR PERFORMANCE
+-- =====================================================
 
--- 9. Backfill: Create profiles for any existing users who signed up before this script
-INSERT INTO public.profiles (id, email, is_premium)
-SELECT id, email, FALSE
-FROM auth.users
-WHERE id NOT IN (SELECT id FROM public.profiles)
-ON CONFLICT (id) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer_id 
+  ON public.profiles(stripe_customer_id);
 
--- ============================================================
--- DONE! Your database is ready.
--- ============================================================
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id 
+  ON public.subscriptions(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id 
+  ON public.subscriptions(stripe_customer_id);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status 
+  ON public.subscriptions(status);
+
+-- =====================================================
+-- VERIFICATION QUERIES (Optional - run to check setup)
+-- =====================================================
+
+-- Check tables exist:
+-- SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+
+-- Check RLS is enabled:
+-- SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
+
+-- Check policies:
+-- SELECT * FROM pg_policies WHERE schemaname = 'public';

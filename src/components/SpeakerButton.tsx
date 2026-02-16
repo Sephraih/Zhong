@@ -7,25 +7,16 @@ export function SpeakerButton({ text, size = "sm" }: SpeakerButtonProps) {
   const handleSpeak = (e: React.MouseEvent) => {
     e.stopPropagation();
     
-    // We try to use the modern "Online" voices if available, which sound much better (Neural voices)
-    // Most browsers (Chrome/Edge/Safari) provide these but they aren't always selected by default
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "zh-CN";
-      
-      // Slightly faster rate often sounds more natural for neural voices
       utter.rate = 0.9;
       utter.pitch = 1.0;
 
       const voices = window.speechSynthesis.getVoices();
       
-      // Preferred voices:
-      // 1. "Microsoft Xiaoxiao" (Highest quality neural)
-      // 2. "Google 普通话" (High quality online)
-      // 3. Any name containing "Neural"
-      // 4. Any name containing "Online"
       const preferredVoice = 
         voices.find(v => v.name.includes("Xiaoxiao")) ||
         voices.find(v => v.name.includes("Google") && v.lang.startsWith("zh")) ||
@@ -36,7 +27,6 @@ export function SpeakerButton({ text, size = "sm" }: SpeakerButtonProps) {
 
       if (preferredVoice) {
         utter.voice = preferredVoice;
-        // Adjust rate for specific engines if needed
         if (preferredVoice.name.includes("Xiaoxiao")) utter.rate = 0.85;
       }
 

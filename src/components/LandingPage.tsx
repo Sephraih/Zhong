@@ -17,7 +17,7 @@ const modes = [
     title: "Practice",
     subtitle: "Balanced mixed sessions",
     description:
-      "A focused session that mixes new words with review. Use “Got it” and “Forgot it” to adjust what you’re learning.",
+      "A focused session that mixes new words with review. Use \u201CGot it\u201D and \u201CForgot it\u201D to adjust what you're learning.",
     icon: "🔥",
     accent: "border-red-900/40 hover:border-red-700/50",
   },
@@ -54,9 +54,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         <p className="mt-4 text-gray-400 max-w-2xl mx-auto">
           HSK 1–2 vocabulary with examples, hover pinyin, and audio. Choose a mode below to start.
         </p>
-
-
-
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pb-12">

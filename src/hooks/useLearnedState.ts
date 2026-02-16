@@ -25,31 +25,28 @@ function saveLearnedWords(learned: Set<number>) {
   }
 }
 
-export function useLearnedState() {
-  const [learnedWords, setLearnedWords] = useState<Set<number>>(() => loadLearnedWords());
+export interface LearnedState {
+  isLearned: (wordId: number) => boolean;
+  toggleLearned: (wordId: number) => void;
+  markAsLearned: (wordId: number) => void;
+  markAsStillLearning: (wordId: number) => void;
+  learnedCount: number;
+}
+
+export function useLearnedState(): LearnedState {
+  const [learned, setLearned] = useState<Set<number>>(loadLearnedWords);
 
   useEffect(() => {
-    saveLearnedWords(learnedWords);
-  }, [learnedWords]);
+    saveLearnedWords(learned);
+  }, [learned]);
 
-  const markAsLearned = useCallback((wordId: number) => {
-    setLearnedWords((prev) => {
-      const next = new Set(prev);
-      next.add(wordId);
-      return next;
-    });
-  }, []);
-
-  const markAsStillLearning = useCallback((wordId: number) => {
-    setLearnedWords((prev) => {
-      const next = new Set(prev);
-      next.delete(wordId);
-      return next;
-    });
-  }, []);
+  const isLearned = useCallback(
+    (wordId: number) => learned.has(wordId),
+    [learned]
+  );
 
   const toggleLearned = useCallback((wordId: number) => {
-    setLearnedWords((prev) => {
+    setLearned((prev) => {
       const next = new Set(prev);
       if (next.has(wordId)) {
         next.delete(wordId);
@@ -60,19 +57,29 @@ export function useLearnedState() {
     });
   }, []);
 
-  const isLearned = useCallback(
-    (wordId: number) => learnedWords.has(wordId),
-    [learnedWords]
-  );
+  const markAsLearned = useCallback((wordId: number) => {
+    setLearned((prev) => {
+      if (prev.has(wordId)) return prev;
+      const next = new Set(prev);
+      next.add(wordId);
+      return next;
+    });
+  }, []);
+
+  const markAsStillLearning = useCallback((wordId: number) => {
+    setLearned((prev) => {
+      if (!prev.has(wordId)) return prev;
+      const next = new Set(prev);
+      next.delete(wordId);
+      return next;
+    });
+  }, []);
 
   return {
-    learnedWords,
-    learnedCount: learnedWords.size,
+    isLearned,
+    toggleLearned,
     markAsLearned,
     markAsStillLearning,
-    toggleLearned,
-    isLearned,
+    learnedCount: learned.size,
   };
 }
-
-export type LearnedState = ReturnType<typeof useLearnedState>;

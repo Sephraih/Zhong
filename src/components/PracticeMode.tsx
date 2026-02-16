@@ -17,12 +17,41 @@ interface StoredSession {
   cycleCount: number;
   hskLevel: HskLevelFilter;
   infoDismissed?: boolean;
+  progress?: Record<number, number>;
 }
 
 const STORAGE_KEY = "hanyu-practice-session";
 
+interface SessionWord extends VocabWord {
+  sessionProgress: number;
+}
+
+function getProgressColor(progress: number): string {
+  switch (progress) {
+    case 0: return "bg-gray-600";
+    case 1: return "bg-green-900";
+    case 2: return "bg-green-700";
+    case 3: return "bg-green-500";
+    case 4: return "bg-green-400";
+    case 5: return "bg-yellow-400";
+    default: return "bg-gray-600";
+  }
+}
+
+function getProgressGlow(progress: number): string {
+  switch (progress) {
+    case 0: return "shadow-[0_0_8px_3px_rgba(107,114,128,0.5)]";
+    case 1: return "shadow-[0_0_8px_3px_rgba(20,83,45,0.6)]";
+    case 2: return "shadow-[0_0_8px_3px_rgba(21,128,61,0.6)]";
+    case 3: return "shadow-[0_0_8px_3px_rgba(34,197,94,0.5)]";
+    case 4: return "shadow-[0_0_8px_3px_rgba(74,222,128,0.5)]";
+    case 5: return "shadow-[0_0_8px_3px_rgba(250,204,21,0.5)]";
+    default: return "shadow-[0_0_8px_3px_rgba(107,114,128,0.5)]";
+  }
+}
+
 export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
-  const [sessionWords, setSessionWords] = useState<VocabWord[]>([]);
+  const [sessionWords, setSessionWords] = useState<SessionWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
@@ -42,23 +71,28 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   };
 
   const saveSession = (
-    words: VocabWord[],
+    words: SessionWord[],
     index: number,
     cycle: number,
     level: HskLevelFilter,
     dismissed: boolean
   ) => {
     try {
+      const progress: Record<number, number> = {};
+      words.forEach((w) => {
+        progress[w.id] = w.sessionProgress;
+      });
       const payload: StoredSession = {
         ids: words.map((w) => w.id),
         currentIndex: index,
         cycleCount: cycle,
         hskLevel: level,
         infoDismissed: dismissed,
+        progress,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
-      // ignore
+      /* ignore */
     }
   };
 
@@ -78,7 +112,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
-      // ignore
+      /* ignore */
     }
   };
 
@@ -91,15 +125,19 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     let selectedOld = learned.slice(0, 2);
 
     if (selectedNew.length < 8) {
-      const extraNeeded = 8 - selectedNew.length;
-      selectedOld = [...selectedOld, ...learned.slice(2, 2 + extraNeeded)];
+      const extra = 8 - selectedNew.length;
+      selectedOld = [...selectedOld, ...learned.slice(2, 2 + extra)];
     }
     if (selectedOld.length < 2) {
-      const extraNeeded = 2 - selectedOld.length;
-      selectedNew = [...selectedNew, ...unlearned.slice(8, 8 + extraNeeded)];
+      const extra = 2 - selectedOld.length;
+      selectedNew = [...selectedNew, ...unlearned.slice(8, 8 + extra)];
     }
 
-    const finalSession = shuffleArray([...selectedNew, ...selectedOld].slice(0, 10));
+    const finalSession: SessionWord[] = shuffleArray([
+      ...selectedNew.map((w) => ({ ...w, sessionProgress: 0 })),
+      ...selectedOld.map((w) => ({ ...w, sessionProgress: 3 })),
+    ]).slice(0, 10) as SessionWord[];
+
     setSessionWords(finalSession);
     setCurrentIndex(0);
     setIsFlipped(false);
@@ -117,14 +155,19 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
       setHskLevel(storedLevel);
       setInfoDismissed(Boolean(stored.infoDismissed));
 
-      const pool = storedLevel === "all" ? allWords : allWords.filter((w) => w.hskLevel === storedLevel);
+      const pool =
+        storedLevel === "all" ? allWords : allWords.filter((w) => w.hskLevel === storedLevel);
       const storedWords = stored.ids
         .map((id) => pool.find((w) => w.id === id))
         .filter((w): w is VocabWord => Boolean(w));
 
       if (storedWords.length > 0) {
         const safeIndex = Math.min(stored.currentIndex ?? 0, storedWords.length - 1);
-        setSessionWords(storedWords);
+        const restoredWords: SessionWord[] = storedWords.map((w) => ({
+          ...w,
+          sessionProgress: stored.progress?.[w.id] ?? (isLearned(w.id) ? 3 : 0),
+        }));
+        setSessionWords(restoredWords);
         setCurrentIndex(safeIndex);
         setCycleCount(stored.cycleCount ?? 0);
         setIsFlipped(false);
@@ -145,7 +188,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     }
   }, [sessionWords, currentIndex, cycleCount, isFinished, hskLevel, infoDismissed]);
 
-  const advanceToNext = (words: VocabWord[], fromIndex: number) => {
+  const advanceToNext = (words: SessionWord[], fromIndex: number) => {
     if (words.length === 0) {
       setIsFinished(true);
       setSessionWords([]);
@@ -171,14 +214,30 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
   const handleGotIt = (e: React.MouseEvent) => {
     e.stopPropagation();
-    markAsLearned(sessionWords[currentIndex].id);
-    advanceToNext(sessionWords, currentIndex);
+    const currentWord = sessionWords[currentIndex];
+    const newProgress = Math.min(5, currentWord.sessionProgress + 1);
+
+    const updatedWords = sessionWords.map((w) =>
+      w.id === currentWord.id ? { ...w, sessionProgress: newProgress } : w
+    );
+    setSessionWords(updatedWords);
+    advanceToNext(updatedWords, currentIndex);
   };
 
   const handleForgotIt = (e: React.MouseEvent) => {
     e.stopPropagation();
-    markAsStillLearning(sessionWords[currentIndex].id);
-    advanceToNext(sessionWords, currentIndex);
+    const currentWord = sessionWords[currentIndex];
+    const newProgress = Math.max(0, currentWord.sessionProgress - 1);
+
+    if (isLearned(currentWord.id)) {
+      markAsStillLearning(currentWord.id);
+    }
+
+    const updatedWords = sessionWords.map((w) =>
+      w.id === currentWord.id ? { ...w, sessionProgress: newProgress } : w
+    );
+    setSessionWords(updatedWords);
+    advanceToNext(updatedWords, currentIndex);
   };
 
   const handleRemove = (e: React.MouseEvent) => {
@@ -191,6 +250,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     if (newSession.length === 0) {
       setIsFinished(true);
       setSessionWords([]);
+      clearSession();
     } else {
       const newIndex = currentIndex >= newSession.length ? 0 : currentIndex;
       setSessionWords(newSession);
@@ -229,221 +289,264 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   const currentWord = sessionWords[currentIndex];
   const isCurrentlyLearned = isLearned(currentWord.id);
 
+  const ProgressBarInsideCard = () => (
+    <div className="flex items-center gap-3">
+      <div className="flex gap-1.5">
+        {[1, 2, 3, 4, 5].map((step) => {
+          const filled = step <= currentWord.sessionProgress;
+          return (
+            <div
+              key={step}
+              className={`w-6 h-3 rounded-sm border transition-all duration-300 ${
+                filled
+                  ? `${getProgressColor(currentWord.sessionProgress)} border-transparent`
+                  : "bg-neutral-800 border-neutral-700"
+              }`}
+            />
+          );
+        })}
+      </div>
+      <span className="text-xs text-gray-500 font-medium tabular-nums">
+        {currentWord.sessionProgress}/5
+      </span>
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.3fr_0.85fr] gap-4 items-start">
-        {/* Left spacer (keeps center column centered) */}
         <div className="hidden lg:block" />
 
-        {/* Center column */}
         <div className="w-full flex justify-center">
           <div className="max-w-lg w-full">
-            {/* Controls */}
-          <div className="mb-6">
-            <div className="flex justify-center">
-              <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
-                {([
-                  { value: "all" as const, label: "All" },
-                  { value: 1 as const, label: "HSK 1" },
-                  { value: 2 as const, label: "HSK 2" },
-                ] satisfies { value: HskLevelFilter; label: string }[]).map((opt) => (
-                  <button
-                    key={String(opt.value)}
-                    onClick={() => {
-                      const next = opt.value;
-                      setHskLevel(next);
-                      clearSession();
-                      startNewSession(next);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                      hskLevel === opt.value
-                        ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-                        : "text-gray-400 hover:text-white hover:bg-neutral-900"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            <div className="mb-6">
+              <div className="flex justify-center">
+                <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
+                  {([
+                    { value: "all" as const, label: "All" },
+                    { value: 1 as const, label: "HSK 1" },
+                    { value: 2 as const, label: "HSK 2" },
+                  ] satisfies { value: HskLevelFilter; label: string }[]).map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      onClick={() => {
+                        const next = opt.value;
+                        setHskLevel(next);
+                        clearSession();
+                        startNewSession(next);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                        hskLevel === opt.value
+                          ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
+                          : "text-gray-400 hover:text-white hover:bg-neutral-900"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Progress */}
-          <div className="mb-6">
-            <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
-              <span>
-                Card {currentIndex + 1} of {sessionWords.length}
-              </span>
-              <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
-                Practice{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
-              </span>
-            </div>
-            <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
-              {sessionWords.map((word, i) => (
-                <div
-                  key={word.id}
-                  className={`h-full flex-1 transition-colors duration-300 ${
-                    i === currentIndex
-                      ? "bg-neutral-500"
-                      : isLearned(word.id)
-                        ? "bg-emerald-900/60"
-                        : "bg-rose-500/60"
-                  } ${i > 0 ? "border-l border-black/20" : ""}`}
-                />
-              ))}
-            </div>
-          </div>
+            <div className="mb-6">
+              <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
+                <span>
+                  Card {currentIndex + 1} of {sessionWords.length}
+                </span>
+                <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
+                  Practice{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
+                </span>
+              </div>
 
-          {/* Flashcard */}
-          <div
-            className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[580px] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative pb-4 overflow-hidden"
-            onClick={() => setIsFlipped(!isFlipped)}
-          >
-            <div className="absolute top-5 left-6 flex items-center gap-2">
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                  currentWord.hskLevel === 1
-                    ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
-                    : "bg-blue-950/80 text-blue-400 border border-blue-800/50"
+              <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
+                {sessionWords.map((word, i) => {
+                  const isCurrent = i === currentIndex;
+                  const color = getProgressColor(word.sessionProgress);
+                  return (
+                    <div
+                      key={word.id}
+                      className={`h-full flex-1 transition-all duration-300 ${color} ${
+                        isCurrent ? "z-10 relative brightness-150 scale-y-150" : ""
+                      } ${i > 0 ? "border-l border-black/30" : ""}`}
+                      style={
+                        isCurrent
+                          ? { boxShadow: "0 0 8px 2px rgba(255,255,255,0.4)" }
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div
+              className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[580px] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative overflow-hidden"
+              onClick={() => setIsFlipped(!isFlipped)}
+            >
+              <div className="absolute top-5 left-6 flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    currentWord.hskLevel === 1
+                      ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
+                      : "bg-blue-950/80 text-blue-400 border border-blue-800/50"
+                  }`}
+                >
+                  HSK {currentWord.hskLevel}
+                </span>
+                {isCurrentlyLearned && (
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
+                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+
+              <div className="absolute top-5 right-6">
+                <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
+              </div>
+
+              <div
+                className={`flex flex-col items-center transition-all duration-300 ${
+                  isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"
                 }`}
               >
-                HSK {currentWord.hskLevel}
-              </span>
-              {isCurrentlyLearned && (
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
-                  <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-              )}
-            </div>
+                <div className="flex items-end gap-2 justify-center">
+                  {currentWord.hanzi.split("").map((char, i) => (
+                    <HoverCharacter
+                      key={i}
+                      char={char}
+                      pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
+                      size="2xl"
+                    />
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <SpeakerButton text={currentWord.hanzi} size="md" />
+                </div>
 
-            <div className="absolute top-5 right-6">
-              <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
-            </div>
-
-            <div
-              className={`flex flex-col items-center transition-all duration-300 ${
-                isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"
-              }`}
-            >
-              <div className="flex items-end gap-2 justify-center">
-                {currentWord.hanzi.split("").map((char, i) => (
-                  <HoverCharacter
-                    key={i}
-                    char={char}
-                    pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
-                    size="2xl"
-                  />
-                ))}
-              </div>
-              <div className="mt-4">
-                <SpeakerButton text={currentWord.hanzi} size="md" />
-              </div>
-              {!isFlipped && <p className="text-gray-600 text-sm mt-8">Tap to reveal · Hover for pinyin</p>}
-            </div>
-
-            <div
-              className={`absolute inset-0 pt-36 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
-                isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
-              }`}
-            >
-              <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
-              <p className="text-white text-3xl font-bold mb-6 text-center">{currentWord.english}</p>
-
-              <div className="space-y-3 mt-4 text-left w-full">
-                {currentWord.examples.slice(0, 3).map((ex, idx) => (
-                  <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
-                        {ex.pinyinWords.map((pw, i) => (
-                          <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="sm" />
-                        ))}
-                      </div>
-                      <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
-                    </div>
-                    <SpeakerButton text={ex.chinese} size="sm" />
+                {!isFlipped && (
+                  <div className="mt-8">
+                    <ProgressBarInsideCard />
                   </div>
-                ))}
+                )}
+
+                {!isFlipped && <p className="text-gray-600 text-sm mt-4">Tap to reveal · Hover for pinyin</p>}
+              </div>
+
+              <div
+                className={`absolute inset-0 pt-36 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
+                  isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
+                }`}
+              >
+                <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
+                <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
+
+                <div className="mb-4">
+                  <ProgressBarInsideCard />
+                </div>
+
+                <div className="space-y-3 mt-2 text-left w-full">
+                  {currentWord.examples.slice(0, 3).map((ex, idx) => (
+                    <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
+                          {ex.pinyinWords.map((pw, i) => (
+                            <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                          ))}
+                        </div>
+                        <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
+                      </div>
+                      <SpeakerButton text={ex.chinese} size="sm" />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleForgotIt}
+                className="flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-bold hover:bg-red-950/40 transition-all border border-red-900/40 hover:border-red-700/60 flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Forgot it
+              </button>
+              <button
+                onClick={handleGotIt}
+                className="flex-1 py-4 bg-neutral-900 text-emerald-400 rounded-xl font-bold hover:bg-emerald-950/40 transition-all border border-emerald-900/40 hover:border-emerald-700/60 flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Got it
+              </button>
+            </div>
+
             <button
-              onClick={handleForgotIt}
-              className="flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-bold hover:bg-red-950/40 transition-all border border-red-900/40 hover:border-red-700/60 flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Forgot it
-            </button>
-            <button
-              onClick={handleGotIt}
-              className="flex-1 py-4 bg-neutral-900 text-emerald-400 rounded-xl font-bold hover:bg-emerald-950/40 transition-all border border-emerald-900/40 hover:border-emerald-700/60 flex items-center justify-center gap-2"
+              onClick={handleRemove}
+              className="w-full mt-3 py-3 rounded-xl text-sm font-semibold text-emerald-400 hover:text-emerald-300 bg-neutral-950 border border-emerald-900/40 hover:border-emerald-700/60 hover:bg-emerald-950/20 transition-all flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Got it
+              Learned it
             </button>
-          </div>
 
-          <button
-            onClick={handleRemove}
-            className="w-full mt-3 py-3 rounded-xl text-sm font-semibold text-emerald-400 hover:text-emerald-300 bg-neutral-950 border border-emerald-900/40 hover:border-emerald-700/60 hover:bg-emerald-950/20 transition-all flex items-center justify-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            Learned it
-          </button>
+            <div className="flex justify-center gap-2 mt-6">
+              {sessionWords.map((w, i) => {
+                const isCurrent = i === currentIndex;
+                const color = getProgressColor(w.sessionProgress);
+                const glow = isCurrent ? getProgressGlow(w.sessionProgress) : "";
+                return (
+                  <div
+                    key={w.id}
+                    className={`rounded-full transition-all duration-300 ${color} ${glow} ${
+                      isCurrent ? "w-3 h-3" : "w-2 h-2"
+                    }`}
+                  />
+                );
+              })}
+            </div>
 
-          <div className="flex justify-center gap-1 mt-6">
-            {sessionWords.map((w, i) => (
-              <div
-                key={w.id}
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  i === currentIndex ? "bg-neutral-500" : isLearned(w.id) ? "bg-emerald-800" : "bg-rose-500"
-                }`}
-              />
-            ))}
-          </div>
-
-          <div className="mt-10 text-center">
-            <button
-              onClick={() => {
-                clearSession();
-                startNewSession(hskLevel);
-              }}
-              className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors"
-            >
-              Start New Session
-            </button>
-          </div>
+            <div className="mt-10 text-center">
+              <button
+                onClick={() => {
+                  clearSession();
+                  startNewSession(hskLevel);
+                }}
+                className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors"
+              >
+                Start New Session
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right column: info toast */}
         <div className="hidden lg:block justify-self-end">
           {!infoDismissed && (
             <div className="bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-4 pr-11 shadow-xl sticky top-24 max-w-[300px]">
               <div className="text-xs leading-relaxed text-gray-400">
                 <p className="font-semibold text-white">How to:</p>
                 <p className="mt-2">
-                  Each Practice Session consists of <span className="font-semibold text-white">10 words</span>, out of which{" "}
-                  <span className="font-semibold text-white">8</span> are <span className="font-semibold text-rose-400">new</span> and{" "}
-                  <span className="font-semibold text-white">2</span> have been marked as <span className="font-semibold text-emerald-400">learned</span> before to make sure they aren't forgotten. :)
+                  Each Practice Session consists of <span className="font-semibold text-white">10 words</span>, out of
+                  which <span className="font-semibold text-white">8</span> are{" "}
+                  <span className="font-semibold text-rose-400">new</span> and{" "}
+                  <span className="font-semibold text-white">2</span> have been marked as{" "}
+                  <span className="font-semibold text-emerald-400">learned</span> before to make sure they aren't
+                  forgotten. :)
                 </p>
                 <p className="mt-2">
                   Click on <span className="font-semibold text-emerald-400">Got it</span> /{" "}
-                  <span className="font-semibold text-rose-400">Forgot it</span> to cycle through them as many times as you want.
+                  <span className="font-semibold text-rose-400">Forgot it</span> to cycle through them as many times as
+                  you want.
                 </p>
                 <p className="mt-2">
                   Select <span className="font-semibold text-emerald-400">Learned it</span>, to{" "}
-                  <span className="font-semibold text-white">remove</span> the word from the session if you know it for sure. Keep going until you have{" "}
+                  <span className="font-semibold text-white">remove</span> the word from the session if you know it for
+                  sure. Keep going until you have{" "}
                   <span className="font-semibold text-white">no words left</span>!
                 </p>
               </div>

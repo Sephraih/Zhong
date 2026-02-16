@@ -1,11 +1,8 @@
 {
-  "name": "chinese-learning-app",
+  "name": "react-vite-tailwind",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "type": "module",
-  "engines": {
-    "node": "20.x"
-  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -14,7 +11,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
     "clsx": "2.1.1",
-    "qs": "^6.14.2",
+    "qs": "^6.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "3.4.0"
