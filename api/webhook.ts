@@ -9,7 +9,8 @@ const supabase = createClient(
 );
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-11-20.acacia',
+  // Use a stable Stripe API version.
+  apiVersion: '2024-06-20',
 });
 
 // Disable body parsing, need raw body for Stripe signature verification

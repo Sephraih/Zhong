@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { getEnrichedVocabulary } from "./data/mergeExamples";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
@@ -19,6 +19,7 @@ type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
 function AppContent() {
+  const { error, clearError } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>("home");
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -503,6 +504,32 @@ function AppContent() {
           </div>
         )}
       </main>
+
+      {/* Global error toast (e.g., checkout errors) */}
+      {error && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-[min(720px,calc(100vw-2rem))]">
+          <div className="bg-red-950/70 border border-red-900/60 backdrop-blur-md rounded-2xl shadow-2xl px-4 py-3 flex items-start gap-3">
+            <div className="mt-0.5 text-red-300">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86l-8.02 14A2 2 0 004.0 21h16a2 2 0 001.73-3.14l-8.02-14a2 2 0 00-3.46 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-200">Action failed</p>
+              <p className="text-sm text-red-200/80 mt-0.5 break-words">{error}</p>
+            </div>
+            <button
+              onClick={clearError}
+              className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-xl text-red-200/70 hover:text-red-100 hover:bg-red-900/30 transition-colors"
+              title="Dismiss"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-neutral-950 border-t border-neutral-800 mt-16">

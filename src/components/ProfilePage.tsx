@@ -15,11 +15,12 @@ interface SubscriptionData {
   stripe_price_id?: string | null;
 }
 
-const API_URL = import.meta.env.VITE_API_BASE || "";
+// Use VITE_API_BASE only during local development.
+const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE || "") : "";
 const apiUrl = (path: string) => (API_URL ? `${API_URL}${path}` : path);
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, isPremium, startCheckout, error } = useAuth();
+  const { user, isPremium, startCheckout, error, isCheckingOut } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -124,9 +125,10 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
               <p className="text-gray-500 text-sm mb-4">Upgrade to unlock premium features.</p>
               <button
                 onClick={startCheckout}
-                className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+                disabled={isCheckingOut}
+                className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-900/60 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors"
               >
-                Upgrade to Premium
+                {isCheckingOut ? "Redirecting to Stripe..." : "Upgrade to Premium"}
               </button>
             </div>
           )}

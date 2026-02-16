@@ -9,6 +9,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isCheckingOut: boolean;
   isPremium: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
@@ -21,7 +22,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_BASE || "";
+// Use VITE_API_BASE only during local development.
+// In production (Vercel), prefer same-origin /api/* to avoid misconfigured baked-in URLs.
+const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE || "") : "";
 
 function apiUrl(path: string) {
   // If VITE_API_BASE is set, use it. Otherwise, use same-origin (Vercel rewrites /api/*).
@@ -33,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isPremium, setIsPremium] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
@@ -211,6 +215,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setError(null);
+    setIsCheckingOut(true);
+
     try {
       console.log("🛒 Starting checkout...");
       const res = await fetch(apiUrl(`/api/create-checkout-session`), {
@@ -221,10 +228,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
+      let body: any = null;
+      try {
+        body = await res.json();
+      } catch {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Checkout failed (HTTP ${res.status})`);
+      }
 
-      if (body.url) {
+      if (!res.ok) throw new Error(body?.error || `Failed to create checkout session (HTTP ${res.status})`);
+
+      if (body?.url) {
         console.log("🔗 Redirecting to Stripe...");
         window.location.assign(body.url);
       } else {
@@ -234,6 +248,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const message = err instanceof Error ? err.message : "Checkout failed";
       console.error("❌ Checkout error:", message);
       setError(message);
+    } finally {
+      setIsCheckingOut(false);
     }
   };
 
@@ -261,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        isCheckingOut,
         isPremium,
         login,
         signup,

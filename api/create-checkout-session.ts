@@ -8,7 +8,8 @@ const supabase = createClient(
 );
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-11-20.acacia',
+  // Use a stable Stripe API version.
+  apiVersion: '2024-06-20',
 });
 
 async function getUserFromToken(authHeader: string | undefined) {
@@ -51,7 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -70,18 +74,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const customerId = await getOrCreateStripeCustomer(user.id, user.email || '');
 
+    const priceId = process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID env var' });
+    }
+
+    // Prefer configured FRONTEND_URL, but fall back to the incoming request host.
+    const origin = (req.headers.origin as string | undefined) || '';
+    const host = (req.headers.host as string | undefined) || '';
+    const fallbackBase = origin || (host ? `${host.startsWith('localhost') ? 'http' : 'https'}://${host}` : '');
+    const frontendBase = process.env.FRONTEND_URL || fallbackBase;
+
+    if (!frontendBase) {
+      return res.status(500).json({ error: 'Missing FRONTEND_URL and could not infer request origin/host' });
+    }
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID!,
+          price: priceId,
           quantity: 1,
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.FRONTEND_URL}/?payment=success`,
-      cancel_url: `${process.env.FRONTEND_URL}/?payment=cancelled`,
+      success_url: `${frontendBase}/?payment=success`,
+      cancel_url: `${frontendBase}/?payment=cancelled`,
       metadata: {
         user_id: user.id,
       },
