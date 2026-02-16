@@ -11,6 +11,8 @@ interface Example {
 // Additional examples for select words (optional enrichment).
 // Keep this file reasonably small to avoid huge client bundles.
 export const additionalExamples: Record<number, Example[]> = {
+  // This file is intentionally light-weight. Add extras for words you care about most.
+
   1: [
     { chinese: "我也很好。", pinyinWords: pw([["我","wǒ"],["也","yě"],["很","hěn"],["好","hǎo"],["。",""]]), english: "I'm also fine." },
     { chinese: "我不太忙。", pinyinWords: pw([["我","wǒ"],["不","bú"],["太","tài"],["忙","máng"],["。",""]]), english: "I'm not too busy." },

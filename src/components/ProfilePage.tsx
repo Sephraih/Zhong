@@ -15,10 +15,11 @@ interface SubscriptionData {
   stripe_price_id?: string | null;
 }
 
-const API_URL = import.meta.env.VITE_API_BASE || "http://localhost:4242";
+const API_URL = import.meta.env.VITE_API_BASE || "";
+const apiUrl = (path: string) => (API_URL ? `${API_URL}${path}` : path);
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, isPremium, startCheckout } = useAuth();
+  const { user, isPremium, startCheckout, error } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +30,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
       if (!token) return;
 
       try {
-        const res = await fetch(`${API_URL}/api/subscription`, {
+        const res = await fetch(apiUrl(`/api/subscription`), {
           headers: {
             Authorization: `Bearer ${token}`,
             "Cache-Control": "no-cache",
@@ -82,6 +83,11 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {error && (
+          <div className="lg:col-span-3 mb-2 p-3 bg-red-950/50 border border-red-900/50 rounded-lg text-red-300 text-sm">
+            {error}
+          </div>
+        )}
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-lg">
           <h3 className="text-lg font-semibold text-white mb-4">Subscription</h3>
           <div className="flex items-center gap-3 mb-4">

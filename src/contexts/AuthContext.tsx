@@ -21,7 +21,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_BASE || "http://localhost:4242";
+const API_URL = import.meta.env.VITE_API_BASE || "";
+
+function apiUrl(path: string) {
+  // If VITE_API_BASE is set, use it. Otherwise, use same-origin (Vercel rewrites /api/*).
+  if (API_URL) return `${API_URL}${path}`;
+  return path;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -33,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async (token: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/auth/me`, {
+      const response = await fetch(apiUrl(`/api/auth/me`), {
         headers: {
           Authorization: `Bearer ${token}`,
           "Cache-Control": "no-cache",
@@ -136,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await fetch(apiUrl(`/api/auth/login`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -167,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/signup`, {
+      const response = await fetch(apiUrl(`/api/auth/signup`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -207,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       console.log("🛒 Starting checkout...");
-      const res = await fetch(`${API_URL}/api/create-checkout-session`, {
+      const res = await fetch(apiUrl(`/api/create-checkout-session`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -220,7 +226,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (body.url) {
         console.log("🔗 Redirecting to Stripe...");
-        window.location.href = body.url;
+        window.location.assign(body.url);
+      } else {
+        throw new Error("No checkout URL returned");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Checkout failed";
@@ -234,7 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token) {
       try {
-        await fetch(`${API_URL}/api/auth/logout`, {
+        await fetch(apiUrl(`/api/auth/logout`), {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
