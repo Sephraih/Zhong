@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -25,6 +25,10 @@ interface StoredSession {
 
 const STORAGE_KEY = "hanyu-practice-session";
 const ANIMATION_DURATION = 330;
+
+// Swipe thresholds
+const SWIPE_THRESHOLD = 60; // px to trigger action
+const SWIPE_UP_THRESHOLD = 80;
 
 interface SessionWord extends VocabWord {
   sessionProgress: number;
@@ -54,7 +58,6 @@ function getProgressGlow(progress: number): string {
   }
 }
 
-// Get card border glow class during animation
 function getCardGlowClass(
   feedback: "got" | "forgot" | "gold" | null,
   isMaxed: boolean
@@ -70,6 +73,20 @@ function getCardGlowClass(
       return isMaxed
         ? "border-yellow-500/70 shadow-[0_0_18px_2px_rgba(250,204,21,0.22)]"
         : "border-neutral-800 hover:border-neutral-700";
+  }
+}
+
+// ─── Swipe action overlay text + color ───
+function getSwipeActionInfo(action: "left" | "right" | "up" | null) {
+  switch (action) {
+    case "left":
+      return { text: "Forgot it", color: "text-red-400", bg: "bg-red-500/15", border: "border-red-500/60", icon: "✕" };
+    case "right":
+      return { text: "Got it", color: "text-emerald-400", bg: "bg-emerald-500/15", border: "border-emerald-500/60", icon: "✓" };
+    case "up":
+      return { text: "Learned it ⭐", color: "text-yellow-400", bg: "bg-yellow-500/15", border: "border-yellow-500/60", icon: "⭐" };
+    default:
+      return null;
   }
 }
 
@@ -90,7 +107,14 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   const [feedback, setFeedback] = useState<"got" | "forgot" | "gold" | null>(null);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Small +1 / -1 indicator when pressing buttons (rendered near the x/5 label)
+  // Swipe state
+  const [swipeOffset, setSwipeOffset] = useState({ x: 0, y: 0 });
+  const [swipeAction, setSwipeAction] = useState<"left" | "right" | "up" | null>(null);
+  const [swipeAnimating, setSwipeAnimating] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const swipingRef = useRef(false);
+
+  // Delta indicator
   const [deltaPulse, setDeltaPulse] = useState<{
     id: number;
     wordId: number;
@@ -107,30 +131,22 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     setDeltaPulse({ id: deltaIdRef.current, wordId, text, tone });
     setDeltaPhase("start");
 
-    // Animate in on next frame
     requestAnimationFrame(() => setDeltaPhase("float"));
 
-    if (deltaFadeTimerRef.current) {
-      clearTimeout(deltaFadeTimerRef.current);
-      deltaFadeTimerRef.current = null;
-    }
-    if (deltaClearTimerRef.current) {
-      clearTimeout(deltaClearTimerRef.current);
-      deltaClearTimerRef.current = null;
-    }
+    if (deltaFadeTimerRef.current) clearTimeout(deltaFadeTimerRef.current);
+    if (deltaClearTimerRef.current) clearTimeout(deltaClearTimerRef.current);
 
-    // Fade out before removal
     deltaFadeTimerRef.current = setTimeout(() => {
       setDeltaPhase("fade");
       deltaFadeTimerRef.current = null;
     }, Math.max(120, ANIMATION_DURATION - 170));
 
-    // Remove
     deltaClearTimerRef.current = setTimeout(() => {
       setDeltaPulse(null);
       deltaClearTimerRef.current = null;
     }, ANIMATION_DURATION);
   };
+
   const { markAsLearned, markAsStillLearning, isLearned } = learnedState;
 
   const shuffleArray = <T,>(arr: T[]): T[] => {
@@ -152,9 +168,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
   ) => {
     try {
       const progress: Record<number, number> = {};
-      words.forEach((w) => {
-        progress[w.id] = w.sessionProgress;
-      });
+      words.forEach((w) => { progress[w.id] = w.sessionProgress; });
       const payload: StoredSession = {
         ids: words.map((w) => w.id),
         currentIndex: index,
@@ -165,9 +179,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         direction: dir,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   };
 
   const loadSession = (): StoredSession | null => {
@@ -177,17 +189,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
       const parsed = JSON.parse(stored) as StoredSession;
       if (!parsed || !Array.isArray(parsed.ids)) return null;
       return parsed;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   };
 
   const clearSession = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   };
 
   const startNewSession = (level: HskLevelFilter = hskLevel) => {
@@ -230,8 +236,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
       setInfoMinimized(Boolean(stored.infoMinimized));
       setDirection(stored.direction ?? "zh-en");
 
-      const pool =
-        storedLevel === "all" ? allWords : allWords.filter((w) => w.hskLevel === storedLevel);
+      const pool = storedLevel === "all" ? allWords : allWords.filter((w) => w.hskLevel === storedLevel);
       const storedWords = stored.ids
         .map((id) => pool.find((w) => w.id === id))
         .filter((w): w is VocabWord => Boolean(w));
@@ -257,21 +262,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords]);
 
-  // Cleanup any pending timers on unmount
   useEffect(() => {
     return () => {
-      if (advanceTimerRef.current) {
-        clearTimeout(advanceTimerRef.current);
-        advanceTimerRef.current = null;
-      }
-      if (deltaFadeTimerRef.current) {
-        clearTimeout(deltaFadeTimerRef.current);
-        deltaFadeTimerRef.current = null;
-      }
-      if (deltaClearTimerRef.current) {
-        clearTimeout(deltaClearTimerRef.current);
-        deltaClearTimerRef.current = null;
-      }
+      if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+      if (deltaFadeTimerRef.current) clearTimeout(deltaFadeTimerRef.current);
+      if (deltaClearTimerRef.current) clearTimeout(deltaClearTimerRef.current);
     };
   }, []);
 
@@ -281,7 +276,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     }
   }, [sessionWords, currentIndex, cycleCount, isFinished, hskLevel, infoMinimized, direction]);
 
-  const advanceToNext = (words: SessionWord[], fromIndex: number) => {
+  const advanceToNext = useCallback((words: SessionWord[], fromIndex: number) => {
     if (words.length === 0) {
       setIsFinished(true);
       setSessionWords([]);
@@ -303,13 +298,10 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
     setCurrentIndex(nextIndex);
     setIsFlipped(false);
-  };
+  }, [cycleCount]);
 
-  const scheduleAdvance = (updatedWords: SessionWord[], feedbackType: "got" | "forgot" | "gold") => {
-    if (advanceTimerRef.current) {
-      clearTimeout(advanceTimerRef.current);
-      advanceTimerRef.current = null;
-    }
+  const scheduleAdvance = useCallback((updatedWords: SessionWord[], feedbackType: "got" | "forgot" | "gold") => {
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
 
     setIsAdvancing(true);
     setFeedback(feedbackType);
@@ -320,18 +312,17 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
       setFeedback(null);
       advanceToNext(updatedWords, currentIndex);
     }, ANIMATION_DURATION);
-  };
+  }, [advanceToNext, currentIndex]);
 
-  const handleGotIt = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isAdvancing) return;
+  const handleGotIt = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (isAdvancing || swipeAnimating) return;
 
     const currentWord = sessionWords[currentIndex];
     const prevProgress = currentWord.sessionProgress;
     const newProgress = Math.min(5, prevProgress + 1);
     const isMaxed = newProgress === 5;
 
-    // If we're already at the max, don't show +1 (and just advance).
     if (newProgress === prevProgress) {
       advanceToNext(sessionWords, currentIndex);
       return;
@@ -344,17 +335,16 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     );
     setSessionWords(updatedWords);
     scheduleAdvance(updatedWords, isMaxed ? "gold" : "got");
-  };
+  }, [isAdvancing, swipeAnimating, sessionWords, currentIndex, advanceToNext, scheduleAdvance]);
 
-  const handleForgotIt = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isAdvancing) return;
+  const handleForgotIt = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (isAdvancing || swipeAnimating) return;
 
     const currentWord = sessionWords[currentIndex];
     const prevProgress = currentWord.sessionProgress;
     const newProgress = Math.max(0, prevProgress - 1);
 
-    // If we're already at the min, don't show -1 (and just advance).
     if (newProgress === prevProgress) {
       advanceToNext(sessionWords, currentIndex);
       return;
@@ -371,11 +361,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     );
     setSessionWords(updatedWords);
     scheduleAdvance(updatedWords, "forgot");
-  };
+  }, [isAdvancing, swipeAnimating, sessionWords, currentIndex, advanceToNext, scheduleAdvance, isLearned, markAsStillLearning]);
 
-  const handleRemove = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isAdvancing) return;
+  const handleRemove = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (isAdvancing || swipeAnimating) return;
 
     const wordId = sessionWords[currentIndex].id;
     markAsLearned(wordId);
@@ -392,7 +382,90 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
       setCurrentIndex(newIndex);
       setIsFlipped(false);
     }
-  };
+  }, [isAdvancing, swipeAnimating, sessionWords, currentIndex, markAsLearned]);
+
+  // ─── Touch / Swipe handlers ───
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (isAdvancing || swipeAnimating) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    swipingRef.current = false;
+  }, [isAdvancing, swipeAnimating]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current || isAdvancing || swipeAnimating) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+
+    // Determine if this is a swipe (not just a tap)
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      swipingRef.current = true;
+    }
+
+    if (!swipingRef.current) return;
+
+    // Prevent vertical scroll while swiping
+    e.preventDefault();
+
+    setSwipeOffset({ x: dx, y: Math.min(0, dy) }); // Only allow upward y
+
+    // Determine action from offset
+    if (dy < -SWIPE_UP_THRESHOLD && Math.abs(dy) > Math.abs(dx)) {
+      setSwipeAction("up");
+    } else if (dx > SWIPE_THRESHOLD) {
+      setSwipeAction("right");
+    } else if (dx < -SWIPE_THRESHOLD) {
+      setSwipeAction("left");
+    } else {
+      setSwipeAction(null);
+    }
+  }, [isAdvancing, swipeAnimating]);
+
+  const onTouchEnd = useCallback(() => {
+    if (!touchStartRef.current || isAdvancing || swipeAnimating) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    const wasSwiping = swipingRef.current;
+    const action = swipeAction;
+
+    // If user didn't swipe far enough, snap back
+    if (!wasSwiping || !action) {
+      setSwipeOffset({ x: 0, y: 0 });
+      setSwipeAction(null);
+      touchStartRef.current = null;
+
+      // If it was a tap (not a swipe), toggle flip
+      if (!wasSwiping) {
+        setIsFlipped((f) => !f);
+      }
+      return;
+    }
+
+    // Animate card flying off screen
+    setSwipeAnimating(true);
+    const flyX = action === "right" ? 400 : action === "left" ? -400 : 0;
+    const flyY = action === "up" ? -500 : 0;
+    setSwipeOffset({ x: flyX, y: flyY });
+
+    // Execute action after fly-out
+    setTimeout(() => {
+      setSwipeOffset({ x: 0, y: 0 });
+      setSwipeAction(null);
+      setSwipeAnimating(false);
+      touchStartRef.current = null;
+
+      if (action === "right") {
+        handleGotIt();
+      } else if (action === "left") {
+        handleForgotIt();
+      } else if (action === "up") {
+        handleRemove();
+      }
+    }, 250);
+  }, [isAdvancing, swipeAnimating, swipeAction, handleGotIt, handleForgotIt, handleRemove]);
 
   const toggleDirection = () => {
     const newDir = direction === "zh-en" ? "en-zh" : "zh-en";
@@ -400,6 +473,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     setIsFlipped(false);
   };
 
+  // ── Finished ──
   if (isFinished) {
     return (
       <div className="max-w-lg mx-auto text-center py-20 bg-neutral-900 rounded-3xl border border-neutral-800 shadow-2xl px-8">
@@ -411,10 +485,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         <h2 className="text-3xl font-bold text-white mb-2">Nice, that's all!</h2>
         <p className="text-gray-400 mb-10">You've cleared every card in this session. Great work!</p>
         <button
-          onClick={() => {
-            clearSession();
-            startNewSession(hskLevel);
-          }}
+          onClick={() => { clearSession(); startNewSession(hskLevel); }}
           className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2"
         >
           Start Another Session
@@ -429,8 +500,33 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
   const currentWord = sessionWords[currentIndex];
   const isCurrentlyLearned = isLearned(currentWord.id);
+  const isChinese = direction === "zh-en";
 
-  // Progress bar component with animation
+  // Swipe visual info
+  const swipeInfo = getSwipeActionInfo(swipeAction);
+  const isSwipeActive = swipingRef.current && swipeAction !== null;
+
+  // Card transform from swipe
+  const cardSwipeStyle: React.CSSProperties = (isMobile && (swipeOffset.x !== 0 || swipeOffset.y !== 0))
+    ? {
+        transform: `translate(${swipeOffset.x}px, ${swipeOffset.y}px) rotate(${swipeOffset.x * 0.05}deg)`,
+        transition: swipeAnimating ? "transform 0.25s ease-out, opacity 0.25s ease-out" : "none",
+        opacity: swipeAnimating ? 0 : 1,
+      }
+    : {};
+
+  // Card border color from swipe
+  const swipeBorderClass = isSwipeActive
+    ? swipeAction === "right"
+      ? "border-emerald-500 shadow-[0_0_24px_6px_rgba(16,185,129,0.35)]"
+      : swipeAction === "left"
+      ? "border-red-500 shadow-[0_0_24px_6px_rgba(239,68,68,0.35)]"
+      : swipeAction === "up"
+      ? "border-yellow-400 shadow-[0_0_24px_6px_rgba(250,204,21,0.4)]"
+      : ""
+    : "";
+
+  // Progress bar component
   const ProgressBarInsideCard = () => {
     const isGold = currentWord.sessionProgress === 5;
     const showDelta = deltaPulse?.wordId === currentWord.id;
@@ -504,9 +600,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     );
   };
 
-  // Determine what to show on front vs back based on direction
-  const isChinese = direction === "zh-en";
-
   return (
     <div className="mx-auto max-w-6xl">
       <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.3fr_0.85fr] gap-4 items-start">
@@ -514,10 +607,10 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
         <div className="w-full flex justify-center">
           <div className="max-w-lg w-full">
-            {/* Controls row: HSK level + Direction toggle */}
+            {/* Controls */}
             <div className="mb-6">
               <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
-                {/* HSK Level selector */}
+                {/* HSK Level */}
                 <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
                   {([
                     { value: "all" as const, label: "All" },
@@ -527,10 +620,9 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                     <button
                       key={String(opt.value)}
                       onClick={() => {
-                        const next = opt.value;
-                        setHskLevel(next);
+                        setHskLevel(opt.value);
                         clearSession();
-                        startNewSession(next);
+                        startNewSession(opt.value);
                       }}
                       className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                         hskLevel === opt.value
@@ -543,7 +635,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                   ))}
                 </div>
 
-                {/* Direction toggle + mobile help */}
+                {/* Direction toggle + help */}
                 <div className="inline-flex items-center gap-2">
                   <button
                     onClick={toggleDirection}
@@ -569,7 +661,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                     )}
                   </button>
 
-                  {/* Mobile: show help toggle right here */}
                   {isMobile && (
                     <button
                       onClick={() => {
@@ -584,18 +675,14 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                       }`}
                       title={infoMinimized ? "Show help" : "Hide help"}
                     >
-                      {infoMinimized ? (
-                        <span className="text-lg font-black">?</span>
-                      ) : (
-                        <span className="text-lg">—</span>
-                      )}
+                      {infoMinimized ? <span className="text-lg font-black">?</span> : <span className="text-lg">—</span>}
                     </button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Mobile: inline help panel under controls */}
+            {/* Mobile help panel */}
             {isMobile && !infoMinimized && (
               <div className="mb-5 bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 shadow-lg">
                 <div className="text-[11px] leading-relaxed text-gray-400">
@@ -608,6 +695,12 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                     At <span className="text-yellow-400 font-semibold">5/5 ⭐</span>, hit <span className="text-yellow-400 font-semibold">Learned it</span> to remove the word.
                   </p>
                   <p className="mt-2">
+                    <span className="font-semibold text-white">Swipe:</span>{" "}
+                    <span className="text-emerald-400">right = Got it</span>,{" "}
+                    <span className="text-rose-400">left = Forgot it</span>,{" "}
+                    <span className="text-yellow-400">up = Learned it</span>.
+                  </p>
+                  <p className="mt-2">
                     Toggle <span className="font-semibold text-white">中 → EN</span> to switch direction.
                   </p>
                 </div>
@@ -617,15 +710,13 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             {/* Progress header */}
             <div className="mb-6">
               <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
-                <span>
-                  Card {currentIndex + 1} of {sessionWords.length}
-                </span>
+                <span>Card {currentIndex + 1} of {sessionWords.length}</span>
                 <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
                   Practice{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
                 </span>
               </div>
 
-              {/* Segmented progress bar */}
+              {/* Segmented bar */}
               <div
                 className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex transition-all duration-300 ${
                   feedback === "got" || feedback === "gold"
@@ -644,142 +735,169 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                       className={`h-full flex-1 transition-all duration-300 ${color} ${
                         isCurrent ? "z-10 relative brightness-150 scale-y-150" : ""
                       } ${i > 0 ? "border-l border-black/30" : ""}`}
-                      style={
-                        isCurrent
-                          ? { boxShadow: "0 0 8px 2px rgba(255,255,255,0.4)" }
-                          : undefined
-                      }
+                      style={isCurrent ? { boxShadow: "0 0 8px 2px rgba(255,255,255,0.4)" } : undefined}
                     />
                   );
                 })}
               </div>
             </div>
 
-            {/* Flashcard */}
-            <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(580px,calc(100dvh-300px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
-                feedback,
-                currentWord.sessionProgress >= 5
-              )}`}
-              onClick={() => setIsFlipped(!isFlipped)}
-            >
-              {/* Top badges */}
-              <div className="absolute top-5 left-6 flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    currentWord.hskLevel === 1
-                      ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
-                      : "bg-blue-950/80 text-blue-400 border border-blue-800/50"
-                  }`}
-                >
-                  HSK {currentWord.hskLevel}
-                </span>
-                {isCurrentlyLearned && (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
-                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                )}
-              </div>
+            {/* ── Flashcard with swipe ── */}
+            <div className="relative">
+              {/* Swipe action overlay (behind the card) */}
+              {isMobile && isSwipeActive && swipeInfo && (
+                <div className={`absolute inset-0 rounded-3xl flex items-center justify-center z-0 ${swipeInfo.bg} border-2 ${swipeInfo.border} transition-all duration-150`}>
+                  <div className={`text-center ${swipeInfo.color}`}>
+                    <div className="text-4xl mb-2">{swipeInfo.icon}</div>
+                    <div className="text-lg font-bold">{swipeInfo.text}</div>
+                  </div>
+                </div>
+              )}
 
-              <div className="absolute top-5 right-6">
-                <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
-              </div>
-
-              {/* Front content */}
               <div
-                className={`flex flex-col items-center transition-all duration-300 ${
-                  isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"
-                }`}
+                className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(580px,calc(100dvh-300px))] flex flex-col items-center justify-center select-none transition-all duration-300 relative overflow-hidden z-10 ${
+                  isMobile ? "touch-none" : "cursor-pointer"
+                } ${swipeBorderClass || getCardGlowClass(feedback, currentWord.sessionProgress >= 5)}`}
+                onClick={isMobile ? undefined : () => setIsFlipped(!isFlipped)}
+                onTouchStart={isMobile ? onTouchStart : undefined}
+                onTouchMove={isMobile ? onTouchMove : undefined}
+                onTouchEnd={isMobile ? onTouchEnd : undefined}
+                style={cardSwipeStyle}
               >
-                {isChinese ? (
-                  /* Chinese front */
-                  <>
-                    <div className="flex items-end gap-2 justify-center">
-                      {currentWord.hanzi.split("").map((char, i) => (
-                        <HoverCharacter
-                          key={i}
-                          char={char}
-                          pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
-                          size="2xl"
-                        />
-                      ))}
+                {/* Swipe label on card */}
+                {isMobile && isSwipeActive && swipeInfo && (
+                  <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none`}>
+                    <div className={`px-6 py-3 rounded-2xl bg-black/70 backdrop-blur-sm border ${swipeInfo.border}`}>
+                      <span className={`text-xl font-bold ${swipeInfo.color}`}>{swipeInfo.text}</span>
                     </div>
-                    <div className="mt-4">
-                      <SpeakerButton text={currentWord.hanzi} size="md" />
-                    </div>
-                  </>
-                ) : (
-                  /* English front */
-                  <>
-                    <p className="text-4xl font-bold text-white text-center px-6">{currentWord.english}</p>
-                    <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
-                  </>
-                )}
-
-                {!isFlipped && (
-                  <div className="mt-8">
-                    <ProgressBarInsideCard />
                   </div>
                 )}
 
-                {!isFlipped && (
-                  <p className="text-gray-600 text-sm mt-4">
-                    {isChinese ? "Tap to reveal · Hover for pinyin" : "Tap to reveal Chinese"}
-                  </p>
-                )}
-              </div>
-
-              {/* Back overlay */}
-              <div
-                className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
-                  isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
-                }`}
-              >
-                {isChinese ? (
-                  /* Chinese→English back: show pinyin + English */
-                  <>
-                    <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
-                    <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
-                  </>
-                ) : (
-                  /* English→Chinese back: show Chinese + pinyin + speaker */
-                  <>
-                    <div className="flex items-end gap-2 justify-center mb-2">
-                      {currentWord.hanzi.split("").map((char, i) => (
-                        <HoverCharacter
-                          key={i}
-                          char={char}
-                          pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
-                          size="xl"
-                        />
-                      ))}
-                    </div>
-                    <p className="text-red-400 text-lg font-medium mb-2">{currentWord.pinyin}</p>
-                    <SpeakerButton text={currentWord.hanzi} size="md" />
-                  </>
-                )}
-
-                <div className="my-4">
-                  <ProgressBarInsideCard />
+                {/* Top badges */}
+                <div className="absolute top-5 left-6 flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      currentWord.hskLevel === 1
+                        ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
+                        : "bg-blue-950/80 text-blue-400 border border-blue-800/50"
+                    }`}
+                  >
+                    HSK {currentWord.hskLevel}
+                  </span>
+                  {isCurrentlyLearned && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
+                      <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  )}
                 </div>
 
-                {/* Examples */}
-                <div className="space-y-3 mt-2 text-left w-full">
-                  {currentWord.examples.slice(0, 3).map((ex, idx) => (
-                    <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
-                          {ex.pinyinWords.map((pw, i) => (
-                            <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="sm" />
-                          ))}
-                        </div>
-                        <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
+                <div className="absolute top-5 right-6">
+                  <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
+                </div>
+
+                {/* Mobile swipe hint */}
+                {isMobile && !isFlipped && !isSwipeActive && (
+                  <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-6 text-[10px] text-gray-600 pointer-events-none">
+                    <span>← Forgot</span>
+                    <span>↑ Learned</span>
+                    <span>Got it →</span>
+                  </div>
+                )}
+
+                {/* Front content */}
+                <div
+                  className={`flex flex-col items-center transition-all duration-300 ${
+                    isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"
+                  }`}
+                >
+                  {isChinese ? (
+                    <>
+                      <div className="flex items-end gap-2 justify-center">
+                        {currentWord.hanzi.split("").map((char, i) => (
+                          <HoverCharacter
+                            key={i}
+                            char={char}
+                            pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
+                            size="2xl"
+                          />
+                        ))}
                       </div>
-                      <SpeakerButton text={ex.chinese} size="sm" />
+                      <div className="mt-4">
+                        <SpeakerButton text={currentWord.hanzi} size="md" />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-4xl font-bold text-white text-center px-6">{currentWord.english}</p>
+                      <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
+                    </>
+                  )}
+
+                  {!isFlipped && (
+                    <div className="mt-8">
+                      <ProgressBarInsideCard />
                     </div>
-                  ))}
+                  )}
+
+                  {!isFlipped && (
+                    <p className="text-gray-600 text-sm mt-4">
+                      {isMobile
+                        ? (isChinese ? "Tap to reveal · Swipe to answer" : "Tap to reveal Chinese")
+                        : (isChinese ? "Tap to reveal · Hover for pinyin" : "Tap to reveal Chinese")
+                      }
+                    </p>
+                  )}
+                </div>
+
+                {/* Back overlay */}
+                <div
+                  className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
+                    isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
+                  }`}
+                >
+                  {isChinese ? (
+                    <>
+                      <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
+                      <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-end gap-2 justify-center mb-2">
+                        {currentWord.hanzi.split("").map((char, i) => (
+                          <HoverCharacter
+                            key={i}
+                            char={char}
+                            pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
+                            size="xl"
+                          />
+                        ))}
+                      </div>
+                      <p className="text-red-400 text-lg font-medium mb-2">{currentWord.pinyin}</p>
+                      <SpeakerButton text={currentWord.hanzi} size="md" />
+                    </>
+                  )}
+
+                  <div className="my-4">
+                    <ProgressBarInsideCard />
+                  </div>
+
+                  <div className="space-y-3 mt-2 text-left w-full">
+                    {currentWord.examples.slice(0, 3).map((ex, idx) => (
+                      <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
+                            {ex.pinyinWords.map((pw, i) => (
+                              <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                            ))}
+                          </div>
+                          <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
+                        </div>
+                        <SpeakerButton text={ex.chinese} size="sm" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -788,11 +906,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             <div className="flex gap-3 mt-4">
               <button
                 onClick={handleForgotIt}
-                disabled={isAdvancing}
+                disabled={isAdvancing || swipeAnimating}
                 className={`flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
                   isAdvancing && feedback === "forgot"
                     ? "border-red-500 bg-red-950/30 scale-[0.98]"
-                    : isAdvancing
+                    : isAdvancing || swipeAnimating
                     ? "opacity-60 cursor-not-allowed border-red-900/40"
                     : "border-red-900/40 hover:bg-red-950/40 hover:border-red-700/60"
                 }`}
@@ -804,11 +922,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </button>
               <button
                 onClick={handleGotIt}
-                disabled={isAdvancing}
+                disabled={isAdvancing || swipeAnimating}
                 className={`flex-1 py-4 bg-neutral-900 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
                   isAdvancing && (feedback === "got" || feedback === "gold")
                     ? "border-emerald-500 bg-emerald-950/30 scale-[0.98] text-emerald-400"
-                    : isAdvancing
+                    : isAdvancing || swipeAnimating
                     ? "opacity-60 cursor-not-allowed border-emerald-900/40 text-emerald-400"
                     : currentWord.sessionProgress === 4
                     ? "text-emerald-400 border-emerald-900/40 hover:text-yellow-300 hover:border-yellow-500/70 hover:bg-yellow-950/20 hover:shadow-[0_0_14px_3px_rgba(250,204,21,0.3)]"
@@ -822,12 +940,12 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </button>
             </div>
 
-            {/* Learned it button - gold hover, glows when at 5/5 */}
+            {/* Learned it button */}
             <button
               onClick={handleRemove}
-              disabled={isAdvancing}
+              disabled={isAdvancing || swipeAnimating}
               className={`w-full mt-3 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                isAdvancing
+                isAdvancing || swipeAnimating
                   ? "opacity-60 cursor-not-allowed text-yellow-500/60 bg-neutral-950 border border-yellow-900/30"
                   : currentWord.sessionProgress >= 5
                   ? "text-yellow-400 bg-yellow-950/30 border border-yellow-600/60 shadow-[0_0_16px_3px_rgba(250,204,21,0.35)] hover:shadow-[0_0_22px_5px_rgba(250,204,21,0.45)] hover:text-yellow-300 hover:border-yellow-500/80 hover:bg-yellow-950/40"
@@ -859,10 +977,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
             <div className="mt-10 text-center">
               <button
-                onClick={() => {
-                  clearSession();
-                  startNewSession(hskLevel);
-                }}
+                onClick={() => { clearSession(); startNewSession(hskLevel); }}
                 className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors"
               >
                 Start New Session
@@ -871,10 +986,9 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
           </div>
         </div>
 
-        {/* Right column: collapsible info toast (desktop only) */}
+        {/* Desktop help toast */}
         <div className={`hidden lg:block justify-self-end ${isMobile ? "hidden" : ""}`}>
           {infoMinimized ? (
-            /* Minimized state: just a (?) button */
             <button
               onClick={() => {
                 setInfoMinimized(false);
@@ -888,7 +1002,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </svg>
             </button>
           ) : (
-            /* Expanded state: full info panel */
             <div className="bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-4 pr-11 shadow-xl sticky top-24 max-w-[300px]">
               <div className="text-xs leading-relaxed text-gray-400">
                 <p className="font-semibold text-white">How to:</p>
@@ -902,24 +1015,20 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                 </p>
                 <p className="mt-2">
                   Click <span className="font-semibold text-emerald-400">Got it</span> to increase progress,{" "}
-                  <span className="font-semibold text-rose-400">Forgot it</span> to decrease it. Cycle through as many times as
-                  you like!
+                  <span className="font-semibold text-rose-400">Forgot it</span> to decrease it.
                 </p>
                 <p className="mt-2">
                   <span className="font-semibold text-yellow-400">Learned it</span> removes the word from the session
-                  and marks it as learned. Keep going until you have{" "}
+                  and marks it as learned. Keep going until{" "}
                   <span className="font-semibold text-white">no words left</span>!
                 </p>
                 <p className="mt-3 pt-2 border-t border-neutral-800">
-                  <span className="font-semibold text-white">Progress levels (0–5):</span><br/>
-                  Each word starts at <span className="text-gray-500">0/5</span>. 
+                  <span className="font-semibold text-white">Progress (0–5):</span><br/>
                   Press <span className="text-emerald-400">Got it</span> to fill the bar.
-                  At <span className="text-yellow-400">5/5 ⭐</span>, the word glows gold — 
-                  perfect time to click <span className="text-yellow-400">Learned it</span>!
+                  At <span className="text-yellow-400">5/5 ⭐</span>, hit <span className="text-yellow-400">Learned it</span>!
                 </p>
                 <p className="mt-3 pt-2 border-t border-neutral-800">
-                  Use the <span className="font-semibold text-white">中 → EN</span> toggle to switch between
-                  Chinese→English and English→Chinese practice modes.
+                  Toggle <span className="font-semibold text-white">中 → EN</span> to switch direction.
                 </p>
               </div>
               <button
