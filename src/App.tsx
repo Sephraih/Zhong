@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { getEnrichedVocabulary } from "./data/mergeExamples";
+import { enrichVocabulary } from "./data/mergeExamples";
+import { useVocabulary } from "./hooks/useVocabulary";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
 import type { FlashcardFilter } from "./components/FlashcardMode";
