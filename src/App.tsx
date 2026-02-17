@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { fetchVocabularyFromSupabase } from "./data/supabaseVocab";
-import { FALLBACK_VOCABULARY, type VocabWord } from "./data/vocabulary";
+import { fetchVocabularyFromSupabase, buildFallbackVocabulary } from "./data/supabaseVocab";
+import type { VocabWord } from "./data/vocabulary";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
 import type { FlashcardFilter } from "./components/FlashcardMode";
@@ -126,9 +126,10 @@ function AppContent() {
   };
 
   const useFallbackData = () => {
-    setVocabulary(FALLBACK_VOCABULARY);
-    setHsk1Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 1).length);
-    setHsk2Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 2).length);
+    const fallback = buildFallbackVocabulary();
+    setVocabulary(fallback);
+    setHsk1Count(fallback.filter((w: VocabWord) => w.hskLevel === 1).length);
+    setHsk2Count(fallback.filter((w: VocabWord) => w.hskLevel === 2).length);
     setDataSource("fallback");
     setDataError(false);
   };

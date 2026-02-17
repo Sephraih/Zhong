@@ -1,5 +1,6 @@
 import { supabase } from "../supabaseClient";
 import type { VocabWord } from "./vocabulary";
+import { FALLBACK_DATA } from "./fallbackData";
 
 // ─── Supabase row types ───────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ interface ExampleRow {
   id: number;
   word_id: number;
   hanzi: string;
-  pinyin: string | null;   // space-separated syllables, may include punct tokens
+  pinyin: string | null;
   english: string;
 }
 
@@ -61,7 +62,7 @@ function buildPinyinWords(
     });
   }
 
-  // No pinyin in DB — return chars with empty pinyin (hover shows nothing)
+  // No pinyin — return chars with empty pinyin
   return chars.map((char) => ({ char, pinyin: "" }));
 }
 
@@ -79,31 +80,61 @@ function limitEnglish(english: string, max = 3): string {
 
 /**
  * Infer a rough display category from the English definition + HSK level.
- * The Supabase table doesn't have a category column so we derive it here.
  */
 function inferCategory(english: string, hskLevel: number): string {
   const e = english.toLowerCase();
-  if (/\b(i|you|he|she|we|they|me|him|her|us|them|myself|yourself)\b/.test(e)) return "Pronouns";
+  if (/\bdet\.\s*:/.test(e)) return "Numbers";
+  if (/\bm\.\[/.test(e)) return "Measure Words";
+  if (/\bparticle\b/.test(e)) return "Particles";
+  if (/\b(i|you|he|she|we|they|me|him|her|us|them|myself|yourself|oneself)\b/.test(e)) return "Pronouns";
   if (/\b(one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|zero|\d)\b/.test(e)) return "Numbers";
-  if (/\b(father|mother|son|daughter|brother|sister|family|parent|child|husband|wife|grandpa|grandma)\b/.test(e)) return "Family";
-  if (/\b(eat|drink|cook|buy|sell|give|take|bring|go|come|walk|run|sit|stand|sleep|wake|work|play|study|read|write|speak|listen|look|watch|learn|teach|help|want|need|use|open|close|start|finish)\b/.test(e)) return "Verbs";
-  if (/\b(big|small|good|bad|hot|cold|fast|slow|tall|short|long|happy|sad|angry|tired|busy|new|old|clean|beautiful|expensive|cheap|important|easy|difficult|simple|clear|comfortable|healthy)\b/.test(e)) return "Adjectives";
-  if (/\b(today|yesterday|tomorrow|now|morning|afternoon|evening|night|year|month|week|day|hour|minute|time|before|after|already|soon|always|often|sometimes|never|again|early|late)\b/.test(e)) return "Time";
-  if (/\b(china|beijing|school|hospital|airport|station|hotel|restaurant|shop|store|bank|company|park|library|home|house|room|office|city|country|place)\b/.test(e)) return "Places";
-  if (/\b(rice|noodle|bread|meat|fish|chicken|egg|vegetable|fruit|apple|water|tea|coffee|milk|beer|food|drink)\b/.test(e)) return "Food & Drink";
-  if (/\b(weather|rain|snow|wind|sun|cloud|cold|hot|warm|temperature)\b/.test(e)) return "Weather";
-  if (/\b(doctor|hospital|medicine|sick|health|body|head|eye|ear|mouth|hand|foot|leg|pain)\b/.test(e)) return "Health";
-  if (/\b(airplane|train|bus|taxi|subway|car|bicycle|boat|ticket|passport|travel)\b/.test(e)) return "Transport";
-  if (/\b(red|blue|green|yellow|white|black|color|colour)\b/.test(e)) return "Colors";
-  if (/\b(this|that|which|what|who|where|when|why|how|here|there)\b/.test(e)) return "Question Words";
-  if (/\b(money|price|pay|cost|yuan|dollar|cheap|expensive)\b/.test(e)) return "Shopping";
-  if (/\b(phone|computer|internet|television|radio|newspaper|book|movie)\b/.test(e)) return "Technology & Media";
-  if (/\b(sport|exercise|swim|run|ball|game|hobby)\b/.test(e)) return "Sports & Hobbies";
+  if (/\b(father|mother|son|daughter|brother|sister|family|parent|child|husband|wife|grandpa|grandma|sibling|uncle|aunt|cousin|nephew|niece)\b/.test(e)) return "Family";
+  if (/\b(eat|drink|cook|buy|sell|give|take|bring|go|come|walk|run|sit|stand|sleep|wake|work|play|study|read|write|speak|listen|look|watch|learn|teach|help|want|need|use|open|close|start|finish|make|put|move|carry|return|arrive|leave|meet|tell|ask|answer|call|wait|try|hope|prepare|practice|choose|allow|invite|welcome|worry|feel|think|know|understand|remember|forget|believe|swim|climb|dance|sing|travel|exercise|jump|fly|drive|ride|pay|send|receive|collect|change|grow|build|fix|clean|wash|wear|dress|visit|check|rest|continue|stop|begin|end|happen|become|seem|appear|need|cost|spend|save)\b/.test(e)) return "Verbs";
+  if (/\b(big|small|good|bad|hot|cold|fast|slow|tall|short|long|happy|sad|angry|tired|busy|new|old|clean|beautiful|expensive|cheap|important|easy|difficult|simple|clear|comfortable|healthy|smart|clever|famous|special|same|different|correct|wrong|safe|dangerous|quiet|loud|heavy|light|strong|weak|full|empty|near|far|left|right|front|back|up|down|high|low|early|late|young|dark|bright|round|flat|soft|hard|sweet|bitter|sour|spicy|delicious|fresh|convenient|satisfied|ordinary|strange|serious|careful|patient)\b/.test(e)) return "Adjectives";
+  if (/\b(today|yesterday|tomorrow|now|morning|afternoon|evening|night|year|month|week|day|hour|minute|time|before|after|already|soon|always|often|sometimes|never|again|early|late|then|ago|during|while|until|since|recently|immediately|finally|suddenly|usually|generally|perhaps|maybe|together|apart|quickly|slowly|carefully|especially|actually|certainly|already|still|also|just|only|even|almost|quite|very|too|so|here|there|everywhere|nowhere|somewhere|anywhere)\b/.test(e)) return "Time & Adverbs";
+  if (/\b(china|beijing|shanghai|school|hospital|airport|station|hotel|restaurant|shop|store|bank|company|park|library|home|house|room|office|city|country|place|road|street|bridge|building|floor|garden|farm|market|pharmacy|post office|embassy|museum|theater|stadium|swimming pool|gym|factory|village|town|mountain|river|lake|sea|beach|island|forest|desert)\b/.test(e)) return "Places";
+  if (/\b(rice|noodle|bread|meat|fish|chicken|beef|pork|egg|vegetable|fruit|apple|orange|banana|grape|watermelon|pear|strawberry|water|tea|coffee|milk|beer|juice|soup|cake|bun|dumpling|tofu|salt|sugar|oil|sauce)\b/.test(e)) return "Food & Drink";
+  if (/\b(weather|rain|snow|wind|sun|cloud|cold|hot|warm|temperature|fog|thunder|lightning|storm|season|spring|summer|autumn|winter)\b/.test(e)) return "Weather & Nature";
+  if (/\b(doctor|hospital|medicine|sick|health|body|head|eye|ear|mouth|nose|hand|foot|leg|arm|back|heart|pain|fever|cold|cough|tired|rest)\b/.test(e)) return "Health & Body";
+  if (/\b(airplane|train|bus|taxi|subway|car|bicycle|boat|ship|ticket|passport|luggage|travel|trip|journey|station|airport)\b/.test(e)) return "Transport & Travel";
+  if (/\b(red|blue|green|yellow|white|black|grey|pink|purple|orange|brown|color|colour)\b/.test(e)) return "Colors";
+  if (/\b(money|price|pay|cost|yuan|dollar|cheap|expensive|discount|change|receipt)\b/.test(e)) return "Shopping";
+  if (/\b(phone|computer|internet|television|radio|newspaper|book|movie|music|song|game|app|camera|photo)\b/.test(e)) return "Technology & Media";
+  if (/\b(sport|exercise|swim|run|ball|game|hobby|basketball|football|tennis|badminton|table tennis|chess|dance|sing)\b/.test(e)) return "Sports & Hobbies";
+  if (/\b(class|lesson|exam|test|homework|grade|score|teacher|student|school|university|college|major|subject|study|learn|practice|review|textbook|dictionary)\b/.test(e)) return "Education";
+  if (/\b(happy|sad|angry|worried|excited|surprised|scared|nervous|tired|bored|interested|satisfied|disappointed|lonely|confident|proud|grateful|sorry|love|hate|miss|like|dislike)\b/.test(e)) return "Emotions";
   if (hskLevel === 1) return "HSK 1";
   return "HSK 2";
 }
 
-// ─── Main fetch function ──────────────────────────────────────────────────────
+// ─── Convert fallback JSON format to VocabWord ────────────────────────────────
+
+/**
+ * Converts the FALLBACK_DATA (which mirrors the Supabase export JSON format)
+ * into the VocabWord[] shape used by all components.
+ */
+export function buildFallbackVocabulary(): VocabWord[] {
+  return FALLBACK_DATA.map((item, index) => {
+    const hskLevel = item.hsk_level === 1 ? 1 : 2;
+    const examples = item.examples.slice(0, 3).map((ex) => ({
+      chinese: ex.chinese,
+      pinyinWords: buildPinyinWords(ex.chinese, ex.pinyin),
+      english: ex.english,
+    }));
+
+    return {
+      id: index + 1,
+      hanzi: item.hanzi,
+      pinyin: item.pinyin,
+      english: limitEnglish(item.english, 3),
+      hskLevel,
+      category: inferCategory(item.english, hskLevel),
+      examples,
+    } satisfies VocabWord;
+  });
+}
+
+// ─── Main fetch result type ───────────────────────────────────────────────────
 
 export interface FetchResult {
   words: VocabWord[];
@@ -117,7 +148,7 @@ export interface FetchResult {
  * Fetch ALL HSK words + their example sentences from Supabase in two queries,
  * join in-memory, then map to the VocabWord shape used by all components.
  *
- * Always resolves — on any error returns { words: [], source: "fallback" }
+ * Always resolves — on any error returns source: "fallback" with empty words[]
  * so the caller can display the local fallback vocabulary instead.
  */
 export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
