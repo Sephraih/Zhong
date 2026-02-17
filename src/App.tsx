@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { enrichVocabulary } from "./data/mergeExamples";
-import { useVocabulary } from "./hooks/useVocabulary";
+import { fetchVocabularyFromSupabase } from "./data/supabaseVocab";
+import { FALLBACK_VOCABULARY, type VocabWord } from "./data/vocabulary";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
 import type { FlashcardFilter } from "./components/FlashcardMode";
@@ -13,14 +13,83 @@ import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
 
-const vocabulary = getEnrichedVocabulary();
-
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
+// ─── Loading screen ───────────────────────────────────────────────────────────
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
+      <div className="flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-lg shadow-red-900/40 animate-pulse">
+        <span className="text-white text-2xl font-bold">汉</span>
+      </div>
+      <div className="text-center">
+        <p className="text-white text-lg font-semibold">Loading vocabulary…</p>
+        <p className="text-gray-500 text-sm mt-1">Fetching HSK word list from database</p>
+      </div>
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="w-2 h-2 rounded-full bg-red-600 animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Error / fallback screen ──────────────────────────────────────────────────
+function ErrorScreen({
+  onRetry,
+  onUseFallback,
+}: {
+  onRetry: () => void;
+  onUseFallback: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6 px-4">
+      <div className="text-5xl">⚠️</div>
+      <div className="text-center max-w-md">
+        <p className="text-white text-xl font-bold mb-2">Could not load vocabulary</p>
+        <p className="text-gray-400 text-sm">
+          Unable to reach the database. Check your internet connection or Supabase
+          environment variables.
+        </p>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onRetry}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors"
+        >
+          Retry
+        </button>
+        <button
+          onClick={onUseFallback}
+          className="px-6 py-3 bg-neutral-800 hover:bg-neutral-700 text-gray-200 rounded-xl font-semibold transition-colors"
+        >
+          Use offline preview (10 words)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main app content ─────────────────────────────────────────────────────────
 function AppContent() {
-  const { error, clearError } = useAuth();
+  const { error: authError, clearError } = useAuth();
+
+  // ── Data loading state ──
+  const [vocabulary, setVocabulary] = useState<VocabWord[]>([]);
+  const [hsk1Count, setHsk1Count] = useState(0);
+  const [hsk2Count, setHsk2Count] = useState(0);
+  const [dataSource, setDataSource] = useState<"supabase" | "fallback" | null>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [dataError, setDataError] = useState(false);
+
+  // ── UI state ──
   const [viewMode, setViewMode] = useState<ViewMode>("home");
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -36,11 +105,44 @@ function AppContent() {
   const learnedState = useLearnedState();
   const { isLearned, toggleLearned, learnedCount } = learnedState;
 
+  // ── Load vocabulary from Supabase ──
+  const loadVocabulary = async () => {
+    setIsDataLoading(true);
+    setDataError(false);
+
+    const result = await fetchVocabularyFromSupabase();
+
+    if (result.words.length > 0) {
+      setVocabulary(result.words);
+      setHsk1Count(result.hsk1Count);
+      setHsk2Count(result.hsk2Count);
+      setDataSource("supabase");
+    } else {
+      // Supabase returned nothing — show error screen
+      setDataError(true);
+    }
+
+    setIsDataLoading(false);
+  };
+
+  const useFallback = () => {
+    setVocabulary(FALLBACK_VOCABULARY);
+    setHsk1Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 1).length);
+    setHsk2Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 2).length);
+    setDataSource("fallback");
+    setDataError(false);
+  };
+
+  useEffect(() => {
+    loadVocabulary();
+  }, []);
+
+  // ── Derived data ──
   const categories = useMemo(() => {
     const cats = new Set<string>();
     vocabulary.forEach((w) => cats.add(w.category));
-    return Array.from(cats);
-  }, []);
+    return Array.from(cats).sort();
+  }, [vocabulary]);
 
   const filteredWords = useMemo(() => {
     return vocabulary.filter((word) => {
@@ -58,21 +160,23 @@ function AppContent() {
       }
       return true;
     });
-  }, [hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
+  }, [vocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
 
-  const hsk1Count = vocabulary.filter((w) => w.hskLevel === 1).length;
-  const hsk2Count = vocabulary.filter((w) => w.hskLevel === 2).length;
   const stillLearningCount = vocabulary.length - learnedCount;
 
   const activeWords = useMemo(() => {
     if (hskFilter === "all") return vocabulary;
     return vocabulary.filter((w) => w.hskLevel === hskFilter);
-  }, [hskFilter]);
+  }, [vocabulary, hskFilter]);
 
   const openAuthModal = (mode: "login" | "signup") => {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
+
+  // ── Render loading / error states ──
+  if (isDataLoading) return <LoadingScreen />;
+  if (dataError) return <ErrorScreen onRetry={loadVocabulary} onUseFallback={useFallback} />;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -81,10 +185,7 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <button
-              onClick={() => {
-                setViewMode("home");
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => { setViewMode("home"); setMobileMenuOpen(false); }}
               className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
@@ -119,21 +220,16 @@ function AppContent() {
               ))}
             </nav>
 
-            {/* Auth Section */}
             <div className="flex items-center gap-2">
               <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
-              
-              {/* Mobile menu button */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
+                  {mobileMenuOpen
+                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
                 </svg>
               </button>
             </div>
@@ -151,14 +247,9 @@ function AppContent() {
                 ].map((mode) => (
                   <button
                     key={mode.id}
-                    onClick={() => {
-                      setViewMode(mode.id);
-                      setMobileMenuOpen(false);
-                    }}
+                    onClick={() => { setViewMode(mode.id); setMobileMenuOpen(false); }}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      viewMode === mode.id
-                        ? "bg-red-600 text-white"
-                        : "text-gray-400 bg-neutral-800"
+                      viewMode === mode.id ? "bg-red-600 text-white" : "text-gray-400 bg-neutral-800"
                     }`}
                   >
                     {mode.label}
@@ -202,8 +293,13 @@ function AppContent() {
                   📖 Learning: <span className="font-bold text-red-400">{stillLearningCount}</span>
                 </span>
               </div>
+              {/* Fallback indicator */}
+              {dataSource === "fallback" && (
+                <span className="text-xs text-yellow-500/80 border border-yellow-800/40 rounded px-2 py-0.5">
+                  ⚠ offline preview
+                </span>
+              )}
             </div>
-            {/* Progress indicator */}
             <div className="hidden sm:flex items-center gap-3">
               <div className="w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
                 <div
@@ -221,12 +317,9 @@ function AppContent() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {viewMode === "home" && (
-          <LandingPage
-            onSelectMode={(mode) => {
-              setViewMode(mode);
-            }}
-          />
+          <LandingPage onSelectMode={(mode) => setViewMode(mode)} />
         )}
+
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
@@ -238,22 +331,11 @@ function AppContent() {
 
         {viewMode === "browse" && (
           <>
-            {/* Filters */}
             <div className="mb-8 space-y-4">
               {/* Search */}
               <div className="relative max-w-md">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
                   type="text"
@@ -264,15 +346,13 @@ function AppContent() {
                 />
               </div>
 
-              {/* Filter Chips Row 1: Level + Status */}
+              {/* Level + Status filters */}
               <div className="flex flex-wrap gap-2">
-                <div className="flex items-center gap-1 mr-2">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Level:</span>
-                </div>
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Level:</span>
                 {[
                   { value: "all" as HSKFilter, label: "All Levels" },
-                  { value: 1 as HSKFilter, label: "HSK 1" },
-                  { value: 2 as HSKFilter, label: "HSK 2" },
+                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
+                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
@@ -286,12 +366,8 @@ function AppContent() {
                     {filter.label}
                   </button>
                 ))}
-
                 <div className="w-px h-6 bg-neutral-800 self-center mx-1" />
-
-                <div className="flex items-center gap-1 mr-1">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Status:</span>
-                </div>
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
                 {[
                   { value: "all" as StatusFilter, label: "All Words", icon: "📋" },
                   { value: "still-learning" as StatusFilter, label: `Still Learning (${stillLearningCount})`, icon: "📖" },
@@ -304,8 +380,6 @@ function AppContent() {
                       statusFilter === filter.value
                         ? filter.value === "learned"
                           ? "bg-emerald-700 text-white shadow-sm"
-                          : filter.value === "still-learning"
-                          ? "bg-red-600 text-white shadow-sm"
                           : "bg-red-600 text-white shadow-sm"
                         : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-red-800/60 hover:text-white"
                     }`}
@@ -315,11 +389,9 @@ function AppContent() {
                 ))}
               </div>
 
-              {/* Filter Chips Row 2: Category */}
+              {/* Category filter */}
               <div className="flex flex-wrap gap-2">
-                <div className="flex items-center gap-1 mr-1">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Category:</span>
-                </div>
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Category:</span>
                 <button
                   onClick={() => setCategoryFilter("all")}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -346,14 +418,13 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Results count */}
             <div className="mb-4">
               <p className="text-sm text-gray-500">
-                Showing <span className="font-semibold text-gray-300">{filteredWords.length}</span> words
+                Showing <span className="font-semibold text-gray-300">{filteredWords.length}</span> of{" "}
+                <span className="font-semibold text-gray-300">{vocabulary.length}</span> words
                 {statusFilter !== "all" && (
                   <span className="text-gray-600">
-                    {" "}
-                    · filtered by{" "}
+                    {" "}· filtered by{" "}
                     <span className={statusFilter === "learned" ? "text-emerald-400" : "text-red-400"}>
                       {statusFilter === "learned" ? "Learned" : "Still Learning"}
                     </span>
@@ -362,7 +433,6 @@ function AppContent() {
               </p>
             </div>
 
-            {/* Word Grid */}
             {filteredWords.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredWords.map((word) => (
@@ -379,12 +449,7 @@ function AppContent() {
                 <p className="text-5xl mb-4">🔍</p>
                 <p className="text-gray-400 text-lg">No words found matching your filters.</p>
                 <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setHskFilter("all");
-                    setCategoryFilter("all");
-                    setStatusFilter("all");
-                  }}
+                  onClick={() => { setSearchQuery(""); setHskFilter("all"); setCategoryFilter("all"); setStatusFilter("all"); }}
                   className="mt-4 text-red-400 font-medium hover:underline"
                 >
                   Clear all filters
@@ -409,24 +474,18 @@ function AppContent() {
               <h2 className="text-2xl font-bold text-white mb-2">🃏 Flashcard Mode</h2>
               <p className="text-gray-400">Tap to reveal · Hover characters for pinyin</p>
 
-              {/* Level Filter */}
               <div className="flex flex-wrap justify-center gap-2 mt-4">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Level:</span>
                 {[
                   { value: "all" as HSKFilter, label: "All" },
-                  { value: 1 as HSKFilter, label: "HSK 1" },
-                  { value: 2 as HSKFilter, label: "HSK 2" },
+                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
+                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
-                    onClick={() => {
-                      setHskFilter(filter.value);
-                      setFlashcardKey((k) => k + 1);
-                    }}
+                    onClick={() => { setHskFilter(filter.value); setFlashcardKey((k) => k + 1); }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value
-                        ? "bg-red-600 text-white"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
+                      hskFilter === filter.value ? "bg-red-600 text-white" : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
                     {filter.label}
@@ -434,7 +493,6 @@ function AppContent() {
                 ))}
               </div>
 
-              {/* Word Status Filter */}
               <div className="flex flex-wrap justify-center gap-2 mt-3">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Words:</span>
                 {[
@@ -444,17 +502,10 @@ function AppContent() {
                 ].map((filter) => (
                   <button
                     key={filter.value}
-                    onClick={() => {
-                      setFlashcardStatusFilter(filter.value);
-                      setFlashcardKey((k) => k + 1);
-                    }}
+                    onClick={() => { setFlashcardStatusFilter(filter.value); setFlashcardKey((k) => k + 1); }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       flashcardStatusFilter === filter.value
-                        ? filter.value === "learned"
-                          ? "bg-emerald-700 text-white"
-                          : filter.value === "still-learning"
-                          ? "bg-red-600 text-white"
-                          : "bg-red-600 text-white"
+                        ? filter.value === "learned" ? "bg-emerald-700 text-white" : "bg-red-600 text-white"
                         : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
@@ -477,23 +528,17 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">✏️ Quiz Mode</h2>
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
-
               <div className="flex justify-center gap-2 mt-4">
                 {[
                   { value: "all" as HSKFilter, label: "All" },
-                  { value: 1 as HSKFilter, label: "HSK 1" },
-                  { value: 2 as HSKFilter, label: "HSK 2" },
+                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
+                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
-                    onClick={() => {
-                      setHskFilter(filter.value);
-                      setQuizKey((k) => k + 1);
-                    }}
+                    onClick={() => { setHskFilter(filter.value); setQuizKey((k) => k + 1); }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value
-                        ? "bg-red-600 text-white"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
+                      hskFilter === filter.value ? "bg-red-600 text-white" : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
                     {filter.label}
@@ -506,8 +551,8 @@ function AppContent() {
         )}
       </main>
 
-      {/* Global error toast (e.g., checkout errors) */}
-      {error && (
+      {/* Global auth error toast */}
+      {authError && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-[min(720px,calc(100vw-2rem))]">
           <div className="bg-red-950/70 border border-red-900/60 backdrop-blur-md rounded-2xl shadow-2xl px-4 py-3 flex items-start gap-3">
             <div className="mt-0.5 text-red-300">
@@ -517,12 +562,11 @@ function AppContent() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-red-200">Action failed</p>
-              <p className="text-sm text-red-200/80 mt-0.5 break-words">{error}</p>
+              <p className="text-sm text-red-200/80 mt-0.5 break-words">{authError}</p>
             </div>
             <button
               onClick={clearError}
               className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-xl text-red-200/70 hover:text-red-100 hover:bg-red-900/30 transition-colors"
-              title="Dismiss"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -537,16 +581,16 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
             <p className="text-sm text-gray-500">
-              🇨🇳 汉语学习 — Chinese Language Learning App — HSK 1 & 2 Vocabulary
+              🇨🇳 汉语学习 — Chinese Language Learning — HSK 1 & 2 Vocabulary
             </p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedCount} learned • 📖 {stillLearningCount} still learning
+              {dataSource === "fallback" && " · offline preview"}
             </p>
           </div>
         </div>
       </footer>
 
-      {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}

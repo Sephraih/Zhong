@@ -1,15 +1,4 @@
-import { additionalExamples } from "./additionalExamples";
-import type { VocabWord } from "./vocabulary";
-
-export function enrichVocabulary(words: VocabWord[]): VocabWord[] {
-  return words.map((word) => {
-    const extras = additionalExamples[word.id];
-    if (extras && extras.length > 0) {
-      return {
-        ...word,
-        examples: [...word.examples, ...extras].slice(0, 3),
-      };
-    }
-    return word;
-  });
-}
+// Thin re-export kept for backward compatibility.
+// The app now loads vocabulary from Supabase via src/data/supabaseVocab.ts
+// This file is no longer the primary data source.
+export { FALLBACK_VOCABULARY as vocabulary, getEnrichedVocabulary, type VocabWord } from "./vocabulary";
