@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
+import { useIsMobile } from "../hooks/useIsMobile";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
 
@@ -73,6 +74,8 @@ function getCardGlowClass(
 }
 
 export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
+  const isMobile = useIsMobile();
+
   const [sessionWords, setSessionWords] = useState<SessionWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -540,32 +543,76 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                   ))}
                 </div>
 
-                {/* Direction toggle */}
-                <button
-                  onClick={toggleDirection}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:border-neutral-700 transition-all"
-                  title={direction === "zh-en" ? "Switch to English → Chinese" : "Switch to Chinese → English"}
-                >
-                  {direction === "zh-en" ? (
-                    <>
-                      <span className="text-red-400">中</span>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                      <span>EN</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>EN</span>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                      <span className="text-red-400">中</span>
-                    </>
+                {/* Direction toggle + mobile help */}
+                <div className="inline-flex items-center gap-2">
+                  <button
+                    onClick={toggleDirection}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:border-neutral-700 transition-all"
+                    title={direction === "zh-en" ? "Switch to English → Chinese" : "Switch to Chinese → English"}
+                  >
+                    {direction === "zh-en" ? (
+                      <>
+                        <span className="text-red-400">中</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        <span>EN</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>EN</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        <span className="text-red-400">中</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Mobile: show help toggle right here */}
+                  {isMobile && (
+                    <button
+                      onClick={() => {
+                        const next = !infoMinimized;
+                        setInfoMinimized(next);
+                        saveSession(sessionWords, currentIndex, cycleCount, hskLevel, next, direction);
+                      }}
+                      className={`w-10 h-10 inline-flex items-center justify-center rounded-xl border transition-all ${
+                        infoMinimized
+                          ? "bg-neutral-900 border-neutral-800 text-gray-500 hover:text-white hover:border-neutral-700"
+                          : "bg-yellow-950/25 border-yellow-900/40 text-yellow-300 hover:bg-yellow-950/35 hover:border-yellow-700/50"
+                      }`}
+                      title={infoMinimized ? "Show help" : "Hide help"}
+                    >
+                      {infoMinimized ? (
+                        <span className="text-lg font-black">?</span>
+                      ) : (
+                        <span className="text-lg">—</span>
+                      )}
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             </div>
+
+            {/* Mobile: inline help panel under controls */}
+            {isMobile && !infoMinimized && (
+              <div className="mb-5 bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 shadow-lg">
+                <div className="text-[11px] leading-relaxed text-gray-400">
+                  <p className="font-semibold text-white">How to:</p>
+                  <p className="mt-2">
+                    10 words per session (8 new + 2 learned). Use <span className="text-emerald-400 font-semibold">Got it</span>{" "}
+                    / <span className="text-rose-400 font-semibold">Forgot it</span> to adjust progress.
+                  </p>
+                  <p className="mt-2">
+                    At <span className="text-yellow-400 font-semibold">5/5 ⭐</span>, hit <span className="text-yellow-400 font-semibold">Learned it</span> to remove the word.
+                  </p>
+                  <p className="mt-2">
+                    Toggle <span className="font-semibold text-white">中 → EN</span> to switch direction.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Progress header */}
             <div className="mb-6">
@@ -610,7 +657,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
             {/* Flashcard */}
             <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[580px] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
+              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(580px,calc(100dvh-300px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
                 feedback,
                 currentWord.sessionProgress >= 5
               )}`}
@@ -686,7 +733,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
               {/* Back overlay */}
               <div
-                className={`absolute inset-0 pt-36 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
+                className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${
                   isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
                 }`}
               >
@@ -824,8 +871,8 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
           </div>
         </div>
 
-        {/* Right column: collapsible info toast */}
-        <div className="hidden lg:block justify-self-end">
+        {/* Right column: collapsible info toast (desktop only) */}
+        <div className={`hidden lg:block justify-self-end ${isMobile ? "hidden" : ""}`}>
           {infoMinimized ? (
             /* Minimized state: just a (?) button */
             <button

@@ -23,13 +23,14 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
     "2xl": "text-7xl",
   };
 
-  // Mobile sizes — bump up sm and md so example sentences are tappable
+  // Mobile sizes — bump up sm/md for tap targets, but keep very large sizes a bit smaller
+  // so flashcards fit vertically on small screens.
   const mobileSizeClasses: Record<string, string> = {
     sm: "text-xl",
     md: "text-2xl",
     lg: "text-3xl",
-    xl: "text-5xl",
-    "2xl": "text-7xl",
+    xl: "text-4xl",
+    "2xl": "text-6xl",
   };
 
   const pinyinSizeClasses: Record<string, string> = {
