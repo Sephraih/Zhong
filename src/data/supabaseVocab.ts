@@ -24,26 +24,57 @@ interface ExampleRow {
 const PUNCT_RE = /^[。，！？、；：""''（）《》…—\s.!?,;:'"()\-]$/;
 
 /**
- * Split a pinyin string (space-separated syllables like "nǐ hǎo") into one
- * syllable per character in `hanzi`.  Falls back to repeating the whole string
- * for single-character words, or leaving chars empty when no mapping is found.
+ * Build a character→pinyin lookup from the loaded HSK word list.
+ * For multi-character words we map each character to its corresponding syllable.
+ * Single-character words map directly.
+ * This lets us annotate Tatoeba sentences (which have no pinyin) character by character.
+ */
+function buildCharPinyinMap(wordRows: HskWordRow[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of wordRows) {
+    const chars = Array.from(row.hanzi);
+    const syllables = row.pinyin.trim().split(/\s+/).filter(Boolean);
+    chars.forEach((char, i) => {
+      if (!PUNCT_RE.test(char) && !map.has(char)) {
+        map.set(char, syllables[i] ?? syllables[0] ?? "");
+      }
+    });
+  }
+  return map;
+}
+
+/**
+ * Build per-character pinyin for a sentence.
+ * Priority:
+ *  1. Use the sentence's own pinyin field (DB row) if present and syllable count matches.
+ *  2. Look up each character in the charPinyinMap built from the HSK word list.
+ *  3. Leave blank for punctuation or unknown characters.
  */
 function buildPinyinWords(
   hanzi: string,
-  pinyin: string | null
+  pinyin: string | null,
+  charMap: Map<string, string>
 ): { char: string; pinyin: string }[] {
   const chars = Array.from(hanzi);
 
-  if (!pinyin) {
-    return chars.map((char) => ({ char, pinyin: "" }));
+  // Try using the stored pinyin field first (space-separated syllables)
+  if (pinyin) {
+    const syllables = pinyin.trim().split(/\s+/).filter(Boolean);
+    // Only use if syllable count roughly matches non-punct char count
+    const nonPunct = chars.filter((c) => !PUNCT_RE.test(c));
+    if (syllables.length === nonPunct.length) {
+      let si = 0;
+      return chars.map((char) => {
+        if (PUNCT_RE.test(char)) return { char, pinyin: "" };
+        return { char, pinyin: syllables[si++] ?? "" };
+      });
+    }
   }
 
-  // Split on whitespace — the DB stores syllables space-separated
-  const syllables = pinyin.trim().split(/\s+/).filter(Boolean);
-
-  return chars.map((char, i) => {
+  // Fall back to character-level lookup from HSK word list
+  return chars.map((char) => {
     if (PUNCT_RE.test(char)) return { char, pinyin: "" };
-    return { char, pinyin: syllables[i] ?? syllables[0] ?? "" };
+    return { char, pinyin: charMap.get(char) ?? "" };
   });
 }
 
@@ -145,7 +176,9 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
       examplesByWordId.set(row.word_id, existing);
     }
 
-    // ── 4. Map to VocabWord[] ─────────────────────────────────────────────────
+    // ── 4. Build character→pinyin map from the HSK word list ─────────────────
+    const charMap = buildCharPinyinMap(wordRows as HskWordRow[]);
+
     const hsk1Rows = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 1);
     const hsk2Rows = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 2);
 
@@ -154,10 +187,11 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
       // Up to 3 examples per word
       const examples = rawExamples.slice(0, 3).map((ex) => ({
         chinese: ex.hanzi,
-        // Build per-character pinyin from the sentence's pinyin field.
-        // Tatoeba sentences may not have pinyin — in that case we leave it blank
-        // (the HoverCharacter component handles empty strings gracefully).
-        pinyinWords: buildPinyinWords(ex.hanzi, ex.pinyin),
+        // Build per-character pinyin using stored pinyin first,
+        // then fall back to character-level lookup from HSK word list.
+        // This ensures hover/tap pinyin works even for Tatoeba sentences
+        // that don't have a stored pinyin field.
+        pinyinWords: buildPinyinWords(ex.hanzi, ex.pinyin, charMap),
         english: ex.english,
       }));
 

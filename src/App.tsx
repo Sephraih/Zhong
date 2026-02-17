@@ -105,9 +105,9 @@ function AppContent() {
   const learnedState = useLearnedState();
   const { isLearned, toggleLearned, learnedCount } = learnedState;
 
-  // ── Load vocabulary from Supabase ──
-  const loadVocabulary = async () => {
-    setIsDataLoading(true);
+  // ── Load vocabulary — fallback first, then Supabase in background ──
+  const loadVocabulary = async (silent = false) => {
+    if (!silent) setIsDataLoading(true);
     setDataError(false);
 
     const result = await fetchVocabularyFromSupabase();
@@ -117,15 +117,15 @@ function AppContent() {
       setHsk1Count(result.hsk1Count);
       setHsk2Count(result.hsk2Count);
       setDataSource("supabase");
-    } else {
-      // Supabase returned nothing — show error screen
-      setDataError(true);
+    } else if (!silent) {
+      // Silent background refresh failed — keep showing fallback, don't error
+      setDataError(false);
     }
 
-    setIsDataLoading(false);
+    if (!silent) setIsDataLoading(false);
   };
 
-  const useFallback = () => {
+  const useFallbackData = () => {
     setVocabulary(FALLBACK_VOCABULARY);
     setHsk1Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 1).length);
     setHsk2Count(FALLBACK_VOCABULARY.filter((w) => w.hskLevel === 2).length);
@@ -134,7 +134,21 @@ function AppContent() {
   };
 
   useEffect(() => {
-    loadVocabulary();
+    // 1. Show fallback immediately so the app is never blank
+    useFallbackData();
+
+    // 2. Try Supabase in the background — replaces fallback if successful
+    fetchVocabularyFromSupabase().then((result) => {
+      if (result.words.length > 0) {
+        setVocabulary(result.words);
+        setHsk1Count(result.hsk1Count);
+        setHsk2Count(result.hsk2Count);
+        setDataSource("supabase");
+      }
+      // If Supabase fails, we silently keep the fallback — no error screen
+      setIsDataLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Derived data ──
@@ -176,7 +190,7 @@ function AppContent() {
 
   // ── Render loading / error states ──
   if (isDataLoading) return <LoadingScreen />;
-  if (dataError) return <ErrorScreen onRetry={loadVocabulary} onUseFallback={useFallback} />;
+  if (dataError) return <ErrorScreen onRetry={loadVocabulary} onUseFallback={useFallbackData} />;
 
   return (
     <div className="min-h-screen bg-black text-white">
