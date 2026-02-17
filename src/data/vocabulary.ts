@@ -33,6 +33,7 @@ export const vocabulary: VocabWord[] = HSK12_SEED.map((w, idx) => ({
   english: w.english,
   hskLevel: w.hskLevel,
   category: w.category,
-  // Generate up to 3 HSK-style example sentences per word.
+  // Curated example sentences from the built-in HSK sentence catalogue.
+  // Up to 3 sentences; if fewer exist, we show only those available.
   examples: generateExamplesForWord(w, pinyinIndex),
 }));
