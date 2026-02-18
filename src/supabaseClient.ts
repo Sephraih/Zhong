@@ -1,12 +1,16 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Safely get env vars - they might not exist in sandboxed environments
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// Only create the client if both env vars are present
+export const supabase: SupabaseClient | null = 
+  supabaseUrl && supabaseAnonKey 
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
-// In sandbox/preview environments the Vite env vars may not be set.
-// Avoid crashing the app at module import time.
-export const supabase: SupabaseClient | null = supabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!)
-  : null;
+// Helper to check if Supabase is available
+export const isSupabaseConfigured = (): boolean => {
+  return supabase !== null;
+};

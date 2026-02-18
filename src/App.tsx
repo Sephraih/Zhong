@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { buildFallbackVocabulary } from "./data/fallbackData";
+import { useState, useMemo, useEffect } from "react";
+import { buildFallbackVocabulary, fetchVocabularyFromSupabase } from "./data/supabaseVocab";
 import type { VocabWord } from "./data/vocabulary";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
@@ -13,14 +13,46 @@ type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice";
 type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
-// Build vocabulary synchronously from fallback data
+// Build vocabulary synchronously from fallback data - app is usable immediately
 const INITIAL_VOCABULARY = buildFallbackVocabulary();
 
 function AppContent() {
-  // Use fallback vocabulary only (no Supabase)
-  const vocabulary: VocabWord[] = INITIAL_VOCABULARY;
-  const hsk1Count = vocabulary.filter((w) => w.hskLevel === 1).length;
-  const hsk2Count = vocabulary.filter((w) => w.hskLevel === 2).length;
+  // Initialize with fallback vocabulary (synchronous - no loading screen needed)
+  const [vocabulary, setVocabulary] = useState<VocabWord[]>(INITIAL_VOCABULARY);
+  const [dataSource, setDataSource] = useState<"fallback" | "supabase">("fallback");
+  const [hsk1Count, setHsk1Count] = useState(() => INITIAL_VOCABULARY.filter((w) => w.hskLevel === 1).length);
+  const [hsk2Count, setHsk2Count] = useState(() => INITIAL_VOCABULARY.filter((w) => w.hskLevel === 2).length);
+
+  // Try to fetch from Supabase in background (won't block initial render)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFromSupabase = async () => {
+      try {
+        const result = await fetchVocabularyFromSupabase();
+        
+        if (cancelled) return;
+        
+        // Only upgrade to Supabase data if we got real data back
+        if (result.source === "supabase" && result.words.length > 0) {
+          console.log(`[App] Upgraded to Supabase data: ${result.words.length} words`);
+          setVocabulary(result.words);
+          setHsk1Count(result.hsk1Count);
+          setHsk2Count(result.hsk2Count);
+          setDataSource("supabase");
+        } else {
+          console.log("[App] Using fallback data (Supabase returned empty or unavailable)");
+        }
+      } catch (err) {
+        console.warn("[App] Supabase fetch failed, using fallback:", err);
+        // Keep using fallback data - no error shown to user
+      }
+    };
+
+    loadFromSupabase();
+
+    return () => { cancelled = true; };
+  }, []);
 
   // UI state
   const [viewMode, setViewMode] = useState<ViewMode>("home");
@@ -182,6 +214,14 @@ function AppContent() {
                   📖 Learning: <span className="font-bold text-red-400">{stillLearningCount}</span>
                 </span>
               </div>
+              {/* Data source indicator */}
+              {dataSource === "fallback" && (
+                <div className="hidden sm:flex items-center gap-1">
+                  <span className="text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
+                    ⚡ Preview
+                  </span>
+                </div>
+              )}
             </div>
             <div className="hidden sm:flex items-center gap-3">
               <div className="w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
@@ -434,6 +474,7 @@ function AppContent() {
             </p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedCount} learned • 📖 {stillLearningCount} still learning
+              {dataSource === "fallback" && " • ⚡ Preview mode"}
             </p>
           </div>
         </div>

@@ -1,56 +1,47 @@
 # 汉语学习 — Chinese Language Learning App
 
-A modern Chinese vocabulary learning application featuring HSK 1 & 2 words with example sentences, flashcards, practice sessions, and quiz modes.
+A modern HSK 1 & 2 vocabulary learning app built with React, Vite, and Tailwind CSS.
 
 ## Features
 
-- 📚 **Browse Mode** — Search and filter HSK vocabulary with example sentences
-- 🔥 **Practice Mode** — Balanced learning sessions with spaced repetition
-- 🃏 **Flashcard Mode** — Quick vocabulary drilling with tap-to-reveal
-- ✏️ **Quiz Mode** — Multiple choice tests to check your knowledge
-- 🔤 **Pinyin Hover/Tap** — Hover (desktop) or tap (mobile) any Chinese character to see its pinyin
-- 🔊 **Text-to-Speech** — Hear native pronunciation using browser speech synthesis
-- 📱 **Mobile Responsive** — Optimized for both desktop and mobile browsers
+- 📚 **Browse** — Search and filter vocabulary by HSK level, category, and learning status
+- 🔥 **Practice** — Spaced repetition sessions with progress tracking
+- 🃏 **Flashcards** — Quick drilling with Chinese ↔ English toggle
+- ✏️ **Quiz** — Multiple choice questions to test your knowledge
+- 📱 **Mobile-friendly** — Tap-to-reveal pinyin on touch devices
+- 🔊 **Text-to-speech** — Hear native pronunciation (works best in Edge/Chrome)
 
-## Tech Stack
+## Quick Start (Offline Mode)
 
-- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS v4
-- **Backend**: Vercel Serverless Functions
-- **Database**: Supabase (PostgreSQL)
-- **Payments**: Stripe (optional premium features)
-- **Auth**: Supabase Auth
-
----
-
-## Running Locally (Offline Mode)
-
-The app works completely offline with a built-in fallback vocabulary (~160 HSK words with examples).
+The app works out of the box with built-in fallback vocabulary (~160 words):
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 — the app will load with fallback data.
+Open http://localhost:5173 in your browser.
 
----
+## Enabling Supabase (Full 450+ Words)
 
-## Enabling Supabase (Full Vocabulary Database)
+To load the complete HSK vocabulary from your Supabase database:
 
-To enable the full vocabulary database with 450+ HSK words and example sentences:
+### 1. Set Environment Variables
 
-### 1. Create Supabase Project
+Create a `.env` file in the project root:
 
-1. Go to [supabase.com](https://supabase.com) and create a new project
-2. Note your **Project URL** and **Anon Key** from Settings → API
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+```
 
-### 2. Set Up Database Tables
+### 2. Create Database Tables
 
-Run this SQL in Supabase SQL Editor (Dashboard → SQL Editor → New Query):
+Run this SQL in your Supabase SQL Editor:
 
 ```sql
--- Create HSK words table
-CREATE TABLE hsk_words (
+-- HSK Words table
+CREATE TABLE IF NOT EXISTS hsk_words (
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   hanzi       TEXT NOT NULL UNIQUE,
   pinyin      TEXT NOT NULL,
@@ -59,8 +50,8 @@ CREATE TABLE hsk_words (
   created_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- Create example sentences table
-CREATE TABLE example_sentences (
+-- Example sentences table
+CREATE TABLE IF NOT EXISTS example_sentences (
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   word_id     BIGINT NOT NULL REFERENCES hsk_words(id) ON DELETE CASCADE,
   hanzi       TEXT NOT NULL,
@@ -72,90 +63,77 @@ CREATE TABLE example_sentences (
 );
 
 -- Enable Row Level Security
-ALTER TABLE public.hsk_words ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.example_sentences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hsk_words ENABLE ROW LEVEL SECURITY;
+ALTER TABLE example_sentences ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access (for the anon key)
-CREATE POLICY "Public read hsk_words" ON public.hsk_words FOR SELECT USING (true);
-CREATE POLICY "Public read example_sentences" ON public.example_sentences FOR SELECT USING (true);
+-- Allow public read access (required for the app to fetch data)
+CREATE POLICY "Public read hsk_words" ON hsk_words FOR SELECT USING (true);
+CREATE POLICY "Public read example_sentences" ON example_sentences FOR SELECT USING (true);
 
--- Create indexes for faster queries
-CREATE INDEX idx_hsk_words_level ON hsk_words(hsk_level);
-CREATE INDEX idx_example_sentences_word ON example_sentences(word_id);
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_hsk_words_level ON hsk_words(hsk_level);
+CREATE INDEX IF NOT EXISTS idx_example_sentences_word ON example_sentences(word_id);
 ```
 
 ### 3. Import Vocabulary Data
 
-Import your HSK word list and example sentences into the tables. Format:
+Import your HSK vocabulary data into the `hsk_words` table and example sentences into `example_sentences`.
 
-**hsk_words**:
+The app expects this JSON format for words:
 ```json
-{ "hanzi": "爱", "pinyin": "ài", "english": "love, like", "hsk_level": 1 }
+{
+  "hanzi": "你好",
+  "pinyin": "nǐ hǎo", 
+  "english": "hello, hi",
+  "hsk_level": 1
+}
 ```
 
-**example_sentences**:
+And this format for example sentences:
 ```json
-{ "word_id": 1, "hanzi": "我爱你。", "pinyin": "wǒ ài nǐ 。", "english": "I love you." }
+{
+  "word_id": 1,
+  "hanzi": "你好，很高兴认识你。",
+  "pinyin": "nǐ hǎo ， hěn gāo xìng rèn shi nǐ 。",
+  "english": "Hello, nice to meet you."
+}
 ```
 
-### 4. Update Frontend to Use Supabase
+### 4. Restart the Dev Server
 
-Edit `src/App.tsx` and restore the Supabase imports:
-
-```tsx
-// At the top of the file, add:
-import { fetchVocabularyFromSupabase } from "./data/supabaseVocab";
-
-// In AppContent, add useEffect to load from Supabase:
-useEffect(() => {
-  fetchVocabularyFromSupabase().then((result) => {
-    if (result.words.length > 0) {
-      setVocabulary(result.words);
-    }
-  });
-}, []);
+```bash
+npm run dev
 ```
 
-### 5. Set Environment Variables
+The app will automatically fetch from Supabase if the environment variables are set. If Supabase is unavailable, it falls back to the built-in vocabulary.
 
-Create a `.env` file locally:
+## Deployment to Vercel
 
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+### Environment Variables
+
+Set these in your Vercel project settings (Settings → Environment Variables):
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_SUPABASE_URL` | Your Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
+
+### Deploy
+
+```bash
+vercel
 ```
 
-For Vercel deployment, add these in the Vercel Dashboard → Settings → Environment Variables.
-
----
+Or connect your GitHub repo to Vercel for automatic deployments.
 
 ## Enabling Auth & Premium Features
 
-The app includes optional authentication and Stripe payment integration.
+The app includes optional authentication and Stripe payment integration. To enable:
 
-### 1. Supabase Auth Setup
-
-Run the SQL from `SUPABASE_SETUP.sql` in your Supabase SQL Editor to create:
-- `profiles` table (stores user premium status)
-- `subscriptions` table (stores Stripe subscription data)
-- Auto-create profile trigger on user signup
-- RLS policies for secure access
-
-### 2. Stripe Setup
-
-1. Create a Stripe account at [stripe.com](https://stripe.com)
-2. Create a Product and Price in the Stripe Dashboard
-3. Set up a webhook endpoint pointing to `/api/webhook`
-4. Configure webhook events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
-
-### 3. Environment Variables (Vercel)
-
-Add these to your Vercel project:
+### 1. Additional Environment Variables
 
 ```env
-# Supabase
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+# Supabase (service role for server-side operations)
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
@@ -164,83 +142,70 @@ STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID=price_...
 
-# App
+# Frontend URL (for Stripe redirects)
 FRONTEND_URL=https://your-app.vercel.app
 ```
 
-### 4. Restore Auth Components
+### 2. Set Up Auth Tables in Supabase
 
-To enable the Sign In button and profile page, update `src/App.tsx`:
+Run the SQL from `SUPABASE_SETUP.sql` to create the `profiles` and `subscriptions` tables.
 
-```tsx
-// Import auth components
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AuthModal } from "./components/AuthModal";
-import { AuthHeader } from "./components/AuthHeader";
-import { ProfilePage } from "./components/ProfilePage";
+### 3. Configure Stripe Webhook
 
-// Wrap App in AuthProvider
-export function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-}
-```
+In your Stripe Dashboard, add a webhook endpoint:
+- URL: `https://your-app.vercel.app/api/webhook`
+- Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
----
+### 4. Re-enable Auth in App.tsx
 
-## Deployment to Vercel
-
-1. Push your code to GitHub
-2. Import the repository in Vercel
-3. Add environment variables (see above)
-4. Deploy!
-
-The `vercel.json` file configures:
-- Build command: `npm run build`
-- Output directory: `dist`
-- API rewrites: `/api/*` → Vercel serverless functions
-
----
+The auth components are available but not imported by default. To enable, update `src/App.tsx` to import and use:
+- `AuthProvider` from `./contexts/AuthContext`
+- `AuthHeader` from `./components/AuthHeader`
+- `AuthModal` from `./components/AuthModal`
+- `ProfilePage` from `./components/ProfilePage`
 
 ## Project Structure
 
 ```
-├── src/
-│   ├── App.tsx                 # Main app component
-│   ├── components/             # React components
-│   │   ├── FlashcardMode.tsx
-│   │   ├── PracticeMode.tsx
-│   │   ├── QuizMode.tsx
-│   │   ├── VocabCard.tsx
-│   │   ├── HoverCharacter.tsx
-│   │   └── ...
-│   ├── contexts/
-│   │   └── AuthContext.tsx     # Auth state management
-│   ├── data/
-│   │   ├── vocabulary.ts       # VocabWord type
-│   │   ├── fallbackData.ts     # Offline vocabulary
-│   │   └── supabaseVocab.ts    # Supabase data fetcher
-│   └── hooks/
-│       ├── useLearnedState.ts  # Local storage for progress
-│       └── useIsMobile.ts      # Mobile detection
-├── api/                        # Vercel serverless functions
-│   ├── auth/
-│   │   ├── login.ts
-│   │   ├── signup.ts
-│   │   ├── logout.ts
-│   │   └── me.ts
-│   ├── create-checkout-session.ts
-│   ├── subscription.ts
-│   ├── webhook.ts
-│   └── health.ts
-├── SUPABASE_SETUP.sql          # Database schema
-└── vercel.json                 # Vercel config
-```
+src/
+├── App.tsx                 # Main app component
+├── main.tsx                # Entry point
+├── index.css               # Tailwind CSS
+├── supabaseClient.ts       # Supabase client (safe if env vars missing)
+├── components/
+│   ├── LandingPage.tsx     # Home page with mode selection
+│   ├── VocabCard.tsx       # Vocabulary card for Browse mode
+│   ├── FlashcardMode.tsx   # Flashcard study mode
+│   ├── PracticeMode.tsx    # Spaced repetition practice
+│   ├── QuizMode.tsx        # Multiple choice quiz
+│   ├── HoverCharacter.tsx  # Pinyin hover/tap component
+│   ├── SpeakerButton.tsx   # Text-to-speech button
+│   ├── AuthHeader.tsx      # User menu (auth enabled)
+│   ├── AuthModal.tsx       # Login/signup modal (auth enabled)
+│   └── ProfilePage.tsx     # User profile (auth enabled)
+├── contexts/
+│   └── AuthContext.tsx     # Auth state management
+├── data/
+│   ├── vocabulary.ts       # VocabWord type definition
+│   ├── fallbackData.ts     # Built-in vocabulary (offline mode)
+│   └── supabaseVocab.ts    # Supabase data fetching
+├── hooks/
+│   ├── useLearnedState.ts  # Learning progress (localStorage)
+│   └── useIsMobile.ts      # Mobile device detection
+└── utils/
+    └── cn.ts               # Tailwind class merging utility
 
----
+api/                        # Vercel serverless functions
+├── auth/
+│   ├── login.ts
+│   ├── logout.ts
+│   ├── me.ts
+│   └── signup.ts
+├── create-checkout-session.ts
+├── subscription.ts
+├── webhook.ts
+└── health.ts
+```
 
 ## License
 
