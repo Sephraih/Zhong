@@ -73,6 +73,42 @@ CREATE POLICY "Public read example_sentences" ON example_sentences FOR SELECT US
 -- Create indexes for faster lookups
 CREATE INDEX IF NOT EXISTS idx_hsk_words_level ON hsk_words(hsk_level);
 CREATE INDEX IF NOT EXISTS idx_example_sentences_word ON example_sentences(word_id);
+
+-- Materialized view for FAST loading (pre-joins words + examples)
+CREATE MATERIALIZED VIEW hsk_words_with_examples AS
+SELECT
+  w.id          AS word_id,
+  w.hanzi,
+  w.pinyin,
+  w.english,
+  w.hsk_level,
+  COALESCE(
+    json_agg(
+      json_build_object(
+        'id', s.id,
+        'hanzi', s.hanzi,
+        'pinyin', s.pinyin,
+        'english', s.english
+      )
+      ORDER BY s.id
+    ) FILTER (WHERE s.id IS NOT NULL),
+    '[]'::json
+  ) AS examples
+FROM hsk_words w
+LEFT JOIN example_sentences s ON s.word_id = w.id
+GROUP BY w.id, w.hanzi, w.pinyin, w.english, w.hsk_level;
+
+-- Indexes on the materialized view
+CREATE UNIQUE INDEX idx_mv_word_id ON hsk_words_with_examples(word_id);
+CREATE INDEX idx_mv_hsk_level ON hsk_words_with_examples(hsk_level);
+
+-- Grant read access to the view
+ALTER MATERIALIZED VIEW hsk_words_with_examples OWNER TO postgres;
+GRANT SELECT ON hsk_words_with_examples TO anon, authenticated;
+
+-- IMPORTANT: Refresh the view after importing data!
+-- Run this command whenever you add/update words or examples:
+-- REFRESH MATERIALIZED VIEW hsk_words_with_examples;
 ```
 
 ### 3. Import Vocabulary Data
@@ -106,6 +142,27 @@ npm run dev
 ```
 
 The app will automatically fetch from Supabase if the environment variables are set. If Supabase is unavailable, it falls back to the built-in vocabulary.
+
+### 5. Refresh the Materialized View
+
+After importing or updating data, refresh the view in Supabase SQL Editor:
+
+```sql
+REFRESH MATERIALIZED VIEW hsk_words_with_examples;
+```
+
+### Caching
+
+The app caches vocabulary data in localStorage for 7 days to speed up repeat visits. To force a fresh fetch:
+- Open browser DevTools → Application → Local Storage
+- Delete the `hanyu_vocab_cache_v2` key
+- Refresh the page
+
+Or programmatically in the browser console:
+```js
+localStorage.removeItem('hanyu_vocab_cache_v2');
+location.reload();
+```
 
 ## Deployment to Vercel
 
