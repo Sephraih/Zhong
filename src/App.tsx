@@ -8,10 +8,10 @@ import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
 import { useLearnedState } from "./hooks/useLearnedState";
-import { AuthModal } from "./components/AuthModal";
-import { AuthHeader } from "./components/AuthHeader";
-import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
+import { AuthHeader } from "./components/AuthHeader";
+import { AuthModal } from "./components/AuthModal";
+import { ProfilePage } from "./components/ProfilePage";
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
@@ -31,6 +31,11 @@ function AppContent() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
 
+  const openAuthModal = (mode: "login" | "signup") => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  };
+
   // Try to fetch from Supabase in background (won't block initial render)
   useEffect(() => {
     let cancelled = false;
@@ -38,9 +43,9 @@ function AppContent() {
     const loadFromSupabase = async () => {
       try {
         const result = await fetchVocabularyFromSupabase();
-        
+
         if (cancelled) return;
-        
+
         // Only upgrade to Supabase data if we got real data back
         if (result.source === "supabase" && result.words.length > 0) {
           console.log(`[App] Upgraded to Supabase data: ${result.words.length} words`);
@@ -59,7 +64,9 @@ function AppContent() {
 
     loadFromSupabase();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // UI state
@@ -108,11 +115,6 @@ function AppContent() {
     return vocabulary.filter((w) => w.hskLevel === hskFilter);
   }, [vocabulary, hskFilter]);
 
-  const openAuthModal = (mode: "login" | "signup") => {
-    setAuthModalMode(mode);
-    setAuthModalOpen(true);
-  };
-
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
@@ -155,14 +157,20 @@ function AppContent() {
               ))}
             </nav>
 
-            {/* Auth Section */}
             <div className="flex items-center gap-2">
-              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
-              
-              {/* Mobile menu button */}
+              {/* Auth */}
+              <AuthHeader
+                onOpenAuth={openAuthModal}
+                onOpenProfile={() => {
+                  setViewMode("profile");
+                  setMobileMenuOpen(false);
+                }}
+              />
+
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
+                title="Menu"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {mobileMenuOpen
@@ -506,7 +514,6 @@ function AppContent() {
         </div>
       </footer>
 
-      {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}

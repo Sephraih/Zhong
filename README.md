@@ -156,15 +156,13 @@ In your Stripe Dashboard, add a webhook endpoint:
 - URL: `https://your-app.vercel.app/api/webhook`
 - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
-### 4. Auth is Enabled by Default
+### 4. Re-enable Auth in App.tsx
 
-The auth components are already imported and working in `src/App.tsx`:
-- `AuthProvider` wraps the entire app
-- `AuthHeader` shows Sign In button (or user menu when logged in)
-- `AuthModal` handles login/signup
-- `ProfilePage` shows subscription status and upgrade button
-
-**Note:** If Supabase is not configured, auth operations will show a friendly "not available in preview mode" message instead of crashing.
+The auth components are available but not imported by default. To enable, update `src/App.tsx` to import and use:
+- `AuthProvider` from `./contexts/AuthContext`
+- `AuthHeader` from `./components/AuthHeader`
+- `AuthModal` from `./components/AuthModal`
+- `ProfilePage` from `./components/ProfilePage`
 
 ## Project Structure
 
