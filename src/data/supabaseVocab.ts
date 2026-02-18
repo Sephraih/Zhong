@@ -159,62 +159,75 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
   }
 
   try {
-    const PAGE_SIZE = 1000;
+    // ── 1. Fetch all HSK words ────────────────────────────────────────────────
+    const { data: wordRows, error: wordError } = await supabase
+      .from("hsk_words")
+      .select("id, hanzi, pinyin, english, hsk_level")
+      .order("hsk_level", { ascending: true })
+      .order("id",        { ascending: true });
 
-    // ── 1) Fetch HSK level 1 + 2 words (paginate; PostgREST defaults to 1000 rows) ──
-    const wordRows: HskWordRow[] = [];
-    for (let from = 0; ; from += PAGE_SIZE) {
-      const to = from + PAGE_SIZE - 1;
-      const { data, error } = await supabase
-        .from("hsk_words")
-        .select("id, hanzi, pinyin, english, hsk_level")
-        .in("hsk_level", [1, 2])
-        .order("hsk_level", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to);
-
-      if (error) {
-        console.error("[supabaseVocab] hsk_words error:", error.message);
-        return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
-      }
-
-      const chunk = (data ?? []) as HskWordRow[];
-      wordRows.push(...chunk);
-      if (chunk.length < PAGE_SIZE) break;
+    if (wordError) {
+      console.error("[supabaseVocab] hsk_words error:", wordError.message);
+      return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
     }
-
-    if (wordRows.length === 0) {
-      console.warn("[supabaseVocab] hsk_words returned 0 rows (levels 1/2) — check RLS policies/data.");
+    if (!wordRows || wordRows.length === 0) {
+      console.warn("[supabaseVocab] hsk_words returned 0 rows — check RLS policies.");
       return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
     }
 
-    // Collect IDs to fetch only relevant examples
-    const wordIds = wordRows.map((w) => w.id);
-
-    // ── 2) Fetch example sentences for those words (paginate!) ─────────────────
-    const exampleRows: ExampleRow[] = [];
-    for (let from = 0; ; from += PAGE_SIZE) {
-      const to = from + PAGE_SIZE - 1;
-      const { data, error } = await supabase
+    // ── 2. Fetch all example sentences ──────────────────────────────────────
+    // Supabase has a default limit of 1000 rows. We need to fetch ALL examples
+    // to ensure HSK 2 words (which have higher word_ids) get their sentences.
+    // We'll paginate if needed.
+    let allExampleRows: ExampleRow[] = [];
+    let exampleError: Error | null = null;
+    
+    try {
+      // First, try to get total count
+      const { count } = await supabase
         .from("example_sentences")
-        .select("id, word_id, hanzi, pinyin, english")
-        .in("word_id", wordIds)
-        .order("id", { ascending: true })
-        .range(from, to);
-
-      if (error) {
-        console.warn("[supabaseVocab] example_sentences error:", error.message);
-        break; // Continue without more examples
+        .select("*", { count: "exact", head: true });
+      
+      const totalExamples = count ?? 0;
+      const pageSize = 1000;
+      const pages = Math.ceil(totalExamples / pageSize);
+      
+      console.log(`[supabaseVocab] Fetching ${totalExamples} example sentences in ${pages} page(s)...`);
+      
+      // Fetch all pages
+      for (let page = 0; page < pages; page++) {
+        const { data: pageData, error: pageError } = await supabase
+          .from("example_sentences")
+          .select("id, word_id, hanzi, pinyin, english")
+          .order("id", { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (pageError) {
+          console.warn(`[supabaseVocab] example_sentences page ${page} error:`, pageError.message);
+          exampleError = new Error(pageError.message);
+          break;
+        }
+        
+        if (pageData) {
+          allExampleRows = allExampleRows.concat(pageData as ExampleRow[]);
+        }
       }
-
-      const chunk = (data ?? []) as ExampleRow[];
-      exampleRows.push(...chunk);
-      if (chunk.length < PAGE_SIZE) break;
+      
+      console.log(`[supabaseVocab] Fetched ${allExampleRows.length} total example sentences.`);
+      
+    } catch (err) {
+      console.warn("[supabaseVocab] example_sentences fetch error:", err);
+      exampleError = err as Error;
     }
 
-    // ── 3) Group examples by word_id ──────────────────────────────────────────
+    if (exampleError && allExampleRows.length === 0) {
+      console.warn("[supabaseVocab] Could not fetch any examples:", exampleError.message);
+      // Continue without examples — better than failing entirely
+    }
+
+    // ── 3. Group examples by word_id ──────────────────────────────────────────
     const examplesByWordId = new Map<number, ExampleRow[]>();
-    for (const row of exampleRows) {
+    for (const row of allExampleRows) {
       const bucket = examplesByWordId.get(row.word_id) ?? [];
       bucket.push(row);
       examplesByWordId.set(row.word_id, bucket);
@@ -246,13 +259,10 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
     const hsk1Count = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 1).length;
     const hsk2Count = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 2).length;
 
-    const hsk2WithExamples = words.filter((w) => w.hskLevel === 2 && w.examples.length > 0).length;
-
     console.log(
       `[supabaseVocab] Loaded ${words.length} words ` +
-        `(HSK1: ${hsk1Count}, HSK2: ${hsk2Count}) ` +
-        `with ${exampleRows.length} example sentences. ` +
-        `HSK2 words with ≥1 example: ${hsk2WithExamples}/${hsk2Count}`
+      `(HSK1: ${hsk1Count}, HSK2: ${hsk2Count}) ` +
+      `with ${allExampleRows.length} example sentences.`
     );
 
     return { words, hsk1Count, hsk2Count, totalCount: words.length, source: "supabase" };
