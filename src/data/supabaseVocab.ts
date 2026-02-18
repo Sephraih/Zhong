@@ -1,4 +1,4 @@
-import { supabase } from "../supabaseClient";
+import { supabase, supabaseConfigured } from "../supabaseClient";
 import type { VocabWord } from "./vocabulary";
 import { FALLBACK_DATA } from "./fallbackData";
 
@@ -152,6 +152,12 @@ export interface FetchResult {
  * so the caller can display the local fallback vocabulary instead.
  */
 export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
+  // Skip fetch entirely if Supabase is not configured (sandbox / no env vars)
+  if (!supabaseConfigured) {
+    console.info("[supabaseVocab] Supabase not configured — using fallback vocabulary.");
+    return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
+  }
+
   try {
     // ── 1. Fetch all HSK words ────────────────────────────────────────────────
     const { data: wordRows, error: wordError } = await supabase
