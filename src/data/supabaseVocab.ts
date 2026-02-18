@@ -12,13 +12,7 @@ interface HskWordRow {
   hsk_level: number;
 }
 
-interface ExampleRow {
-  id: number;
-  word_id: number;
-  hanzi: string;
-  pinyin: string | null;
-  english: string;
-}
+// ExampleRow type removed (no longer needed with embedded select)
 
 // ─── Pinyin helpers ───────────────────────────────────────────────────────────
 
@@ -158,85 +152,87 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
     return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
   }
 
+  // Cache (stale-while-revalidate is handled by App.tsx)
+  const CACHE_KEY = "hanyu_supabase_vocab_cache_v1";
+
   try {
-    // ── 1. Fetch all HSK words ────────────────────────────────────────────────
-    const { data: wordRows, error: wordError } = await supabase
-      .from("hsk_words")
-      .select("id, hanzi, pinyin, english, hsk_level")
-      .order("hsk_level", { ascending: true })
-      .order("id",        { ascending: true });
-
-    if (wordError) {
-      console.error("[supabaseVocab] hsk_words error:", wordError.message);
-      return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
-    }
-    if (!wordRows || wordRows.length === 0) {
-      console.warn("[supabaseVocab] hsk_words returned 0 rows — check RLS policies.");
-      return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
-    }
-
-    // ── 2. Fetch all example sentences ──────────────────────────────────────
-    // Supabase has a default limit of 1000 rows. We need to fetch ALL examples
-    // to ensure HSK 2 words (which have higher word_ids) get their sentences.
-    // We'll paginate if needed.
-    let allExampleRows: ExampleRow[] = [];
-    let exampleError: Error | null = null;
-    
+    // ── Fast path: read cache if present ─────────────────────────────────────
     try {
-      // First, try to get total count
-      const { count } = await supabase
-        .from("example_sentences")
-        .select("*", { count: "exact", head: true });
-      
-      const totalExamples = count ?? 0;
-      const pageSize = 1000;
-      const pages = Math.ceil(totalExamples / pageSize);
-      
-      console.log(`[supabaseVocab] Fetching ${totalExamples} example sentences in ${pages} page(s)...`);
-      
-      // Fetch all pages
-      for (let page = 0; page < pages; page++) {
-        const { data: pageData, error: pageError } = await supabase
-          .from("example_sentences")
-          .select("id, word_id, hanzi, pinyin, english")
-          .order("id", { ascending: true })
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        
-        if (pageError) {
-          console.warn(`[supabaseVocab] example_sentences page ${page} error:`, pageError.message);
-          exampleError = new Error(pageError.message);
-          break;
-        }
-        
-        if (pageData) {
-          allExampleRows = allExampleRows.concat(pageData as ExampleRow[]);
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as {
+          words: VocabWord[];
+          hsk1Count: number;
+          hsk2Count: number;
+          totalCount: number;
+          cachedAt: number;
+        };
+
+        // 7 day TTL (still refreshed in background by App)
+        const ttlMs = 7 * 24 * 60 * 60 * 1000;
+        if (parsed?.words?.length && Date.now() - (parsed.cachedAt ?? 0) < ttlMs) {
+          console.log(`[supabaseVocab] Using cached vocabulary (${parsed.words.length} words)`);
+          return {
+            words: parsed.words,
+            hsk1Count: parsed.hsk1Count,
+            hsk2Count: parsed.hsk2Count,
+            totalCount: parsed.totalCount,
+            source: "supabase",
+          };
         }
       }
-      
-      console.log(`[supabaseVocab] Fetched ${allExampleRows.length} total example sentences.`);
-      
-    } catch (err) {
-      console.warn("[supabaseVocab] example_sentences fetch error:", err);
-      exampleError = err as Error;
+    } catch {
+      // ignore cache parse errors
     }
 
-    if (exampleError && allExampleRows.length === 0) {
-      console.warn("[supabaseVocab] Could not fetch any examples:", exampleError.message);
-      // Continue without examples — better than failing entirely
+    // ── 1) Fetch words with embedded examples (server-side limit 3) ──────────
+    // This avoids fetching the entire example_sentences table.
+    type WordWithExamples = HskWordRow & {
+      example_sentences?: {
+        id: number;
+        hanzi: string;
+        pinyin: string | null;
+        english: string;
+      }[];
+    };
+
+    const PAGE_SIZE = 1000;
+    const wordRows: WordWithExamples[] = [];
+
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const to = from + PAGE_SIZE - 1;
+
+      const { data, error } = await supabase
+        .from("hsk_words")
+        .select(
+          `id, hanzi, pinyin, english, hsk_level,
+           example_sentences ( id, hanzi, pinyin, english )`
+        )
+        .in("hsk_level", [1, 2])
+        .order("hsk_level", { ascending: true })
+        .order("id", { ascending: true })
+        .order("id", { foreignTable: "example_sentences", ascending: true })
+        .limit(3, { foreignTable: "example_sentences" })
+        .range(from, to);
+
+      if (error) {
+        console.error("[supabaseVocab] hsk_words embedded select error:", error.message);
+        return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
+      }
+
+      const chunk = (data ?? []) as WordWithExamples[];
+      wordRows.push(...chunk);
+      if (chunk.length < PAGE_SIZE) break;
     }
 
-    // ── 3. Group examples by word_id ──────────────────────────────────────────
-    const examplesByWordId = new Map<number, ExampleRow[]>();
-    for (const row of allExampleRows) {
-      const bucket = examplesByWordId.get(row.word_id) ?? [];
-      bucket.push(row);
-      examplesByWordId.set(row.word_id, bucket);
+    if (wordRows.length === 0) {
+      console.warn("[supabaseVocab] hsk_words returned 0 rows (levels 1/2) — check RLS policies/data.");
+      return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
     }
 
-    // ── 4. Map rows → VocabWord ───────────────────────────────────────────────
-    const words: VocabWord[] = (wordRows as HskWordRow[]).map((row) => {
-      const rawExamples = examplesByWordId.get(row.id) ?? [];
-
+    // ── 2) Map rows → VocabWord ─────────────────────────────────────────────
+    const words: VocabWord[] = wordRows.map((row) => {
+      const rawExamples = row.example_sentences ?? [];
       const examples = rawExamples.slice(0, 3).map((ex) => ({
         chinese: ex.hanzi,
         pinyinWords: buildPinyinWords(ex.hanzi, ex.pinyin),
@@ -246,27 +242,48 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
       const hskLevel = row.hsk_level === 1 ? 1 : 2;
 
       return {
-        id:       row.id,
-        hanzi:    row.hanzi,
-        pinyin:   row.pinyin,
-        english:  limitEnglish(row.english, 3),
+        id: row.id,
+        hanzi: row.hanzi,
+        pinyin: row.pinyin,
+        english: limitEnglish(row.english, 3),
         hskLevel,
         category: inferCategory(row.english, hskLevel),
         examples,
       } satisfies VocabWord;
     });
 
-    const hsk1Count = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 1).length;
-    const hsk2Count = (wordRows as HskWordRow[]).filter((r) => r.hsk_level === 2).length;
+    const hsk1Count = wordRows.filter((r) => r.hsk_level === 1).length;
+    const hsk2Count = wordRows.filter((r) => r.hsk_level === 2).length;
+
+    const result: FetchResult = {
+      words,
+      hsk1Count,
+      hsk2Count,
+      totalCount: words.length,
+      source: "supabase",
+    };
+
+    // ── 3) Save cache ───────────────────────────────────────────────────────
+    try {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          words,
+          hsk1Count,
+          hsk2Count,
+          totalCount: words.length,
+          cachedAt: Date.now(),
+        })
+      );
+    } catch {
+      // ignore storage errors
+    }
 
     console.log(
-      `[supabaseVocab] Loaded ${words.length} words ` +
-      `(HSK1: ${hsk1Count}, HSK2: ${hsk2Count}) ` +
-      `with ${allExampleRows.length} example sentences.`
+      `[supabaseVocab] Loaded ${words.length} words (HSK1: ${hsk1Count}, HSK2: ${hsk2Count}) with up to 3 examples/word.`
     );
 
-    return { words, hsk1Count, hsk2Count, totalCount: words.length, source: "supabase" };
-
+    return result;
   } catch (err) {
     console.error("[supabaseVocab] Unexpected error:", err);
     return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
