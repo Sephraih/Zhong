@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useLayoutEffect } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 interface HoverCharacterProps {
@@ -24,11 +24,10 @@ export function HoverCharacter({ char, pinyin, size = "md", wordId }: HoverChara
 
   const isPunctuation = /^[。，！？、；：""''（）《》…—\s.!?,;:'"()\-]$/.test(char);
 
-  // Reset pinyin visibility when the rendered content changes (new card / new sentence)
-  // This prevents “sticky” toggled pinyin when React reuses components between cards.
-  useLayoutEffect(() => {
+  // Reset pinyin visibility when wordId changes (new card)
+  useEffect(() => {
     setIsRevealed(false);
-  }, [wordId, char, pinyin]);
+  }, [wordId]);
 
   // Desktop sizes
   const sizeClasses: Record<string, string> = {

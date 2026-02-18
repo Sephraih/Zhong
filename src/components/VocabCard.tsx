@@ -53,7 +53,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
           <div className="inline-flex items-end gap-1 mb-2">
             {word.hanzi.split("").map((char, i) => (
               <HoverCharacter
-                key={`${word.id}-${i}`}
+                key={i}
                 char={char}
                 pinyin={
                   word.hanzi.length === 1
@@ -61,7 +61,6 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
                     : extractPinyinForChar(word.pinyin, i, word.hanzi.length)
                 }
                 size="xl"
-                wordId={word.id}
               />
             ))}
           </div>
@@ -149,13 +148,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
                   <div className="flex-1">
                     <div className="flex flex-wrap items-end gap-0.5 mb-2">
                       {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter
-                          key={`${word.id}-ex-${idx}-${i}`}
-                          char={pw.char}
-                          pinyin={pw.pinyin}
-                          size="md"
-                          wordId={word.id}
-                        />
+                        <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="md" />
                       ))}
                     </div>
                     <p className="text-gray-500 text-sm">{example.english}</p>

@@ -703,11 +703,10 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                     <div className="flex items-end gap-2 justify-center">
                       {currentWord.hanzi.split("").map((char, i) => (
                         <HoverCharacter
-                          key={`${currentWord.id}-${i}`}
+                          key={`${currentWord.id}-front-${i}`}
                           char={char}
                           pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
                           size="2xl"
-                          wordId={currentWord.id}
                         />
                       ))}
                     </div>
@@ -758,7 +757,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                           char={char}
                           pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
                           size="xl"
-                          wordId={currentWord.id}
                         />
                       ))}
                     </div>
@@ -774,17 +772,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                 {/* Examples */}
                 <div className="space-y-3 mt-2 text-left w-full">
                   {currentWord.examples.slice(0, 3).map((ex, idx) => (
-                    <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                    <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
                       <div className="flex-1">
                         <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
                           {ex.pinyinWords.map((pw, i) => (
-                            <HoverCharacter
-                              key={`${currentWord.id}-ex-${idx}-${i}`}
-                              char={pw.char}
-                              pinyin={pw.pinyin}
-                              size="sm"
-                              wordId={currentWord.id}
-                            />
+                            <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
                           ))}
                         </div>
                         <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>

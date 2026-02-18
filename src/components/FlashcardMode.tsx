@@ -225,11 +225,10 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           <div className="flex items-end gap-2 justify-center">
             {currentWord.hanzi.split("").map((char, i) => (
               <HoverCharacter
-                key={`${currentWord.id}-${i}`}
+                key={`${currentWord.id}-front-${i}`}
                 char={char}
                 pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
                 size="2xl"
-                wordId={currentWord.id}
               />
             ))}
           </div>
@@ -253,17 +252,11 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           {currentWord.examples.length > 0 && (
             <div className="space-y-3 mt-4 text-left w-full">
               {currentWord.examples.slice(0, 3).map((example, idx) => (
-                <div key={idx} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
                       {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter
-                          key={`${currentWord.id}-ex-${idx}-${i}`}
-                          char={pw.char}
-                          pinyin={pw.pinyin}
-                          size="sm"
-                          wordId={currentWord.id}
-                        />
+                        <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
                       ))}
                     </div>
                     <p className="text-gray-400 text-xs leading-relaxed">{example.english}</p>
