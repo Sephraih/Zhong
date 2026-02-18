@@ -1,6 +1,10 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, useTransition } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
-import { buildFallbackVocabulary, fetchVocabularyFromSupabase } from "./data/supabaseVocab";
+import {
+  buildFallbackVocabulary,
+  fetchVocabularyFromSupabase,
+  loadCachedSupabaseVocabulary,
+} from "./data/supabaseVocab";
 import type { VocabWord } from "./data/vocabulary";
 import { VocabCard } from "./components/VocabCard";
 import { FlashcardMode } from "./components/FlashcardMode";
@@ -18,17 +22,33 @@ type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profil
 type HSKFilter = "all" | 1 | 2;
 type StatusFilter = "all" | "learned" | "still-learning";
 
-// Build vocabulary synchronously from fallback data - app is usable immediately
-const INITIAL_VOCABULARY = buildFallbackVocabulary();
+const FALLBACK_VOCABULARY = buildFallbackVocabulary();
+
+function signature(words: VocabWord[]): string {
+  if (!words.length) return "0";
+  const first = words[0]?.id ?? 0;
+  const last = words[words.length - 1]?.id ?? 0;
+  return `${words.length}:${first}:${last}`;
+}
 
 function AppContent() {
   const isMobile = useIsMobile();
+  const [isPending, startTransition] = useTransition();
 
-  // Initialize with fallback vocabulary (synchronous - no loading screen needed)
-  const [vocabulary, setVocabulary] = useState<VocabWord[]>(INITIAL_VOCABULARY);
-  const [dataSource, setDataSource] = useState<"fallback" | "supabase">("fallback");
-  const [hsk1Count, setHsk1Count] = useState(() => INITIAL_VOCABULARY.filter((w) => w.hskLevel === 1).length);
-  const [hsk2Count, setHsk2Count] = useState(() => INITIAL_VOCABULARY.filter((w) => w.hskLevel === 2).length);
+  // 1) Load from localStorage cache synchronously if present.
+  // 2) Otherwise show fallback immediately.
+  const initial = useMemo(() => {
+    const cached = loadCachedSupabaseVocabulary();
+    if (cached?.words?.length) {
+      return { words: cached.words, source: "supabase" as const };
+    }
+    return { words: FALLBACK_VOCABULARY, source: "fallback" as const };
+  }, []);
+
+  const [vocabulary, setVocabulary] = useState<VocabWord[]>(initial.words);
+  const [dataSource, setDataSource] = useState<"fallback" | "supabase">(initial.source);
+  const sigRef = useRef(signature(initial.words));
+  const hadSupabaseCacheRef = useRef(initial.source === "supabase");
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -42,10 +62,8 @@ function AppContent() {
     if (!isMobile) return;
     const currentY = window.scrollY;
     if (currentY > lastScrollY.current && currentY > 60) {
-      // Scrolling down past threshold
       setHeaderVisible(false);
     } else if (currentY < lastScrollY.current) {
-      // Scrolling up
       setHeaderVisible(true);
     }
     lastScrollY.current = currentY;
@@ -56,36 +74,41 @@ function AppContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
-  // Try to fetch from Supabase in background (won't block initial render)
+  // Background refresh:
+  // - If we started from cache, bypass cache to fetch fresh data.
+  // - If we started from fallback, use cache if available.
+  // Avoid redundant swaps by comparing signatures.
   useEffect(() => {
     let cancelled = false;
 
     const loadFromSupabase = async () => {
       try {
-        const result = await fetchVocabularyFromSupabase();
-        
+        const result = await fetchVocabularyFromSupabase({
+          bypassCache: hadSupabaseCacheRef.current,
+        });
+
         if (cancelled) return;
-        
-        // Only upgrade to Supabase data if we got real data back
-        if (result.source === "supabase" && result.words.length > 0) {
-          console.log(`[App] Upgraded to Supabase data: ${result.words.length} words`);
+        if (result.source !== "supabase" || result.words.length === 0) return;
+
+        const nextSig = signature(result.words);
+        if (nextSig === sigRef.current) return;
+
+        sigRef.current = nextSig;
+        startTransition(() => {
           setVocabulary(result.words);
-          setHsk1Count(result.hsk1Count);
-          setHsk2Count(result.hsk2Count);
           setDataSource("supabase");
-        } else {
-          console.log("[App] Using fallback data (Supabase returned empty or unavailable)");
-        }
+        });
       } catch (err) {
-        console.warn("[App] Supabase fetch failed, using fallback:", err);
-        // Keep using fallback data - no error shown to user
+        console.warn("[App] Supabase fetch failed, keeping current data:", err);
       }
     };
 
     loadFromSupabase();
 
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [startTransition]);
 
   // UI state
   const [viewMode, setViewMode] = useState<ViewMode>("home");
@@ -98,10 +121,18 @@ function AppContent() {
   const [flashcardStatusFilter, setFlashcardStatusFilter] = useState<FlashcardFilter>("all");
   const [quizKey, setQuizKey] = useState(0);
 
+  // Browse pagination (major perf win)
+  const [browsePage, setBrowsePage] = useState(1);
+  const browsePageSize = isMobile ? 18 : 30;
+
   const learnedState = useLearnedState();
   const { isLearned, toggleLearned, learnedCount } = learnedState;
 
-  // Derived data
+  const hsk1Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 1).length, [vocabulary]);
+  const hsk2Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 2).length, [vocabulary]);
+
+  const stillLearningCount = vocabulary.length - learnedCount;
+
   const categories = useMemo(() => {
     const cats = new Set<string>();
     vocabulary.forEach((w) => cats.add(w.category));
@@ -126,7 +157,16 @@ function AppContent() {
     });
   }, [vocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
 
-  const stillLearningCount = vocabulary.length - learnedCount;
+  // Reset pagination when the user changes filters/search.
+  useEffect(() => {
+    setBrowsePage(1);
+  }, [hskFilter, categoryFilter, searchQuery, statusFilter]);
+
+  const visibleWords = useMemo(() => {
+    return filteredWords.slice(0, browsePage * browsePageSize);
+  }, [filteredWords, browsePage, browsePageSize]);
+
+  const canLoadMore = visibleWords.length < filteredWords.length;
 
   const activeWords = useMemo(() => {
     if (hskFilter === "all") return vocabulary;
@@ -151,7 +191,10 @@ function AppContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <button
-              onClick={() => { setViewMode("home"); setMobileMenuOpen(false); }}
+              onClick={() => {
+                setViewMode("home");
+                setMobileMenuOpen(false);
+              }}
               className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
@@ -189,16 +232,18 @@ function AppContent() {
             {/* Auth Section */}
             <div className="flex items-center gap-2">
               <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
-              
+
               {/* Mobile menu button */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen
-                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                  {mobileMenuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  )}
                 </svg>
               </button>
             </div>
@@ -216,7 +261,10 @@ function AppContent() {
                 ].map((mode) => (
                   <button
                     key={mode.id}
-                    onClick={() => { setViewMode(mode.id); setMobileMenuOpen(false); }}
+                    onClick={() => {
+                      setViewMode(mode.id);
+                      setMobileMenuOpen(false);
+                    }}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       viewMode === mode.id ? "bg-red-600 text-white" : "text-gray-400 bg-neutral-800"
                     }`}
@@ -234,7 +282,7 @@ function AppContent() {
       <div className="bg-neutral-950 border-b border-neutral-800/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-wrap gap-4 items-center justify-between">
-            <div className="flex flex-wrap gap-4 sm:gap-6">
+            <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
                 <span className="text-sm text-gray-500">
@@ -253,6 +301,7 @@ function AppContent() {
                   Total: <span className="font-bold text-gray-300">{vocabulary.length}</span>
                 </span>
               </div>
+
               <div className="hidden sm:flex items-center gap-2">
                 <span className="text-sm text-gray-600">|</span>
                 <span className="text-sm text-gray-500">
@@ -262,15 +311,21 @@ function AppContent() {
                   📖 Learning: <span className="font-bold text-red-400">{stillLearningCount}</span>
                 </span>
               </div>
+
               {/* Data source indicator */}
               {dataSource === "fallback" && (
-                <div className="hidden sm:flex items-center gap-1">
-                  <span className="text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
-                    ⚡ Preview
-                  </span>
-                </div>
+                <span className="hidden sm:inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
+                  ⚡ Preview
+                </span>
+              )}
+
+              {isPending && (
+                <span className="hidden sm:inline-flex text-xs text-gray-400 bg-neutral-900 px-2 py-0.5 rounded-full border border-neutral-800">
+                  Syncing…
+                </span>
               )}
             </div>
+
             <div className="hidden sm:flex items-center gap-3">
               <div className="w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
                 <div
@@ -287,9 +342,7 @@ function AppContent() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewMode === "home" && (
-          <LandingPage onSelectMode={(mode) => setViewMode(mode)} />
-        )}
+        {viewMode === "home" && <LandingPage onSelectMode={(mode) => setViewMode(mode)} />}
 
         {viewMode === "profile" && (
           <ProfilePage
@@ -302,11 +355,22 @@ function AppContent() {
 
         {viewMode === "browse" && (
           <>
+            {/* Filters */}
             <div className="mb-8 space-y-4">
               {/* Search */}
               <div className="relative max-w-md">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
                 </svg>
                 <input
                   type="text"
@@ -337,10 +401,12 @@ function AppContent() {
                     {filter.label}
                   </button>
                 ))}
+
                 <div className="w-px h-6 bg-neutral-800 self-center mx-1" />
+
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
                 {[
-                  { value: "all" as StatusFilter, label: "All Words", icon: "📋" },
+                  { value: "all" as StatusFilter, label: `All Words (${vocabulary.length})`, icon: "📋" },
                   { value: "still-learning" as StatusFilter, label: `Still Learning (${stillLearningCount})`, icon: "📖" },
                   { value: "learned" as StatusFilter, label: `Learned (${learnedCount})`, icon: "✅" },
                 ].map((filter) => (
@@ -389,38 +455,53 @@ function AppContent() {
               </div>
             </div>
 
-            <div className="mb-4">
+            {/* Results count */}
+            <div className="mb-4 flex items-center justify-between gap-3">
               <p className="text-sm text-gray-500">
-                Showing <span className="font-semibold text-gray-300">{filteredWords.length}</span> of{" "}
-                <span className="font-semibold text-gray-300">{vocabulary.length}</span> words
-                {statusFilter !== "all" && (
-                  <span className="text-gray-600">
-                    {" "}· filtered by{" "}
-                    <span className={statusFilter === "learned" ? "text-emerald-400" : "text-red-400"}>
-                      {statusFilter === "learned" ? "Learned" : "Still Learning"}
-                    </span>
-                  </span>
-                )}
+                Showing <span className="font-semibold text-gray-300">{visibleWords.length}</span> of{" "}
+                <span className="font-semibold text-gray-300">{filteredWords.length}</span> results
               </p>
+              {filteredWords.length > browsePageSize && (
+                <p className="text-xs text-gray-600">(Paged for performance)</p>
+              )}
             </div>
 
+            {/* Word Grid */}
             {filteredWords.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredWords.map((word) => (
-                  <VocabCard
-                    key={word.id}
-                    word={word}
-                    isLearned={isLearned(word.id)}
-                    onToggleLearned={toggleLearned}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visibleWords.map((word) => (
+                    <VocabCard
+                      key={word.id}
+                      word={word}
+                      isLearned={isLearned(word.id)}
+                      onToggleLearned={toggleLearned}
+                    />
+                  ))}
+                </div>
+
+                {canLoadMore && (
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      onClick={() => setBrowsePage((p) => p + 1)}
+                      className="px-6 py-3 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-200 hover:border-neutral-700 hover:bg-neutral-800 transition-colors"
+                    >
+                      Load more
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-16">
                 <p className="text-5xl mb-4">🔍</p>
                 <p className="text-gray-400 text-lg">No words found matching your filters.</p>
                 <button
-                  onClick={() => { setSearchQuery(""); setHskFilter("all"); setCategoryFilter("all"); setStatusFilter("all"); }}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setHskFilter("all");
+                    setCategoryFilter("all");
+                    setStatusFilter("all");
+                  }}
                   className="mt-4 text-red-400 font-medium hover:underline"
                 >
                   Clear all filters
@@ -454,9 +535,14 @@ function AppContent() {
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
-                    onClick={() => { setHskFilter(filter.value); setFlashcardKey((k) => k + 1); }}
+                    onClick={() => {
+                      setHskFilter(filter.value);
+                      setFlashcardKey((k) => k + 1);
+                    }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value ? "bg-red-600 text-white" : "bg-neutral-900 text-gray-400 border border-neutral-800"
+                      hskFilter === filter.value
+                        ? "bg-red-600 text-white"
+                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
                     {filter.label}
@@ -473,10 +559,15 @@ function AppContent() {
                 ].map((filter) => (
                   <button
                     key={filter.value}
-                    onClick={() => { setFlashcardStatusFilter(filter.value); setFlashcardKey((k) => k + 1); }}
+                    onClick={() => {
+                      setFlashcardStatusFilter(filter.value);
+                      setFlashcardKey((k) => k + 1);
+                    }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       flashcardStatusFilter === filter.value
-                        ? filter.value === "learned" ? "bg-emerald-700 text-white" : "bg-red-600 text-white"
+                        ? filter.value === "learned"
+                          ? "bg-emerald-700 text-white"
+                          : "bg-red-600 text-white"
                         : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
@@ -485,6 +576,7 @@ function AppContent() {
                 ))}
               </div>
             </div>
+
             <FlashcardMode
               key={`fc-${flashcardKey}`}
               words={activeWords}
@@ -499,6 +591,7 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">✏️ Quiz Mode</h2>
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
+
               <div className="flex justify-center gap-2 mt-4">
                 {[
                   { value: "all" as HSKFilter, label: "All" },
@@ -507,9 +600,14 @@ function AppContent() {
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
-                    onClick={() => { setHskFilter(filter.value); setQuizKey((k) => k + 1); }}
+                    onClick={() => {
+                      setHskFilter(filter.value);
+                      setQuizKey((k) => k + 1);
+                    }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value ? "bg-red-600 text-white" : "bg-neutral-900 text-gray-400 border border-neutral-800"
+                      hskFilter === filter.value
+                        ? "bg-red-600 text-white"
+                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
                     }`}
                   >
                     {filter.label}
@@ -517,6 +615,7 @@ function AppContent() {
                 ))}
               </div>
             </div>
+
             <QuizMode key={`quiz-${quizKey}`} words={activeWords} />
           </div>
         )}
@@ -526,9 +625,7 @@ function AppContent() {
       <footer className="bg-neutral-950 border-t border-neutral-800 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <p className="text-sm text-gray-500">
-              🇨🇳 汉语学习 — Chinese Language Learning — HSK 1 & 2 Vocabulary
-            </p>
+            <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1 & 2 Vocabulary</p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedCount} learned • 📖 {stillLearningCount} still learning
               {dataSource === "fallback" && " • ⚡ Preview mode"}
@@ -538,11 +635,7 @@ function AppContent() {
       </footer>
 
       {/* Auth Modal */}
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        initialMode={authModalMode}
-      />
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} initialMode={authModalMode} />
     </div>
   );
 }
