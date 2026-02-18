@@ -1,18 +1,33 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 interface HoverCharacterProps {
   char: string;
   pinyin: string;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  wordId?: number | string;
 }
 
-export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProps) {
+/**
+ * Helper: check if a click/touch event originated from a HoverCharacter.
+ * Used by parent card handlers to ignore taps on characters.
+ */
+export function isHoverCharacterEvent(e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent): boolean {
+  const target = e.target as HTMLElement;
+  return !!target?.closest?.("[data-hover-char]");
+}
+
+export function HoverCharacter({ char, pinyin, size = "md", wordId }: HoverCharacterProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const isMobile = useIsMobile();
-  const tapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTouching = useRef(false);
 
   const isPunctuation = /^[。，！？、；：""''（）《》…—\s.!?,;:'"()\-]$/.test(char);
+
+  // Reset pinyin visibility when wordId changes (new card)
+  useEffect(() => {
+    setIsRevealed(false);
+  }, [wordId]);
 
   // Desktop sizes
   const sizeClasses: Record<string, string> = {
@@ -23,8 +38,7 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
     "2xl": "text-7xl",
   };
 
-  // Mobile sizes — bump up sm/md for tap targets, but keep very large sizes a bit smaller
-  // so flashcards fit vertically on small screens.
+  // Mobile sizes
   const mobileSizeClasses: Record<string, string> = {
     sm: "text-xl",
     md: "text-2xl",
@@ -41,7 +55,6 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
     "2xl": "text-lg",
   };
 
-  // Mobile pinyin sizes — slightly larger for readability
   const mobilePinyinSizeClasses: Record<string, string> = {
     sm: "text-xs",
     md: "text-sm",
@@ -50,7 +63,6 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
     "2xl": "text-xl",
   };
 
-  // Mobile: min tap target height per size
   const mobileTapTargetClasses: Record<string, string> = {
     sm: "min-w-[28px] min-h-[44px]",
     md: "min-w-[32px] min-h-[48px]",
@@ -62,8 +74,6 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
   const activeSizeClasses = isMobile ? mobileSizeClasses : sizeClasses;
   const activePinyinClasses = isMobile ? mobilePinyinSizeClasses : pinyinSizeClasses;
 
-  // ── Interaction handlers ──
-
   // Desktop: hover
   const handleMouseEnter = useCallback(() => {
     if (!isMobile) setIsRevealed(true);
@@ -73,24 +83,30 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
     if (!isMobile) setIsRevealed(false);
   }, [isMobile]);
 
-  // Mobile: tap to toggle
-  const handleTap = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      if (!isMobile) return;
+  // Mobile: use touchEnd to toggle, prevent ALL propagation
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    isTouching.current = true;
+    e.stopPropagation();
+  }, [isMobile]);
 
-      // Prevent the tap from bubbling to the card's flip handler
-      e.stopPropagation();
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    e.stopPropagation();
+    e.preventDefault(); // Prevent synthetic click
+    isTouching.current = false;
+    setIsRevealed((prev) => !prev);
+  }, [isMobile]);
 
-      // Clear any pending timeout (rapid taps)
-      if (tapTimeout.current) {
-        clearTimeout(tapTimeout.current);
-        tapTimeout.current = null;
-      }
-
-      setIsRevealed((prev) => !prev);
-    },
-    [isMobile]
-  );
+  // Desktop click handler (also acts as fallback)
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // On mobile, touchEnd already handled the toggle — ignore the synthetic click
+    if (isMobile) {
+      e.preventDefault();
+      return;
+    }
+  }, [isMobile]);
 
   if (isPunctuation) {
     return (
@@ -102,13 +118,15 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
 
   return (
     <span
+      data-hover-char="true"
       className={`relative inline-flex flex-col items-center group
         ${isMobile ? `cursor-pointer select-none ${mobileTapTargetClasses[size]} justify-end` : "cursor-pointer"}
       `}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onClick={handleTap}
-      // Prevent long-press context menu on mobile
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={handleClick}
       onContextMenu={isMobile ? (e) => e.preventDefault() : undefined}
     >
       {/* Pinyin label */}
@@ -139,7 +157,7 @@ export function HoverCharacter({ char, pinyin, size = "md" }: HoverCharacterProp
         {char}
       </span>
 
-      {/* Mobile: subtle tap indicator dot (only when pinyin is hidden) */}
+      {/* Mobile: subtle tap indicator dot */}
       {isMobile && !isRevealed && (
         <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-red-800/50" />
       )}

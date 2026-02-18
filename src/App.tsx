@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { buildFallbackVocabulary, fetchVocabularyFromSupabase } from "./data/supabaseVocab";
 import type { VocabWord } from "./data/vocabulary";
@@ -8,10 +8,11 @@ import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
 import { useLearnedState } from "./hooks/useLearnedState";
-import { LandingPage } from "./components/LandingPage";
-import { AuthHeader } from "./components/AuthHeader";
 import { AuthModal } from "./components/AuthModal";
+import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
+import { LandingPage } from "./components/LandingPage";
+import { useIsMobile } from "./hooks/useIsMobile";
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
@@ -21,6 +22,8 @@ type StatusFilter = "all" | "learned" | "still-learning";
 const INITIAL_VOCABULARY = buildFallbackVocabulary();
 
 function AppContent() {
+  const isMobile = useIsMobile();
+
   // Initialize with fallback vocabulary (synchronous - no loading screen needed)
   const [vocabulary, setVocabulary] = useState<VocabWord[]>(INITIAL_VOCABULARY);
   const [dataSource, setDataSource] = useState<"fallback" | "supabase">("fallback");
@@ -31,10 +34,27 @@ function AppContent() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
 
-  const openAuthModal = (mode: "login" | "signup") => {
-    setAuthModalMode(mode);
-    setAuthModalOpen(true);
-  };
+  // Mobile: auto-hide header on scroll down, show on scroll up
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  const handleScroll = useCallback(() => {
+    if (!isMobile) return;
+    const currentY = window.scrollY;
+    if (currentY > lastScrollY.current && currentY > 60) {
+      // Scrolling down past threshold
+      setHeaderVisible(false);
+    } else if (currentY < lastScrollY.current) {
+      // Scrolling up
+      setHeaderVisible(true);
+    }
+    lastScrollY.current = currentY;
+  }, [isMobile]);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
   // Try to fetch from Supabase in background (won't block initial render)
   useEffect(() => {
@@ -43,9 +63,9 @@ function AppContent() {
     const loadFromSupabase = async () => {
       try {
         const result = await fetchVocabularyFromSupabase();
-
+        
         if (cancelled) return;
-
+        
         // Only upgrade to Supabase data if we got real data back
         if (result.source === "supabase" && result.words.length > 0) {
           console.log(`[App] Upgraded to Supabase data: ${result.words.length} words`);
@@ -64,9 +84,7 @@ function AppContent() {
 
     loadFromSupabase();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   // UI state
@@ -115,10 +133,21 @@ function AppContent() {
     return vocabulary.filter((w) => w.hskLevel === hskFilter);
   }, [vocabulary, hskFilter]);
 
+  const openAuthModal = (mode: "login" | "signup") => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800">
+      {/* Header — hides on scroll down on mobile */}
+      <header
+        className={`sticky top-0 z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800 transition-all duration-300 ${
+          !headerVisible && isMobile
+            ? "-translate-y-full opacity-0 pointer-events-none"
+            : "translate-y-0 opacity-100"
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <button
@@ -157,20 +186,14 @@ function AppContent() {
               ))}
             </nav>
 
+            {/* Auth Section */}
             <div className="flex items-center gap-2">
-              {/* Auth */}
-              <AuthHeader
-                onOpenAuth={openAuthModal}
-                onOpenProfile={() => {
-                  setViewMode("profile");
-                  setMobileMenuOpen(false);
-                }}
-              />
-
+              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
+              
+              {/* Mobile menu button */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
-                title="Menu"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {mobileMenuOpen
@@ -514,6 +537,7 @@ function AppContent() {
         </div>
       </footer>
 
+      {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}

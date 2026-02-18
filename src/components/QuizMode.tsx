@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
+import { HoverCharacter } from "./HoverCharacter";
+import { useIsMobile } from "../hooks/useIsMobile";
 import type { VocabWord } from "../data/vocabulary";
 
 interface QuizModeProps {
@@ -11,7 +13,50 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
+function splitPinyin(pinyin: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  const vowels = "aeiouüāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ";
+
+  for (let i = 0; i < pinyin.length; i++) {
+    const ch = pinyin[i];
+    if (ch === " ") {
+      if (current) result.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+
+    if (i < pinyin.length - 1) {
+      const next = pinyin[i + 1];
+      if (next === " ") continue;
+      const isCurrentVowel = vowels.includes(ch.toLowerCase());
+      const isNextConsonant = !vowels.includes(next.toLowerCase());
+      if (isCurrentVowel && isNextConsonant) {
+        const remaining = pinyin.slice(i + 1);
+        const nextSyllableMatch = remaining.match(/^[bpmfdtnlgkhjqxzhchshrzcsyw]/i);
+        if (nextSyllableMatch) {
+          if (ch === "n" || (ch === "g" && current.endsWith("ng"))) continue;
+          result.push(current);
+          current = "";
+        }
+      }
+    }
+  }
+
+  if (current) result.push(current);
+  return result.length === 0 ? [pinyin] : result;
+}
+
+function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars: number): string {
+  const syllables = splitPinyin(fullPinyin);
+  if (totalChars === 1) return fullPinyin;
+  if (charIndex < syllables.length) return syllables[charIndex];
+  return fullPinyin;
+}
+
 export function QuizMode({ words }: QuizModeProps) {
+  const isMobile = useIsMobile();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
@@ -115,8 +160,23 @@ export function QuizMode({ words }: QuizModeProps) {
       {/* Question */}
       <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8 text-center mb-6">
         <p className="text-sm text-gray-500 mb-4">What does this mean?</p>
-        <p className="text-6xl mb-2 text-white">{currentQuestion.word.hanzi}</p>
-        <p className="text-red-400 text-lg font-medium">{currentQuestion.word.pinyin}</p>
+        
+        {/* Hanzi with hover/tap pinyin */}
+        <div className="flex items-end gap-1 justify-center mb-2">
+          {currentQuestion.word.hanzi.split("").map((char, i) => (
+            <HoverCharacter
+              key={`${currentQuestion.word.id}-${i}`}
+              char={char}
+              pinyin={extractPinyinForChar(currentQuestion.word.pinyin, i, currentQuestion.word.hanzi.length)}
+              size="xl"
+              wordId={currentQuestion.word.id}
+            />
+          ))}
+        </div>
+
+        <p className="text-gray-600 text-xs mt-2">
+          {isMobile ? "Tap characters for pinyin" : "Hover for pinyin"}
+        </p>
       </div>
 
       {/* Options */}

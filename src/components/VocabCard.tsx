@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HoverCharacter } from "./HoverCharacter";
+import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import type { VocabWord } from "../data/vocabulary";
 
@@ -24,7 +24,10 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
       {/* Main Card */}
       <div
         className="p-6 cursor-pointer"
-        onClick={() => setIsFlipped(!isFlipped)}
+        onClick={(e) => {
+          if (isHoverCharacterEvent(e)) return;
+          setIsFlipped(!isFlipped);
+        }}
       >
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">

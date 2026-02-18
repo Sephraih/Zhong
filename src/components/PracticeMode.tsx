@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { HoverCharacter } from "./HoverCharacter";
+import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
 import type { VocabWord } from "../data/vocabulary";
@@ -661,7 +661,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                 feedback,
                 currentWord.sessionProgress >= 5
               )}`}
-              onClick={() => setIsFlipped(!isFlipped)}
+              onClick={(e) => {
+                // On mobile, ignore taps that originated from a HoverCharacter
+                if (isHoverCharacterEvent(e)) return;
+                setIsFlipped(!isFlipped);
+              }}
             >
               {/* Top badges */}
               <div className="absolute top-5 left-6 flex items-center gap-2">

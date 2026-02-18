@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { HoverCharacter } from "./HoverCharacter";
+import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
@@ -192,7 +192,10 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
       {/* Flashcard */}
       <div
         className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[min(580px,calc(100dvh-260px))] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative pb-4 overflow-hidden"
-        onClick={() => setIsFlipped(!isFlipped)}
+        onClick={(e) => {
+          if (isHoverCharacterEvent(e)) return;
+          setIsFlipped(!isFlipped);
+        }}
       >
         {/* Top-left: HSK badge + learned check */}
         <div className="absolute top-5 left-6 flex items-center gap-2">
