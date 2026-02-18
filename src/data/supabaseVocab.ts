@@ -175,20 +175,59 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
       return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };
     }
 
-    // ── 2. Fetch all example sentences in one query ───────────────────────────
-    const { data: exampleRows, error: exampleError } = await supabase
-      .from("example_sentences")
-      .select("id, word_id, hanzi, pinyin, english")
-      .order("id", { ascending: true });
+    // ── 2. Fetch all example sentences ──────────────────────────────────────
+    // Supabase has a default limit of 1000 rows. We need to fetch ALL examples
+    // to ensure HSK 2 words (which have higher word_ids) get their sentences.
+    // We'll paginate if needed.
+    let allExampleRows: ExampleRow[] = [];
+    let exampleError: Error | null = null;
+    
+    try {
+      // First, try to get total count
+      const { count } = await supabase
+        .from("example_sentences")
+        .select("*", { count: "exact", head: true });
+      
+      const totalExamples = count ?? 0;
+      const pageSize = 1000;
+      const pages = Math.ceil(totalExamples / pageSize);
+      
+      console.log(`[supabaseVocab] Fetching ${totalExamples} example sentences in ${pages} page(s)...`);
+      
+      // Fetch all pages
+      for (let page = 0; page < pages; page++) {
+        const { data: pageData, error: pageError } = await supabase
+          .from("example_sentences")
+          .select("id, word_id, hanzi, pinyin, english")
+          .order("id", { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (pageError) {
+          console.warn(`[supabaseVocab] example_sentences page ${page} error:`, pageError.message);
+          exampleError = new Error(pageError.message);
+          break;
+        }
+        
+        if (pageData) {
+          allExampleRows = allExampleRows.concat(pageData as ExampleRow[]);
+        }
+      }
+      
+      console.log(`[supabaseVocab] Fetched ${allExampleRows.length} total example sentences.`);
+      
+    } catch (err) {
+      console.warn("[supabaseVocab] example_sentences fetch error:", err);
+      exampleError = err as Error;
+    }
 
-    if (exampleError) {
-      console.warn("[supabaseVocab] example_sentences error:", exampleError.message);
+    if (exampleError && allExampleRows.length === 0) {
+      console.warn("[supabaseVocab] Could not fetch any examples:", exampleError.message);
       // Continue without examples — better than failing entirely
     }
 
     // ── 3. Group examples by word_id ──────────────────────────────────────────
     const examplesByWordId = new Map<number, ExampleRow[]>();
-    for (const row of (exampleRows ?? []) as ExampleRow[]) {
+    for (const row of allExampleRows) {
       const bucket = examplesByWordId.get(row.word_id) ?? [];
       bucket.push(row);
       examplesByWordId.set(row.word_id, bucket);
@@ -223,7 +262,7 @@ export async function fetchVocabularyFromSupabase(): Promise<FetchResult> {
     console.log(
       `[supabaseVocab] Loaded ${words.length} words ` +
       `(HSK1: ${hsk1Count}, HSK2: ${hsk2Count}) ` +
-      `with ${exampleRows?.length ?? 0} example sentences.`
+      `with ${allExampleRows.length} example sentences.`
     );
 
     return { words, hsk1Count, hsk2Count, totalCount: words.length, source: "supabase" };
