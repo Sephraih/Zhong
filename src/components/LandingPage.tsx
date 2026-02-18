@@ -513,18 +513,17 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     const el = children[index];
     if (!el) return;
 
-    // Center the section in the viewport
-    const targetTop = el.offsetTop - (container.clientHeight - el.offsetHeight) / 2;
-    container.scrollTo({ top: targetTop, behavior: "smooth" });
+    // Use scrollIntoView with block:center for more reliable centering across mobile browsers.
+    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
   }, []);
 
   const scrollNext = useCallback(() => scrollTo(Math.min(active + 1, SECTIONS.length - 1)), [active, scrollTo]);
   const scrollPrev = useCallback(() => scrollTo(Math.max(active - 1, 0)), [active, scrollTo]);
 
   return (
-    <div className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-8">
-      {/* Dot nav */}
-      <div className="fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2.5">
+    <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden">
+      {/* Dot nav (hidden on small screens so it doesn't overlap content) */}
+      <div className="hidden sm:flex fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-2.5">
         {SECTIONS.map((s, i) => (
           <button
             key={s.id}
@@ -541,11 +540,11 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
       <div
         ref={containerRef}
-        className="h-[calc(100dvh-4rem)] overflow-y-scroll snap-y snap-mandatory scroll-smooth"
+        className="h-[calc(100svh-4rem)] sm:h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-y-contain"
         style={{ scrollSnapType: "y mandatory" }}
       >
         {/* HERO */}
-        <section className="snap-center h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4">
+        <section className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
           <div className="absolute inset-0 bg-gradient-to-br from-neutral-950 via-black to-neutral-950" />
           <InkLandscape accent="#ef4444" />
           <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
@@ -597,7 +596,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
           <button
             onClick={scrollNext}
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors"
+            className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors"
           >
             <span className="text-xs tracking-widest uppercase">Next</span>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -689,7 +688,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           return (
             <section
               key={mode.id}
-              className="snap-center h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden"
+              className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             >
               <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
               <InkLandscape accent={mode.accent} />
@@ -730,14 +729,25 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
                     </div>
                   </div>
 
-                  <div>
-                    <mode.Preview />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectMode(mode.id)}
+                    className="group block text-left w-full"
+                    aria-label={`Open ${mode.title}`}
+                  >
+                    <div className="relative">
+                      <div className="absolute -inset-2 rounded-[2rem] bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <mode.Preview />
+                      <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-semibold bg-black/60 border border-white/15 text-gray-200 backdrop-blur group-hover:border-white/25">
+                        Tap preview →
+                      </div>
+                    </div>
+                  </button>
                 </div>
               </div>
 
               {/* Scroll buttons */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3">
+              <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-3 px-4">
                 <button
                   onClick={scrollPrev}
                   className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
@@ -762,7 +772,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         })}
 
         {/* FOOTER */}
-        <section className="snap-center h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black">
+        <section className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black pb-[max(2rem,env(safe-area-inset-bottom))]">
           <div className="absolute inset-0 bg-gradient-to-br from-red-950/10 via-black to-black" />
           <InkLandscape accent="#ef4444" />
 
