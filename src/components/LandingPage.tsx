@@ -1,5 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 interface LandingPageProps {
   onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
@@ -7,12 +9,13 @@ interface LandingPageProps {
 
 type ModeId = "browse" | "practice" | "flashcards" | "quiz";
 
+type SectionId = "hero" | ModeId | "footer";
+
 function svgDataUri(svg: string) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 function InkLandscape({ accent = "#ef4444" }: { accent?: string }) {
-  // Simple ink-style layered mountains.
   const svg = `
 <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>
   <defs>
@@ -49,14 +52,11 @@ function InkLandscape({ accent = "#ef4444" }: { accent?: string }) {
   );
 }
 
-function PreviewFrame({ title, children }: { title: string; children: React.ReactNode }) {
+function PreviewFrame({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="relative w-full max-w-md mx-auto">
-      {/* Outer glow */}
       <div className="absolute -inset-6 bg-white/5 rounded-[2rem] blur-2xl" />
-
       <div className="relative rounded-[1.35rem] border-2 border-white/20 shadow-[0_0_70px_rgba(255,255,255,0.08)] ring-1 ring-white/10 overflow-hidden bg-neutral-950">
-        {/* Chrome */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/80 backdrop-blur">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500/60" />
@@ -66,7 +66,6 @@ function PreviewFrame({ title, children }: { title: string; children: React.Reac
           <div className="ml-3 text-xs text-gray-400 truncate">{title}</div>
           <div className="ml-auto w-20 h-6 rounded-md bg-white/5" />
         </div>
-
         <div className="bg-neutral-900/40">{children}</div>
       </div>
     </div>
@@ -232,7 +231,6 @@ function PracticePreview() {
           </div>
           <div className="absolute top-5 right-6 text-xs text-gray-600 font-medium">Education</div>
 
-          {/* Front */}
           <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-10" : "opacity-100"}`}>
             <div className="flex items-end gap-2 justify-center">
               {[
@@ -262,7 +260,6 @@ function PracticePreview() {
             <p className="text-gray-600 text-sm mt-5">Tap to reveal · Hover for pinyin</p>
           </div>
 
-          {/* Back */}
           <div className={`absolute inset-0 pt-36 px-8 transition-all duration-300 ${flipped ? "opacity-100" : "opacity-0 pointer-events-none translate-y-6"}`}>
             <p className="text-red-400 text-xl font-medium text-center">xué xí</p>
             <p className="text-white text-3xl font-bold text-center mt-1">to study / learn</p>
@@ -304,7 +301,6 @@ function PracticePreview() {
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="h-12 rounded-xl bg-neutral-900 border border-red-900/40 flex items-center justify-center gap-2 text-red-400 font-bold">✗ Forgot it</div>
           <div className="h-12 rounded-xl bg-neutral-900 border border-emerald-900/40 flex items-center justify-center gap-2 text-emerald-400 font-bold">✓ Got it</div>
@@ -434,8 +430,7 @@ function QuizPreview() {
 
         <div className="space-y-2">
           {options.map((opt, idx) => {
-            let cls =
-              "w-full h-12 rounded-xl border px-4 text-sm flex items-center transition-all duration-200 ";
+            let cls = "w-full h-12 rounded-xl border px-4 text-sm flex items-center transition-all duration-200 ";
             if (selected === null) {
               cls += "bg-neutral-950 border-neutral-800 text-gray-200 hover:bg-neutral-900";
             } else if (idx === correct) {
@@ -462,7 +457,7 @@ function QuizPreview() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SectionConfig {
-  id: ModeId | "hero";
+  id: SectionId;
   label: string;
   color: string;
 }
@@ -473,12 +468,18 @@ const SECTIONS: SectionConfig[] = [
   { id: "practice", label: "Practice", color: "bg-orange-500" },
   { id: "flashcards", label: "Flashcards", color: "bg-blue-500" },
   { id: "quiz", label: "Quiz", color: "bg-yellow-500" },
+  { id: "footer", label: "Start", color: "bg-gray-400" },
 ];
 
-function useActiveSection(containerRef: React.RefObject<HTMLDivElement | null>) {
+function useActiveSection(containerRef: React.RefObject<HTMLDivElement | null>, enabled: boolean) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
+    if (!enabled) {
+      setActive(0);
+      return;
+    }
+
     const container = containerRef.current;
     if (!container) return;
 
@@ -497,322 +498,478 @@ function useActiveSection(containerRef: React.RefObject<HTMLDivElement | null>) 
     container.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => container.removeEventListener("scroll", onScroll);
-  }, [containerRef]);
+  }, [containerRef, enabled]);
 
   return active;
 }
 
+function ModeSectionDesktop({
+  id,
+  icon,
+  title,
+  subtitle,
+  description,
+  bullets,
+  accent,
+  Preview,
+  onSelectMode,
+  onPrev,
+  onNext,
+  swap,
+}: {
+  id: ModeId;
+  icon: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  bullets: string[];
+  accent: string;
+  Preview: () => ReactElement;
+  onSelectMode: (id: ModeId) => void;
+  onPrev: () => void;
+  onNext: () => void;
+  swap: boolean;
+}) {
+  const accentText =
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+  const bulletDot =
+    id === "browse" ? "bg-red-500/60" : id === "practice" ? "bg-orange-500/60" : id === "flashcards" ? "bg-blue-500/60" : "bg-yellow-500/60";
+  const btn =
+    id === "browse"
+      ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
+      : id === "practice"
+      ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
+      : id === "flashcards"
+      ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
+      : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
+
+  return (
+    <section className="snap-center min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
+      <InkLandscape accent={accent} />
+
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-6 lg:px-8">
+        <div
+          className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${
+            swap ? "lg:[&>*:first-child]:order-2 lg:[&>*:last-child]:order-1" : ""
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-3 mb-5">
+              <span className="text-4xl">{icon}</span>
+              <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
+            </div>
+            <h2 className="text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">{title}</h2>
+            <p className={`mt-2 text-lg font-semibold ${accentText}`}>{subtitle}</p>
+            <p className="mt-4 text-gray-400 leading-relaxed max-w-lg">{description}</p>
+
+            <ul className="mt-6 space-y-2.5">
+              {bullets.map((b) => (
+                <li key={b} className="flex items-start gap-3 text-sm text-gray-300">
+                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${bulletDot}`} />
+                  {b}
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => onSelectMode(id)}
+                className={`px-6 py-3 rounded-xl text-white font-semibold transition-colors shadow-lg ${btn}`}
+              >
+                Open {title} →
+              </button>
+            </div>
+          </div>
+
+          <button type="button" onClick={() => onSelectMode(id)} className="group block text-left w-full" aria-label={`Open ${title}`}>
+            <div className="relative">
+              <div className="absolute -inset-2 rounded-[2rem] bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Preview />
+              <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-semibold bg-black/60 border border-white/15 text-gray-200 backdrop-blur group-hover:border-white/25">
+                Click preview →
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-3 px-4">
+        <button
+          onClick={onPrev}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
+        >
+          <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          Prev
+        </button>
+        <button
+          onClick={onNext}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
+        >
+          Next
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ModeSectionMobile({
+  id,
+  icon,
+  title,
+  subtitle,
+  description,
+  bullets,
+  accent,
+  Preview,
+  onSelectMode,
+}: {
+  id: ModeId;
+  icon: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  bullets: string[];
+  accent: string;
+  Preview: () => ReactElement;
+  onSelectMode: (id: ModeId) => void;
+}) {
+  const accentText =
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+  const btn =
+    id === "browse"
+      ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
+      : id === "practice"
+      ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
+      : id === "flashcards"
+      ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
+      : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
+
+  return (
+    <section id={id} className="relative overflow-hidden py-14">
+      <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
+      <InkLandscape accent={accent} />
+
+      <div className="relative z-10 max-w-md mx-auto px-4">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-3xl">{icon}</span>
+          <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
+        </div>
+
+        <h2 className="text-4xl font-black text-white tracking-tight leading-none">{title}</h2>
+        <p className={`mt-2 text-base font-semibold ${accentText}`}>{subtitle}</p>
+        <p className="mt-4 text-gray-400 leading-relaxed">{description}</p>
+
+        <ul className="mt-5 space-y-2 text-sm text-gray-300">
+          {bullets.slice(0, 4).map((b) => (
+            <li key={b} className="flex items-start gap-2">
+              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-white/20" />
+              {b}
+            </li>
+          ))}
+        </ul>
+
+        {/* Preview (smaller on mobile) */}
+        <button
+          type="button"
+          onClick={() => onSelectMode(id)}
+          className="mt-7 block w-full"
+          aria-label={`Open ${title}`}
+        >
+          <div className="max-w-sm mx-auto origin-top scale-[0.86]">
+            <Preview />
+          </div>
+          <div className="mt-2 text-center text-xs text-gray-500">Tap preview to open</div>
+        </button>
+
+        {/* Open button after the preview (mobile-first order) */}
+        <button
+          onClick={() => onSelectMode(id)}
+          className={`mt-4 w-full px-6 py-3 rounded-xl text-white font-semibold transition-colors shadow-lg ${btn}`}
+        >
+          Open {title} →
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function LandingPage({ onSelectMode }: LandingPageProps) {
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
-  const active = useActiveSection(containerRef);
+  const active = useActiveSection(containerRef, !isMobile);
 
-  const scrollTo = useCallback((index: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const children = Array.from(container.children) as HTMLElement[];
-    const el = children[index];
-    if (!el) return;
+  const scrollToIndex = useCallback(
+    (index: number) => {
+      if (isMobile) return;
+      const container = containerRef.current;
+      if (!container) return;
+      const children = Array.from(container.children) as HTMLElement[];
+      const el = children[index];
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    },
+    [isMobile]
+  );
 
-    // Use scrollIntoView with block:center for more reliable centering across mobile browsers.
-    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-  }, []);
+  const scrollNext = useCallback(() => scrollToIndex(Math.min(active + 1, SECTIONS.length - 1)), [active, scrollToIndex]);
+  const scrollPrev = useCallback(() => scrollToIndex(Math.max(active - 1, 0)), [active, scrollToIndex]);
 
-  const scrollNext = useCallback(() => scrollTo(Math.min(active + 1, SECTIONS.length - 1)), [active, scrollTo]);
-  const scrollPrev = useCallback(() => scrollTo(Math.max(active - 1, 0)), [active, scrollTo]);
+  const modes = [
+    {
+      id: "browse" as ModeId,
+      icon: "📚",
+      title: "Browse",
+      subtitle: "Search. Filter. Learn.",
+      description:
+        "Explore the full HSK vocabulary with fast filtering by level, category, and learning status.",
+      bullets: [
+        "Filter by HSK level, category, learned/still-learning",
+        "Click cards to reveal pinyin + English",
+        "Expand 1–3 real example sentences per word",
+        "Hover (desktop) or tap (mobile) for per-character pinyin",
+      ],
+      accent: "#ef4444",
+      Preview: BrowsePreview,
+    },
+    {
+      id: "practice" as ModeId,
+      icon: "🔥",
+      title: "Practice",
+      subtitle: "Short sessions. Real progress.",
+      description:
+        "A focused 10-card session mixing new words with review, plus a 0–5 mastery bar per word.",
+      bullets: [
+        "10 cards per session: 8 new + 2 review",
+        "0–5 progress bar per word with feedback",
+        "Got it / Forgot it adjusts difficulty",
+        "Learned it removes the word from the session",
+      ],
+      accent: "#f97316",
+      Preview: PracticePreview,
+    },
+    {
+      id: "flashcards" as ModeId,
+      icon: "🃏",
+      title: "Flashcards",
+      subtitle: "Fast repetition. Instant recall.",
+      description:
+        "Drill through shuffled cards at your own pace. Mark each word as Learned or Still Learning.",
+      bullets: [
+        "Tap card to reveal meaning + examples",
+        "I Know This / Still Learning tracking",
+        "Filter by learned / still-learning status",
+        "Audio pronunciation with one tap",
+      ],
+      accent: "#3b82f6",
+      Preview: FlashcardPreview,
+    },
+    {
+      id: "quiz" as ModeId,
+      icon: "✏️",
+      title: "Quiz",
+      subtitle: "Test your recall.",
+      description:
+        "10-question multiple choice quizzes with instant feedback.",
+      bullets: [
+        "10 questions per round",
+        "4 answer options per question",
+        "Instant feedback: green correct / red wrong",
+        "Hover/tap hanzi to reveal pinyin",
+      ],
+      accent: "#eab308",
+      Preview: QuizPreview,
+    },
+  ];
+
+  const hero = (
+    <section id="hero" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]"}>
+      <div className="absolute inset-0 bg-gradient-to-br from-neutral-950 via-black to-neutral-950" />
+      <InkLandscape accent="#ef4444" />
+      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
+
+      <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-3xl mx-auto"}>
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
+          <span className="text-white text-4xl font-bold">汉</span>
+        </div>
+
+        <h1 className={isMobile ? "text-5xl font-black tracking-tight text-white leading-none" : "text-5xl sm:text-7xl font-black tracking-tight text-white leading-none"}>
+          Learn Mandarin
+        </h1>
+        <p className="mt-3 text-xl font-light text-red-400">One focused session at a time.</p>
+        <p className="mt-5 text-gray-400 leading-relaxed">
+          HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
+        </p>
+
+        <div className="mt-8 inline-flex items-end gap-2 px-6 py-4 rounded-2xl bg-neutral-900/80 border border-neutral-700 shadow-xl">
+          {[{ c: "你", p: "nǐ" }, { c: "好", p: "hǎo" }, { c: "！", p: "" }].map((x, i) => (
+            <HoverCharacter key={`hero-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`hero-${i}`} />
+          ))}
+          <span className="ml-3 text-xs text-gray-500 self-center">← hover / tap</span>
+        </div>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-500">
+          {["450+ Words", "1000+ Examples", "4 Study Modes", "HSK 1 & 2"].map((s) => (
+            <span key={s} className="px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800">{s}</span>
+          ))}
+        </div>
+
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <button
+            onClick={() => onSelectMode("practice")}
+            className="px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors shadow-lg shadow-red-900/30"
+          >
+            Start Practicing
+          </button>
+          {isMobile ? (
+            <button
+              onClick={() => onSelectMode("browse")}
+              className="px-6 py-3 rounded-xl bg-neutral-900 border border-neutral-700 text-gray-200 hover:bg-neutral-800 transition-colors"
+            >
+              Browse words
+            </button>
+          ) : (
+            <button
+              onClick={() => scrollToIndex(1)}
+              className="px-6 py-3 rounded-xl bg-neutral-900 border border-neutral-700 text-gray-200 hover:bg-neutral-800 transition-colors"
+            >
+              Explore Modes ↓
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!isMobile && (
+        <button
+          onClick={scrollNext}
+          className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors"
+        >
+          <span className="text-xs tracking-widest uppercase">Next</span>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      )}
+    </section>
+  );
+
+  const footer = (
+    <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black pb-[max(2rem,env(safe-area-inset-bottom))]"}>
+      <div className="absolute inset-0 bg-gradient-to-br from-red-950/10 via-black to-black" />
+      <InkLandscape accent="#ef4444" />
+
+      <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-2xl mx-auto px-4"}>
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
+          <span className="text-white text-2xl font-bold">汉</span>
+        </div>
+        <h2 className="text-4xl sm:text-5xl font-black text-white">Ready to start?</h2>
+        <p className="mt-4 text-gray-400">Pick a mode and begin your first session. Progress is saved locally.</p>
+
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
+            { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
+            { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
+            { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => onSelectMode(m.id)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-neutral-900 border transition-all ${m.cls}`}
+            >
+              <span className="text-2xl">{m.icon}</span>
+              <span className="text-sm font-semibold text-gray-200">{m.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {!isMobile && (
+          <button
+            onClick={() => scrollToIndex(0)}
+            className="mt-10 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 mx-auto"
+          >
+            <svg className="w-3 h-3 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            Back to top
+          </button>
+        )}
+      </div>
+    </section>
+  );
 
   return (
     <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden">
-      {/* Dot nav (hidden on small screens so it doesn't overlap content) */}
-      <div className="hidden sm:flex fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-2.5">
-        {SECTIONS.map((s, i) => (
-          <button
-            key={s.id}
-            onClick={() => scrollTo(i)}
-            title={s.label}
-            className={`rounded-full transition-all duration-300 ${
-              active === i
-                ? `w-3 h-3 ${s.color} shadow-lg`
-                : "w-2 h-2 bg-neutral-600 hover:bg-neutral-400"
-            }`}
-          />
-        ))}
-      </div>
-
-      <div
-        ref={containerRef}
-        className="h-[calc(100svh-4rem)] sm:h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-y-contain"
-        style={{ scrollSnapType: "y mandatory" }}
-      >
-        {/* HERO */}
-        <section className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <div className="absolute inset-0 bg-gradient-to-br from-neutral-950 via-black to-neutral-950" />
-          <InkLandscape accent="#ef4444" />
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
-
-          <div className="relative z-10 text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
-              <span className="text-white text-4xl font-bold">汉</span>
-            </div>
-
-            <h1 className="text-5xl sm:text-7xl font-black tracking-tight text-white leading-none">
-              Learn Mandarin
-            </h1>
-            <p className="mt-3 text-xl sm:text-2xl font-light text-red-400">
-              One focused session at a time.
-            </p>
-            <p className="mt-5 text-gray-400 max-w-lg mx-auto leading-relaxed">
-              HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
-            </p>
-
-            <div className="mt-8 inline-flex items-end gap-2 px-6 py-4 rounded-2xl bg-neutral-900/80 border border-neutral-700 shadow-xl">
-              {[{ c: "你", p: "nǐ" }, { c: "好", p: "hǎo" }, { c: "！", p: "" }].map((x, i) => (
-                <HoverCharacter key={`hero-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`hero-${i}`} />
-              ))}
-              <span className="ml-3 text-xs text-gray-500 self-center">← hover / tap</span>
-            </div>
-
-            <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-500">
-              {["450+ Words", "1000+ Examples", "4 Study Modes", "HSK 1 & 2"].map((s) => (
-                <span key={s} className="px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800">{s}</span>
-              ))}
-            </div>
-
-            <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <button
-                onClick={() => onSelectMode("practice")}
-                className="px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors shadow-lg shadow-red-900/30"
-              >
-                Start Practicing
-              </button>
-              <button
-                onClick={() => scrollTo(1)}
-                className="px-6 py-3 rounded-xl bg-neutral-900 border border-neutral-700 text-gray-200 hover:bg-neutral-800 transition-colors"
-              >
-                Explore Modes ↓
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={scrollNext}
-            className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors"
-          >
-            <span className="text-xs tracking-widest uppercase">Next</span>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </section>
-
-        {/* MODE SECTIONS */}
-        {(
-          [
-            {
-              id: "browse" as ModeId,
-              icon: "📚",
-              title: "Browse",
-              subtitle: "Search. Filter. Learn.",
-              description:
-                "Explore the full HSK vocabulary with fast filtering by level, category, and learning status. Flip cards for meanings, expand example sentences, and hover or tap any character for its pinyin reading.",
-              bullets: [
-                "Filter by HSK level, category, learned/still-learning",
-                "Click cards to reveal pinyin + English",
-                "Expand 1–3 real example sentences per word",
-                "Hover (desktop) or tap (mobile) for per-character pinyin",
-              ],
-              accent: "#ef4444",
-              Preview: BrowsePreview,
-            },
-            {
-              id: "practice" as ModeId,
-              icon: "🔥",
-              title: "Practice",
-              subtitle: "Short sessions. Real progress.",
-              description:
-                "A focused 10-card session mixing new words with review. A 5-level mastery bar tracks confidence per word. Mark words Learned when you're ready to clear them from the session.",
-              bullets: [
-                "10 cards per session: 8 new + 2 review",
-                "0–5 progress bar per word with feedback",
-                "Got it / Forgot it adjusts difficulty",
-                "Learned it removes the word from the session",
-              ],
-              accent: "#f97316",
-              Preview: PracticePreview,
-            },
-            {
-              id: "flashcards" as ModeId,
-              icon: "🃏",
-              title: "Flashcards",
-              subtitle: "Fast repetition. Instant recall.",
-              description:
-                "Drill through shuffled cards at your own pace. Mark each word as Learned or Still Learning. Filter by HSK level or learning status to focus your session.",
-              bullets: [
-                "Tap card to reveal meaning + examples",
-                "I Know This / Still Learning tracking",
-                "Filter by learned / still-learning status",
-                "Audio pronunciation with one tap",
-              ],
-              accent: "#3b82f6",
-              Preview: FlashcardPreview,
-            },
-            {
-              id: "quiz" as ModeId,
-              icon: "✏️",
-              title: "Quiz",
-              subtitle: "Test your recall.",
-              description:
-                "10-question multiple choice quizzes to keep your knowledge honest. Hover or tap the hanzi to check pinyin before answering.",
-              bullets: [
-                "10 questions per round",
-                "4 answer options per question",
-                "Instant feedback: green correct / red wrong",
-                "Hover/tap hanzi to reveal pinyin",
-              ],
-              accent: "#eab308",
-              Preview: QuizPreview,
-            },
-          ] as const
-        ).map((mode, idx) => {
-          const isEven = idx % 2 === 0;
-          const accentText = idx === 0 ? "text-red-400" : idx === 1 ? "text-orange-400" : idx === 2 ? "text-blue-400" : "text-yellow-400";
-          const bulletDot = idx === 0 ? "bg-red-500/60" : idx === 1 ? "bg-orange-500/60" : idx === 2 ? "bg-blue-500/60" : "bg-yellow-500/60";
-          const btn = idx === 0
-            ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
-            : idx === 1
-            ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
-            : idx === 2
-            ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
-            : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
-
-          return (
-            <section
-              key={mode.id}
-              className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
-              <InkLandscape accent={mode.accent} />
-
-              <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div
-                  className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${
-                    isEven ? "" : "lg:[&>*:first-child]:order-2 lg:[&>*:last-child]:order-1"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-3 mb-5">
-                      <span className="text-4xl">{mode.icon}</span>
-                      <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
-                    </div>
-                    <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">
-                      {mode.title}
-                    </h2>
-                    <p className={`mt-2 text-lg font-semibold ${accentText}`}>{mode.subtitle}</p>
-                    <p className="mt-4 text-gray-400 leading-relaxed max-w-lg">{mode.description}</p>
-
-                    <ul className="mt-6 space-y-2.5">
-                      {mode.bullets.map((b) => (
-                        <li key={b} className="flex items-start gap-3 text-sm text-gray-300">
-                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${bulletDot}`} />
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-
-                    <div className="mt-8 flex flex-wrap gap-3">
-                      <button
-                        onClick={() => onSelectMode(mode.id)}
-                        className={`px-6 py-3 rounded-xl text-white font-semibold transition-colors shadow-lg ${btn}`}
-                      >
-                        Open {mode.title} →
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => onSelectMode(mode.id)}
-                    className="group block text-left w-full"
-                    aria-label={`Open ${mode.title}`}
-                  >
-                    <div className="relative">
-                      <div className="absolute -inset-2 rounded-[2rem] bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <mode.Preview />
-                      <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-semibold bg-black/60 border border-white/15 text-gray-200 backdrop-blur group-hover:border-white/25">
-                        Tap preview →
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Scroll buttons */}
-              <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-3 px-4">
-                <button
-                  onClick={scrollPrev}
-                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
-                >
-                  <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                  Prev
-                </button>
-                <button
-                  onClick={scrollNext}
-                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
-                >
-                  Next
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-            </section>
-          );
-        })}
-
-        {/* FOOTER */}
-        <section className="snap-center min-h-[calc(100svh-4rem)] sm:min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <div className="absolute inset-0 bg-gradient-to-br from-red-950/10 via-black to-black" />
-          <InkLandscape accent="#ef4444" />
-
-          <div className="relative z-10 text-center max-w-2xl mx-auto px-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
-              <span className="text-white text-2xl font-bold">汉</span>
-            </div>
-            <h2 className="text-4xl sm:text-5xl font-black text-white">Ready to start?</h2>
-            <p className="mt-4 text-gray-400">Pick a mode and begin your first session. Progress is saved locally.</p>
-
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
-                { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
-                { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
-                { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => onSelectMode(m.id)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-neutral-900 border transition-all ${m.cls}`}
-                >
-                  <span className="text-2xl">{m.icon}</span>
-                  <span className="text-sm font-semibold text-gray-200">{m.label}</span>
-                </button>
-              ))}
-            </div>
-
+      {/* Desktop-only dot nav */}
+      {!isMobile && (
+        <div className="fixed right-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-2.5 hidden sm:flex">
+          {SECTIONS.slice(0, SECTIONS.length - 0).map((s, i) => (
             <button
-              onClick={() => scrollTo(0)}
-              className="mt-10 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 mx-auto"
-            >
-              <svg className="w-3 h-3 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              Back to top
-            </button>
-          </div>
-        </section>
-      </div>
+              key={s.id}
+              onClick={() => scrollToIndex(i)}
+              title={s.label}
+              className={`rounded-full transition-all duration-300 ${
+                active === i
+                  ? `w-3 h-3 ${s.color} shadow-lg`
+                  : "w-2 h-2 bg-neutral-600 hover:bg-neutral-400"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {isMobile ? (
+        <div>
+          {hero}
+          {modes.map((m) => (
+            <ModeSectionMobile
+              key={m.id}
+              id={m.id}
+              icon={m.icon}
+              title={m.title}
+              subtitle={m.subtitle}
+              description={m.description}
+              bullets={m.bullets}
+              accent={m.accent}
+              Preview={m.Preview}
+              onSelectMode={onSelectMode}
+            />
+          ))}
+          {footer}
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
+          className="h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-y-contain"
+          style={{ scrollSnapType: "y mandatory" }}
+        >
+          {hero}
+          {modes.map((m, idx) => (
+            <ModeSectionDesktop
+              key={m.id}
+              id={m.id}
+              icon={m.icon}
+              title={m.title}
+              subtitle={m.subtitle}
+              description={m.description}
+              bullets={m.bullets}
+              accent={m.accent}
+              Preview={m.Preview}
+              onSelectMode={onSelectMode}
+              onPrev={scrollPrev}
+              onNext={scrollNext}
+              swap={idx % 2 === 1}
+            />
+          ))}
+          {footer}
+        </div>
+      )}
     </div>
   );
 }
