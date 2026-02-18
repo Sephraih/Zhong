@@ -7,240 +7,410 @@ interface LandingPageProps {
 
 type ModeId = "browse" | "practice" | "flashcards" | "quiz";
 
-// ─── Fancy Mode Previews ──────────────────────────────────────────────────────
+function svgDataUri(svg: string) {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function InkLandscape({ accent = "#ef4444" }: { accent?: string }) {
+  // Simple ink-style layered mountains.
+  const svg = `
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>
+  <defs>
+    <linearGradient id='mist' x1='0' y1='0' x2='0' y2='1'>
+      <stop offset='0' stop-color='${accent}' stop-opacity='0.00'/>
+      <stop offset='1' stop-color='${accent}' stop-opacity='0.25'/>
+    </linearGradient>
+    <filter id='blur' x='-20%' y='-20%' width='140%' height='140%'>
+      <feGaussianBlur stdDeviation='8'/>
+    </filter>
+  </defs>
+  <rect width='1200' height='800' fill='transparent'/>
+  <g filter='url(#blur)'>
+    <path d='M0 560 C120 520 180 500 260 520 C330 540 380 520 470 480 C560 440 650 430 760 470 C860 505 920 470 1020 430 C1100 400 1160 410 1200 430 L1200 800 L0 800 Z' fill='url(#mist)' opacity='0.55'/>
+    <path d='M0 610 C130 600 220 560 310 560 C410 560 480 600 580 585 C680 570 740 540 860 560 C980 580 1040 630 1200 610 L1200 800 L0 800 Z' fill='${accent}' opacity='0.10'/>
+    <path d='M0 660 C150 690 240 640 330 640 C460 640 520 705 650 680 C770 655 850 610 970 630 C1080 650 1130 700 1200 690 L1200 800 L0 800 Z' fill='${accent}' opacity='0.08'/>
+  </g>
+  <g opacity='0.12'>
+    <circle cx='950' cy='160' r='60' fill='${accent}'/>
+    <circle cx='1020' cy='190' r='22' fill='${accent}' opacity='0.6'/>
+  </g>
+</svg>`;
+
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 opacity-25 pointer-events-none"
+      style={{
+        backgroundImage: svgDataUri(svg),
+        backgroundSize: "cover",
+        backgroundPosition: "center bottom",
+      }}
+    />
+  );
+}
+
+function PreviewFrame({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="relative w-full max-w-md mx-auto">
+      {/* Outer glow */}
+      <div className="absolute -inset-6 bg-white/5 rounded-[2rem] blur-2xl" />
+
+      <div className="relative rounded-[1.35rem] border-2 border-white/20 shadow-[0_0_70px_rgba(255,255,255,0.08)] ring-1 ring-white/10 overflow-hidden bg-neutral-950">
+        {/* Chrome */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/80 backdrop-blur">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500/60" />
+            <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
+            <span className="w-3 h-3 rounded-full bg-green-500/60" />
+          </div>
+          <div className="ml-3 text-xs text-gray-400 truncate">{title}</div>
+          <div className="ml-auto w-20 h-6 rounded-md bg-white/5" />
+        </div>
+
+        <div className="bg-neutral-900/40">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Previews (stylized to match the real UI)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function BrowsePreview() {
   const [flipped, setFlipped] = useState(false);
-  const [learned, setLearned] = useState(false);
+  const [examplesOpen, setExamplesOpen] = useState(false);
+
   useEffect(() => {
-    const t1 = setTimeout(() => setFlipped(true), 1200);
-    const t2 = setTimeout(() => setLearned(true), 2200);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t1 = setTimeout(() => setFlipped(true), 1100);
+    const t2 = setTimeout(() => setExamplesOpen(true), 2100);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   return (
-    <div className="relative w-full max-w-sm mx-auto">
-      {/* Glow */}
-      <div className="absolute -inset-4 bg-red-600/10 rounded-3xl blur-2xl" />
-      <div className="relative bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Toolbar mock */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
-          <div className="w-3 h-3 rounded-full bg-red-500/60" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-          <div className="w-3 h-3 rounded-full bg-green-500/60" />
-          <div className="ml-3 flex-1 h-6 bg-neutral-800 rounded-md" />
+    <PreviewFrame title="Browse · Vocabulary">
+      <div className="p-4">
+        <div className="flex gap-2 mb-4">
+          <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-600 text-white">All</span>
+          <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-800 text-gray-400">HSK 1</span>
+          <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-800 text-gray-400">HSK 2</span>
+          <span className="ml-auto px-3 py-1 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-800 text-gray-400">Search</span>
         </div>
-        {/* Filter chips */}
-        <div className="flex gap-2 px-4 py-3 border-b border-neutral-800/60">
-          <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-red-600 text-white">All</span>
-          <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-neutral-800 text-gray-400">HSK 1</span>
-          <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-neutral-800 text-gray-400">HSK 2</span>
-          <span className="ml-auto px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-900/40">✓ Learned</span>
-        </div>
-        {/* Cards grid */}
-        <div className="p-4 grid grid-cols-2 gap-3">
-          {/* Main featured card */}
-          <div className={`col-span-2 rounded-xl border p-4 transition-all duration-700 ${learned ? "border-emerald-800/50 bg-emerald-950/10" : "border-neutral-800 bg-black/30"}`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">HSK 1</span>
-              <span className="text-xs text-gray-600">Food</span>
+
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 overflow-hidden shadow-xl">
+          <div className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">
+                  HSK 1
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+                  ✓ Learned
+                </span>
+              </div>
+              <span className="text-xs text-gray-600 font-medium">Greetings</span>
             </div>
-            <div className="text-center py-2">
-              <div className="flex items-end justify-center gap-1">
-                {[{ c: "茶", p: "chá" }, { c: "。", p: "" }].map((x, i) => (
-                  <HoverCharacter key={i} char={x.c} pinyin={x.p} size="xl" wordId={`lp-b-${i}`} />
+
+            <div className="text-center py-3">
+              <div className="inline-flex items-end gap-1">
+                {[
+                  { c: "你", p: "nǐ" },
+                  { c: "好", p: "hǎo" },
+                ].map((x, i) => (
+                  <HoverCharacter key={`bp-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`bp-${i}`} />
                 ))}
               </div>
-              <div className={`transition-all duration-500 mt-2 ${flipped ? "opacity-100 max-h-10" : "opacity-0 max-h-0"} overflow-hidden`}>
-                <p className="text-red-400 text-sm font-medium">chá</p>
-                <p className="text-white text-base font-semibold">tea</p>
+
+              <div className={`transition-all duration-500 overflow-hidden ${flipped ? "max-h-28 opacity-100" : "max-h-0 opacity-0"}`}>
+                <div className="mt-2 flex items-center justify-center gap-2">
+                  <p className="text-red-400 text-sm font-medium">nǐ hǎo</p>
+                  <span className="w-7 h-7 rounded-full border border-neutral-700 bg-neutral-800/70" />
+                </div>
+                <p className="text-white text-lg font-semibold mt-1">hello, hi</p>
               </div>
-              {!flipped && <p className="text-gray-600 text-xs mt-1">Click to reveal</p>}
-            </div>
-            <div className={`mt-3 pt-3 border-t border-neutral-800 flex items-center justify-center gap-2 text-xs font-semibold transition-colors duration-500 ${learned ? "text-emerald-400" : "text-gray-600"}`}>
-              {learned ? "✓ Learned — Click to reset" : "+ Mark as Learned"}
+              {!flipped && <p className="text-gray-600 text-xs mt-2">Click to reveal meaning</p>}
             </div>
           </div>
-          {/* Mini cards */}
-          {[{ h: "水", p: "shuǐ", e: "water" }, { h: "书", p: "shū", e: "book" }].map((w) => (
-            <div key={w.h} className="rounded-xl border border-neutral-800 bg-black/30 p-3 text-center">
-              <div className="flex items-end justify-center">
-                <HoverCharacter char={w.h} pinyin={w.p} size="lg" wordId={`lp-b-mini-${w.h}`} />
-              </div>
-              <p className="text-gray-500 text-xs mt-1">{w.e}</p>
+
+          <div className="border-t border-neutral-800">
+            <div className="px-5 py-3 text-sm font-medium text-gray-400 flex items-center justify-between">
+              <span>Examples (3)</span>
+              <span className={`transition-transform ${examplesOpen ? "rotate-180" : ""}`}>⌄</span>
             </div>
-          ))}
+            <div className={`transition-all duration-500 overflow-hidden ${examplesOpen ? "max-h-48" : "max-h-0"}`}>
+              <div className="px-5 pb-4">
+                <div className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-end gap-0.5 mb-1">
+                      {[
+                        { c: "你", p: "nǐ" },
+                        { c: "好", p: "hǎo" },
+                        { c: "，", p: "" },
+                        { c: "我", p: "wǒ" },
+                        { c: "是", p: "shì" },
+                        { c: "小", p: "xiǎo" },
+                        { c: "明", p: "míng" },
+                        { c: "。", p: "" },
+                      ].map((x, i) => (
+                        <HoverCharacter key={`bp-ex-${i}`} char={x.c} pinyin={x.p} size="sm" wordId={`bp-ex-${i}`} />
+                      ))}
+                    </div>
+                    <p className="text-gray-400 text-xs">Hello, I'm Xiaoming.</p>
+                  </div>
+                  <span className="w-7 h-7 rounded-full border border-neutral-700 bg-neutral-800/70" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-neutral-800 grid grid-cols-2">
+            <div className="py-3 text-xs font-semibold text-gray-500 text-center hover:bg-neutral-800/60">Learned — Click to reset</div>
+            <div className="py-3 text-xs font-semibold text-gray-500 text-center hover:bg-neutral-800/60">Show Examples</div>
+          </div>
         </div>
       </div>
-    </div>
+    </PreviewFrame>
   );
 }
 
 function PracticePreview() {
   const [progress, setProgress] = useState(2);
   const [flipped, setFlipped] = useState(false);
-  const [glowColor, setGlowColor] = useState<"green" | "red" | null>(null);
+  const [pulse, setPulse] = useState<"got" | null>(null);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFlipped(true), 1000);
-    const t2 = setTimeout(() => { setGlowColor("green"); setProgress(3); }, 2200);
-    const t3 = setTimeout(() => setGlowColor(null), 2700);
-    const t4 = setTimeout(() => setFlipped(false), 3000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    const t1 = setTimeout(() => setFlipped(true), 900);
+    const t2 = setTimeout(() => {
+      setPulse("got");
+      setProgress(3);
+    }, 2100);
+    const t3 = setTimeout(() => setPulse(null), 2550);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, []);
 
-  const glowClass = glowColor === "green"
-    ? "border-emerald-500/60 shadow-[0_0_20px_4px_rgba(34,197,94,0.25)]"
-    : glowColor === "red"
-    ? "border-red-500/60 shadow-[0_0_20px_4px_rgba(239,68,68,0.25)]"
-    : "border-neutral-700";
+  const ring = pulse === "got" ? "ring-2 ring-emerald-500/40" : "";
+  const border = pulse === "got" ? "border-emerald-500/60" : "border-neutral-800";
 
   return (
-    <div className="relative w-full max-w-sm mx-auto">
-      <div className="absolute -inset-4 bg-orange-600/10 rounded-3xl blur-2xl" />
-      <div className="relative space-y-3">
-        {/* Progress bar */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-          <div className="flex justify-between text-xs text-gray-500 mb-2">
-            <span>Card 3 / 10</span>
+    <PreviewFrame title="Practice · Session">
+      <div className="p-4">
+        <div className="mb-3 bg-neutral-950 border border-neutral-800 rounded-xl p-3">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
+            <span>Card 3 of 10</span>
             <span className="bg-neutral-800 px-2 py-0.5 rounded">Practice</span>
           </div>
-          <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex gap-px">
+          <div className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex ${ring}`}>
             {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className={`h-full flex-1 transition-all duration-500 rounded-sm ${i < 3 ? "bg-emerald-500" : i === 3 ? "bg-gray-600" : "bg-neutral-700"}`} />
+              <div
+                key={i}
+                className={`h-full flex-1 ${i === 2 ? "bg-green-500" : i < 2 ? "bg-green-700" : "bg-neutral-700"} ${i > 0 ? "border-l border-black/20" : ""}`}
+              />
             ))}
           </div>
         </div>
-        {/* Flashcard */}
-        <div className={`bg-neutral-900 border rounded-2xl shadow-2xl p-6 text-center transition-all duration-300 ${glowClass}`}>
-          <div className="absolute top-4 left-4">
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-950/80 text-blue-400 border border-blue-800/50">HSK 2</span>
+
+        <div
+          className={`relative rounded-3xl border ${border} bg-neutral-900 shadow-2xl overflow-hidden transition-all duration-300 ${
+            pulse === "got" ? "shadow-[0_0_26px_6px_rgba(34,197,94,0.25)]" : ""
+          }`}
+          style={{ height: 520 }}
+        >
+          <div className="absolute top-5 left-6 flex items-center gap-2">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-950/80 text-blue-400 border border-blue-800/50">HSK 2</span>
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/60 border border-emerald-800/40">
+              <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
           </div>
+          <div className="absolute top-5 right-6 text-xs text-gray-600 font-medium">Education</div>
+
           {/* Front */}
-          <div className={`transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-6" : "opacity-100 scale-100"}`}>
-            <div className="flex items-end justify-center gap-1 pt-4">
-              {[{ c: "学", p: "xué" }, { c: "习", p: "xí" }].map((x, i) => (
-                <HoverCharacter key={i} char={x.c} pinyin={x.p} size="xl" wordId={`lp-p-${i}`} />
+          <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-10" : "opacity-100"}`}>
+            <div className="flex items-end gap-2 justify-center">
+              {[
+                { c: "学", p: "xué" },
+                { c: "习", p: "xí" },
+              ].map((x, i) => (
+                <HoverCharacter key={`pp-${i}`} char={x.c} pinyin={x.p} size="2xl" wordId={`pp-${i}`} />
               ))}
             </div>
-            <div className="mt-4 flex items-center justify-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((step) => (
-                <div key={step} className={`h-2.5 rounded-sm transition-all duration-500 ${step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800"}`} />
-              ))}
-              <span className="text-xs text-gray-400 ml-1">{progress}/5 ⭐</span>
+            <div className="mt-5 w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700" />
+
+            <div className="mt-7 flex items-center gap-3">
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-3 rounded-sm transition-all duration-500 ${
+                      step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800 border border-neutral-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className={`text-xs font-semibold ${progress === 5 ? "text-yellow-400" : "text-gray-500"}`}>
+                {progress}/5 <span className={progress === 5 ? "text-yellow-300" : "text-gray-600"}>⭐</span>
+              </span>
             </div>
+            <p className="text-gray-600 text-sm mt-5">Tap to reveal · Hover for pinyin</p>
           </div>
-          {/* Back overlay */}
-          <div className={`absolute inset-0 rounded-2xl flex flex-col items-center justify-center transition-all duration-300 ${flipped ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-            <p className="text-red-400 font-medium">xué xí</p>
-            <p className="text-white text-2xl font-bold mt-1">to study / learn</p>
-            <div className="mt-3 flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((step) => (
-                <div key={step} className={`h-2.5 rounded-sm transition-all duration-500 ${step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800"}`} />
-              ))}
-              <span className="text-xs text-gray-400 ml-1">{progress}/5 ⭐</span>
+
+          {/* Back */}
+          <div className={`absolute inset-0 pt-36 px-8 transition-all duration-300 ${flipped ? "opacity-100" : "opacity-0 pointer-events-none translate-y-6"}`}>
+            <p className="text-red-400 text-xl font-medium text-center">xué xí</p>
+            <p className="text-white text-3xl font-bold text-center mt-1">to study / learn</p>
+
+            <div className="mt-6 flex justify-center">
+              <div className="p-3 bg-black/40 rounded-xl border border-neutral-800 w-full">
+                <div className="flex flex-wrap items-end gap-0.5 mb-2 justify-center">
+                  {[
+                    { c: "我", p: "wǒ" },
+                    { c: "在", p: "zài" },
+                    { c: "学", p: "xué" },
+                    { c: "习", p: "xí" },
+                    { c: "汉", p: "hàn" },
+                    { c: "语", p: "yǔ" },
+                    { c: "。", p: "" },
+                  ].map((x, i) => (
+                    <HoverCharacter key={`pp-ex-${i}`} char={x.c} pinyin={x.p} size="sm" wordId={`pp-ex-${i}`} />
+                  ))}
+                </div>
+                <p className="text-gray-400 text-xs text-center">I am studying Chinese.</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-3 rounded-sm transition-all duration-500 ${
+                      step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800 border border-neutral-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className={`text-xs font-semibold ${progress === 5 ? "text-yellow-400" : "text-gray-500"}`}>
+                {progress}/5 <span className={progress === 5 ? "text-yellow-300" : "text-gray-600"}>⭐</span>
+              </span>
             </div>
           </div>
         </div>
+
         {/* Buttons */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="h-12 rounded-xl border border-red-900/40 bg-neutral-950 flex items-center justify-center gap-2 text-red-400 text-sm font-bold">
-            ✗ Forgot it
-          </div>
-          <div className="h-12 rounded-xl border border-emerald-900/40 bg-neutral-950 flex items-center justify-center gap-2 text-emerald-400 text-sm font-bold">
-            ✓ Got it
-          </div>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="h-12 rounded-xl bg-neutral-900 border border-red-900/40 flex items-center justify-center gap-2 text-red-400 font-bold">✗ Forgot it</div>
+          <div className="h-12 rounded-xl bg-neutral-900 border border-emerald-900/40 flex items-center justify-center gap-2 text-emerald-400 font-bold">✓ Got it</div>
         </div>
-        <div className="h-11 rounded-xl border border-yellow-900/30 bg-neutral-950 flex items-center justify-center gap-2 text-yellow-400 text-sm font-semibold">
+        <div className="mt-3 h-11 rounded-xl bg-neutral-950 border border-yellow-900/30 flex items-center justify-center gap-2 text-yellow-400 font-semibold">
           ⭐ Learned it
         </div>
       </div>
-    </div>
+    </PreviewFrame>
   );
 }
 
 function FlashcardPreview() {
   const [flipped, setFlipped] = useState(false);
   const [known, setKnown] = useState(0);
-  const [unknown] = useState(0);
   const [card, setCard] = useState(0);
   const cards = [
-    { h: "明天", p: "míng tiān", e: "tomorrow", parts: [{ c: "明", p: "míng" }, { c: "天", p: "tiān" }] },
-    { h: "朋友", p: "péng yǒu", e: "friend", parts: [{ c: "朋", p: "péng" }, { c: "友", p: "yǒu" }] },
+    { parts: [{ c: "谢", p: "xiè" }, { c: "谢", p: "xiè" }], p: "xiè xiè", e: "thank you" },
+    { parts: [{ c: "明", p: "míng" }, { c: "天", p: "tiān" }], p: "míng tiān", e: "tomorrow" },
   ];
   const current = cards[card % cards.length];
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFlipped(true), 1000);
-    const t2 = setTimeout(() => { setKnown(k => k + 1); setFlipped(false); setCard(c => c + 1); }, 2200);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t1 = setTimeout(() => setFlipped(true), 900);
+    const t2 = setTimeout(() => {
+      setKnown((k) => k + 1);
+      setFlipped(false);
+      setCard((c) => c + 1);
+    }, 2100);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
-  const progress = ((card) / 8) * 100;
-
   return (
-    <div className="relative w-full max-w-sm mx-auto">
-      <div className="absolute -inset-4 bg-blue-600/10 rounded-3xl blur-2xl" />
-      <div className="relative space-y-3">
-        {/* Progress */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-          <div className="flex justify-between text-xs text-gray-500 mb-2">
+    <PreviewFrame title="Flashcards · Drill">
+      <div className="p-4 space-y-3">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
             <span>Card {card + 1} of 8</span>
-            <span>✅ {known} · ❌ {unknown}</span>
+            <span>✅ {known} · ❌ 0</span>
           </div>
           <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full transition-all duration-500" style={{ width: `${((card + 1) / 8) * 100}%` }} />
           </div>
         </div>
-        {/* Card */}
-        <div className="relative bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl h-48 flex flex-col items-center justify-center overflow-hidden">
-          {/* Glow top-right */}
-          <div className="absolute -top-8 -right-8 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl" />
-          <div className="absolute top-3 left-4">
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">HSK 1</span>
+
+        <div className="relative bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl overflow-hidden" style={{ height: 420 }}>
+          <div className="absolute top-5 left-6 flex items-center gap-2">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">HSK 1</span>
           </div>
-          <div className={`flex flex-col items-center transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-6" : ""}`}>
-            <div className="flex items-end justify-center gap-1">
+          <div className="absolute top-5 right-6 text-xs text-gray-600 font-medium">Basics</div>
+
+          <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-10" : "opacity-100"}`}>
+            <div className="flex items-end gap-2 justify-center">
               {current.parts.map((x, i) => (
-                <HoverCharacter key={`${card}-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`lp-f-${card}-${i}`} />
+                <HoverCharacter key={`fp-${card}-${i}`} char={x.c} pinyin={x.p} size="2xl" wordId={`fp-${card}-${i}`} />
               ))}
             </div>
-            {!flipped && <p className="text-gray-600 text-xs mt-3">Tap to reveal</p>}
+            <div className="mt-4 w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700" />
+            {!flipped && <p className="text-gray-600 text-sm mt-8">Tap to reveal · Hover for pinyin</p>}
           </div>
-          {flipped && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-900/95">
-              <p className="text-red-400 font-medium">{current.p}</p>
-              <p className="text-white text-xl font-bold mt-1">{current.e}</p>
+
+          <div className={`absolute inset-0 pt-36 px-8 bg-neutral-900/95 transition-all duration-300 ${flipped ? "opacity-100" : "opacity-0 pointer-events-none translate-y-6"}`}>
+            <p className="text-red-400 text-xl font-medium text-center">{current.p}</p>
+            <p className="text-white text-3xl font-bold text-center mt-1">{current.e}</p>
+            <div className="mt-6 p-3 bg-black/40 rounded-xl border border-neutral-800">
+              <div className="flex flex-wrap items-end gap-0.5 mb-2 justify-center">
+                {[
+                  { c: "谢", p: "xiè" },
+                  { c: "谢", p: "xiè" },
+                  { c: "！", p: "" },
+                ].map((x, i) => (
+                  <HoverCharacter key={`fp-ex-${i}`} char={x.c} pinyin={x.p} size="sm" wordId={`fp-ex-${i}`} />
+                ))}
+              </div>
+              <p className="text-gray-400 text-xs text-center">Thanks!</p>
             </div>
-          )}
+          </div>
         </div>
-        {/* Buttons */}
+
         <div className="grid grid-cols-2 gap-3">
-          <div className="h-12 rounded-xl border border-red-900/40 bg-neutral-950 flex items-center justify-center text-red-400 text-sm font-semibold">❌ Still Learning</div>
-          <div className="h-12 rounded-xl border border-emerald-900/40 bg-neutral-950 flex items-center justify-center text-emerald-400 text-sm font-semibold">✅ I Know This</div>
+          <div className="h-12 rounded-xl bg-neutral-900 border border-red-900/40 flex items-center justify-center text-red-400 font-semibold">❌ Still Learning</div>
+          <div className="h-12 rounded-xl bg-neutral-900 border border-emerald-900/40 flex items-center justify-center text-emerald-400 font-semibold">✅ I Know This</div>
         </div>
       </div>
-    </div>
+    </PreviewFrame>
   );
 }
 
 function QuizPreview() {
   const [selected, setSelected] = useState<number | null>(null);
-  const correct = 0;
-  const options = ["Tomorrow", "Yesterday", "Morning", "Night"];
+  const correct = 1;
+  const options = ["yesterday", "tomorrow", "morning", "night"];
 
   useEffect(() => {
-    const t1 = setTimeout(() => setSelected(0), 1200);
+    const t1 = setTimeout(() => setSelected(1), 1100);
     return () => clearTimeout(t1);
   }, []);
 
   return (
-    <div className="relative w-full max-w-sm mx-auto">
-      <div className="absolute -inset-4 bg-yellow-600/10 rounded-3xl blur-2xl" />
-      <div className="relative space-y-3">
-        {/* Progress */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3">
-          <div className="flex justify-between text-xs text-gray-500 mb-2">
+    <PreviewFrame title="Quiz · Multiple Choice">
+      <div className="p-4 space-y-3">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
             <span>Question 4 of 10</span>
             <span>Score: 3/3</span>
           </div>
@@ -248,29 +418,32 @@ function QuizPreview() {
             <div className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full" style={{ width: "40%" }} />
           </div>
         </div>
-        {/* Question card */}
-        <div className="bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl p-6 text-center relative overflow-hidden">
-          <div className="absolute -top-6 -left-6 w-24 h-24 bg-yellow-500/10 rounded-full blur-2xl" />
-          <p className="text-xs text-gray-500 mb-3">What does this mean?</p>
-          <div className="flex items-end justify-center gap-1">
-            {[{ c: "明", p: "míng" }, { c: "天", p: "tiān" }].map((x, i) => (
-              <HoverCharacter key={i} char={x.c} pinyin={x.p} size="xl" wordId={`lp-q-${i}`} />
+
+        <div className="bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl p-7 text-center">
+          <p className="text-xs text-gray-500 mb-4">What does this mean?</p>
+          <div className="flex items-end justify-center gap-2">
+            {[
+              { c: "明", p: "míng" },
+              { c: "天", p: "tiān" },
+            ].map((x, i) => (
+              <HoverCharacter key={`qp-${i}`} char={x.c} pinyin={x.p} size="2xl" wordId={`qp-${i}`} />
             ))}
           </div>
-          <p className="text-xs text-gray-600 mt-3">Hover / tap characters for pinyin</p>
+          <p className="text-gray-600 text-xs mt-3">Hover / tap characters for pinyin</p>
         </div>
-        {/* Options */}
+
         <div className="space-y-2">
           {options.map((opt, idx) => {
-            let cls = "h-11 rounded-xl border flex items-center px-4 text-sm transition-all duration-300 ";
+            let cls =
+              "w-full h-12 rounded-xl border px-4 text-sm flex items-center transition-all duration-200 ";
             if (selected === null) {
-              cls += "border-neutral-800 bg-neutral-950/50 text-gray-300";
+              cls += "bg-neutral-950 border-neutral-800 text-gray-200 hover:bg-neutral-900";
             } else if (idx === correct) {
-              cls += "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 font-semibold";
-            } else if (idx === selected && idx !== correct) {
-              cls += "border-red-600/60 bg-red-950/40 text-red-300";
+              cls += "bg-emerald-950/40 border-emerald-600/60 text-emerald-300 font-semibold";
+            } else if (idx === selected) {
+              cls += "bg-red-950/40 border-red-600/60 text-red-300";
             } else {
-              cls += "border-neutral-800/40 bg-neutral-950/30 text-gray-600";
+              cls += "bg-neutral-950/30 border-neutral-800/40 text-gray-600";
             }
             return (
               <div key={opt} className={cls}>
@@ -282,11 +455,11 @@ function QuizPreview() {
           })}
         </div>
       </div>
-    </div>
+    </PreviewFrame>
   );
 }
 
-// ─── Section data ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface SectionConfig {
   id: ModeId | "hero";
@@ -302,43 +475,47 @@ const SECTIONS: SectionConfig[] = [
   { id: "quiz", label: "Quiz", color: "bg-yellow-500" },
 ];
 
-// ─── Scroll helpers ───────────────────────────────────────────────────────────
-
-function useActiveSection(containerRef: React.RefObject<HTMLDivElement>) {
+function useActiveSection(containerRef: React.RefObject<HTMLDivElement | null>) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
     const onScroll = () => {
       const children = Array.from(container.children) as HTMLElement[];
       const mid = container.scrollTop + container.clientHeight / 2;
       let found = 0;
       children.forEach((el, i) => {
-        if (el.offsetTop <= mid) found = i;
+        const top = el.offsetTop;
+        const bottom = top + el.offsetHeight;
+        if (mid >= top && mid <= bottom) found = i;
       });
       setActive(found);
     };
+
     container.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
     return () => container.removeEventListener("scroll", onScroll);
   }, [containerRef]);
 
   return active;
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
 export function LandingPage({ onSelectMode }: LandingPageProps) {
-  const containerRef = useRef<HTMLDivElement>(null!);
+  const containerRef = useRef<HTMLDivElement>(null);
   const active = useActiveSection(containerRef);
 
   const scrollTo = useCallback((index: number) => {
     const container = containerRef.current;
     if (!container) return;
     const children = Array.from(container.children) as HTMLElement[];
-    if (children[index]) {
-      children[index].scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    const el = children[index];
+    if (!el) return;
+
+    // Center the section in the viewport
+    const targetTop = el.offsetTop - (container.clientHeight - el.offsetHeight) / 2;
+    container.scrollTo({ top: targetTop, behavior: "smooth" });
   }, []);
 
   const scrollNext = useCallback(() => scrollTo(Math.min(active + 1, SECTIONS.length - 1)), [active, scrollTo]);
@@ -362,21 +539,17 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         ))}
       </div>
 
-      {/* Scroll container */}
       <div
         ref={containerRef}
         className="h-[calc(100dvh-4rem)] overflow-y-scroll snap-y snap-mandatory scroll-smooth"
         style={{ scrollSnapType: "y mandatory" }}
       >
-        {/* ── HERO ── */}
-        <section
-          className="snap-start h-[calc(100dvh-4rem)] flex flex-col items-center justify-center relative overflow-hidden px-4"
-          style={{ scrollSnapAlign: "start" }}
-        >
-          {/* Animated background */}
+        {/* HERO */}
+        <section className="snap-center h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4">
           <div className="absolute inset-0 bg-gradient-to-br from-neutral-950 via-black to-neutral-950" />
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/8 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/6 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+          <InkLandscape accent="#ef4444" />
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
 
           <div className="relative z-10 text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
@@ -393,15 +566,13 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
             </p>
 
-            {/* Live pinyin demo */}
             <div className="mt-8 inline-flex items-end gap-2 px-6 py-4 rounded-2xl bg-neutral-900/80 border border-neutral-700 shadow-xl">
               {[{ c: "你", p: "nǐ" }, { c: "好", p: "hǎo" }, { c: "！", p: "" }].map((x, i) => (
-                <HoverCharacter key={i} char={x.c} pinyin={x.p} size="xl" wordId={`hero-${i}`} />
+                <HoverCharacter key={`hero-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`hero-${i}`} />
               ))}
               <span className="ml-3 text-xs text-gray-500 self-center">← hover / tap</span>
             </div>
 
-            {/* Stats */}
             <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-500">
               {["450+ Words", "1000+ Examples", "4 Study Modes", "HSK 1 & 2"].map((s) => (
                 <span key={s} className="px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800">{s}</span>
@@ -424,19 +595,18 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
             </div>
           </div>
 
-          {/* Scroll down indicator */}
           <button
             onClick={scrollNext}
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors animate-bounce"
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-gray-600 hover:text-gray-300 transition-colors"
           >
-            <span className="text-xs tracking-widest uppercase">Scroll</span>
+            <span className="text-xs tracking-widest uppercase">Next</span>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
         </section>
 
-        {/* ── MODE SECTIONS ── */}
+        {/* MODE SECTIONS */}
         {(
           [
             {
@@ -444,10 +614,15 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               icon: "📚",
               title: "Browse",
               subtitle: "Search. Filter. Learn.",
-              description: "Explore the full HSK vocabulary with fast filtering by level, category, and learning status. Flip cards for meanings, expand example sentences, and hover or tap any character for its pinyin reading.",
-              bullets: ["Filter by HSK level, category, learned/still-learning", "Click cards to reveal pinyin + English", "Expand 1–3 real Tatoeba example sentences per word", "Hover (desktop) or tap (mobile) for per-character pinyin"],
-              gradient: "from-red-950/20 via-black to-black",
-              accent: "red",
+              description:
+                "Explore the full HSK vocabulary with fast filtering by level, category, and learning status. Flip cards for meanings, expand example sentences, and hover or tap any character for its pinyin reading.",
+              bullets: [
+                "Filter by HSK level, category, learned/still-learning",
+                "Click cards to reveal pinyin + English",
+                "Expand 1–3 real example sentences per word",
+                "Hover (desktop) or tap (mobile) for per-character pinyin",
+              ],
+              accent: "#ef4444",
               Preview: BrowsePreview,
             },
             {
@@ -455,10 +630,15 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               icon: "🔥",
               title: "Practice",
               subtitle: "Short sessions. Real progress.",
-              description: "A focused 10-card session mixing new words with review. A 5-level mastery bar tracks confidence per word. Mark words Learned when you're ready to clear them from the session.",
-              bullets: ["10 cards per session: 8 new + 2 review", "0–5 progress bar per word with visual feedback", "Got it / Forgot it adjusts difficulty", "Swipe gestures on mobile (left / right / up)"],
-              gradient: "from-orange-950/20 via-black to-black",
-              accent: "orange",
+              description:
+                "A focused 10-card session mixing new words with review. A 5-level mastery bar tracks confidence per word. Mark words Learned when you're ready to clear them from the session.",
+              bullets: [
+                "10 cards per session: 8 new + 2 review",
+                "0–5 progress bar per word with feedback",
+                "Got it / Forgot it adjusts difficulty",
+                "Learned it removes the word from the session",
+              ],
+              accent: "#f97316",
               Preview: PracticePreview,
             },
             {
@@ -466,10 +646,15 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               icon: "🃏",
               title: "Flashcards",
               subtitle: "Fast repetition. Instant recall.",
-              description: "Drill through shuffled cards at your own pace. Mark each word as Learned or Still Learning. Filter by HSK level or learning status to focus your session.",
-              bullets: ["Tap card to reveal meaning + examples", "I Know This / Still Learning tracking", "Filter by learned / still-learning status", "Swipe left or right on mobile"],
-              gradient: "from-blue-950/20 via-black to-black",
-              accent: "blue",
+              description:
+                "Drill through shuffled cards at your own pace. Mark each word as Learned or Still Learning. Filter by HSK level or learning status to focus your session.",
+              bullets: [
+                "Tap card to reveal meaning + examples",
+                "I Know This / Still Learning tracking",
+                "Filter by learned / still-learning status",
+                "Audio pronunciation with one tap",
+              ],
+              accent: "#3b82f6",
               Preview: FlashcardPreview,
             },
             {
@@ -477,63 +662,59 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               icon: "✏️",
               title: "Quiz",
               subtitle: "Test your recall.",
-              description: "10-question multiple choice quizzes to keep your knowledge honest. Hover or tap the hanzi to check pinyin before answering.",
-              bullets: ["10 questions per round", "4 answer options per question", "Instant feedback: green correct / red wrong", "Score tracking with emoji rating"],
-              gradient: "from-yellow-950/15 via-black to-black",
-              accent: "yellow",
+              description:
+                "10-question multiple choice quizzes to keep your knowledge honest. Hover or tap the hanzi to check pinyin before answering.",
+              bullets: [
+                "10 questions per round",
+                "4 answer options per question",
+                "Instant feedback: green correct / red wrong",
+                "Hover/tap hanzi to reveal pinyin",
+              ],
+              accent: "#eab308",
               Preview: QuizPreview,
             },
           ] as const
         ).map((mode, idx) => {
           const isEven = idx % 2 === 0;
-          const accentColor: Record<string, string> = {
-            red: "text-red-400",
-            orange: "text-orange-400",
-            blue: "text-blue-400",
-            yellow: "text-yellow-400",
-          };
-          const bulletColor: Record<string, string> = {
-            red: "bg-red-500/60",
-            orange: "bg-orange-500/60",
-            blue: "bg-blue-500/60",
-            yellow: "bg-yellow-500/60",
-          };
-          const btnColor: Record<string, string> = {
-            red: "bg-red-600 hover:bg-red-700 shadow-red-900/30",
-            orange: "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30",
-            blue: "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30",
-            yellow: "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30",
-          };
+          const accentText = idx === 0 ? "text-red-400" : idx === 1 ? "text-orange-400" : idx === 2 ? "text-blue-400" : "text-yellow-400";
+          const bulletDot = idx === 0 ? "bg-red-500/60" : idx === 1 ? "bg-orange-500/60" : idx === 2 ? "bg-blue-500/60" : "bg-yellow-500/60";
+          const btn = idx === 0
+            ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
+            : idx === 1
+            ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
+            : idx === 2
+            ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
+            : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
 
           return (
             <section
               key={mode.id}
-              className={`snap-start h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden bg-gradient-to-b ${mode.gradient}`}
-              style={{ scrollSnapAlign: "start" }}
+              className="snap-center h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden"
             >
-              {/* Decorative blur */}
-              <div className={`absolute -top-20 ${isEven ? "-right-20" : "-left-20"} w-72 h-72 rounded-full blur-3xl opacity-20`}
-                style={{ background: mode.accent === "red" ? "#dc2626" : mode.accent === "orange" ? "#ea580c" : mode.accent === "blue" ? "#2563eb" : "#ca8a04" }}
-              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
+              <InkLandscape accent={mode.accent} />
 
               <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${isEven ? "" : "lg:[&>*:first-child]:order-2 lg:[&>*:last-child]:order-1"}`}>
-                  {/* Text */}
+                <div
+                  className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${
+                    isEven ? "" : "lg:[&>*:first-child]:order-2 lg:[&>*:last-child]:order-1"
+                  }`}
+                >
                   <div>
                     <div className="flex items-center gap-3 mb-5">
                       <span className="text-4xl">{mode.icon}</span>
-                      <span className={`text-xs font-bold tracking-widest uppercase ${accentColor[mode.accent]}`}>Study Mode</span>
+                      <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
                     </div>
                     <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">
                       {mode.title}
                     </h2>
-                    <p className={`mt-2 text-lg font-semibold ${accentColor[mode.accent]}`}>{mode.subtitle}</p>
+                    <p className={`mt-2 text-lg font-semibold ${accentText}`}>{mode.subtitle}</p>
                     <p className="mt-4 text-gray-400 leading-relaxed max-w-lg">{mode.description}</p>
 
                     <ul className="mt-6 space-y-2.5">
                       {mode.bullets.map((b) => (
-                        <li key={b} className="flex items-start gap-3 text-sm text-gray-400">
-                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${bulletColor[mode.accent]}`} />
+                        <li key={b} className="flex items-start gap-3 text-sm text-gray-300">
+                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${bulletDot}`} />
                           {b}
                         </li>
                       ))}
@@ -542,14 +723,13 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
                     <div className="mt-8 flex flex-wrap gap-3">
                       <button
                         onClick={() => onSelectMode(mode.id)}
-                        className={`px-6 py-3 rounded-xl text-white font-semibold transition-colors shadow-lg ${btnColor[mode.accent]}`}
+                        className={`px-6 py-3 rounded-xl text-white font-semibold transition-colors shadow-lg ${btn}`}
                       >
                         Open {mode.title} →
                       </button>
                     </div>
                   </div>
 
-                  {/* Preview */}
                   <div>
                     <mode.Preview />
                   </div>
@@ -557,41 +737,34 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               </div>
 
               {/* Scroll buttons */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4">
-                {idx > 0 && (
-                  <button
-                    onClick={scrollPrev}
-                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
-                  >
-                    <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    {SECTIONS[idx].label}
-                  </button>
-                )}
-                {idx < 3 && (
-                  <button
-                    onClick={scrollNext}
-                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600 animate-pulse"
-                  >
-                    {SECTIONS[idx + 2]?.label}
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                )}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3">
+                <button
+                  onClick={scrollPrev}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
+                >
+                  <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  Prev
+                </button>
+                <button
+                  onClick={scrollNext}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
+                >
+                  Next
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
             </section>
           );
         })}
 
-        {/* ── FOOTER CTA ── */}
-        <section
-          className="snap-start h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black"
-          style={{ scrollSnapAlign: "start" }}
-        >
+        {/* FOOTER */}
+        <section className="snap-center h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black">
           <div className="absolute inset-0 bg-gradient-to-br from-red-950/10 via-black to-black" />
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-red-600/5 rounded-full blur-3xl" />
+          <InkLandscape accent="#ef4444" />
 
           <div className="relative z-10 text-center max-w-2xl mx-auto px-4">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
@@ -602,15 +775,15 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
             <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { id: "browse" as ModeId, icon: "📚", label: "Browse", color: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
-                { id: "practice" as ModeId, icon: "🔥", label: "Practice", color: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
-                { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", color: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
-                { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", color: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
+                { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
+                { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
+                { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
+                { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
               ].map((m) => (
                 <button
                   key={m.id}
                   onClick={() => onSelectMode(m.id)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-neutral-900 border transition-all ${m.color}`}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-neutral-900 border transition-all ${m.cls}`}
                 >
                   <span className="text-2xl">{m.icon}</span>
                   <span className="text-sm font-semibold text-gray-200">{m.label}</span>
@@ -619,8 +792,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
             </div>
 
             <button
-              onClick={scrollPrev}
-              className="mt-10 text-xs text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-1 mx-auto"
+              onClick={() => scrollTo(0)}
+              className="mt-10 text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 mx-auto"
             >
               <svg className="w-3 h-3 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
