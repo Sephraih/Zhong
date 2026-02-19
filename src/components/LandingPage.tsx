@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
+import chinaLandscapeUrl from "../assets/china-landscape.svg";
 
 interface LandingPageProps {
   onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
@@ -56,17 +57,17 @@ function PreviewFrame({ title, children }: { title: string; children: ReactNode 
   return (
     <div className="relative w-full max-w-md mx-auto">
       <div className="absolute -inset-6 bg-white/5 rounded-[2rem] blur-2xl" />
-      <div className="relative rounded-[1.35rem] border-2 border-white/20 shadow-[0_0_70px_rgba(255,255,255,0.08)] ring-1 ring-white/10 overflow-hidden bg-neutral-950">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/80 backdrop-blur">
+      <div className="relative rounded-[1.35rem] border-2 border-white/25 shadow-[0_0_70px_rgba(255,255,255,0.08)] ring-1 ring-white/10 overflow-hidden bg-neutral-950/70 backdrop-blur-md">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/70 backdrop-blur">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500/60" />
             <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
             <span className="w-3 h-3 rounded-full bg-green-500/60" />
           </div>
-          <div className="ml-3 text-xs text-gray-400 truncate">{title}</div>
+          <div className="ml-3 text-xs text-gray-300 truncate">{title}</div>
           <div className="ml-auto w-20 h-6 rounded-md bg-white/5" />
         </div>
-        <div className="bg-neutral-900/40">{children}</div>
+        <div className="bg-neutral-900/35">{children}</div>
       </div>
     </div>
   );
@@ -545,7 +546,7 @@ function ModeSectionDesktop({
 
   return (
     <section className="snap-center min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-      <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
+      <div className="absolute inset-0 bg-black/35" />
       <InkLandscape accent={accent} />
 
       <div className="relative z-10 w-full max-w-6xl mx-auto px-6 lg:px-8">
@@ -586,9 +587,6 @@ function ModeSectionDesktop({
             <div className="relative">
               <div className="absolute -inset-2 rounded-[2rem] bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
               <Preview />
-              <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-semibold bg-black/60 border border-white/15 text-gray-200 backdrop-blur group-hover:border-white/25">
-                Click preview →
-              </div>
             </div>
           </button>
         </div>
@@ -652,7 +650,7 @@ function ModeSectionMobile({
 
   return (
     <section id={id} className="relative overflow-hidden py-14">
-      <div className="absolute inset-0 bg-gradient-to-b from-black via-black to-black" />
+      <div className="absolute inset-0 bg-black/35" />
       <InkLandscape accent={accent} />
 
       <div className="relative z-10 max-w-md mx-auto px-4">
@@ -684,7 +682,6 @@ function ModeSectionMobile({
           <div className="max-w-sm mx-auto origin-top scale-[0.86]">
             <Preview />
           </div>
-          <div className="mt-2 text-center text-xs text-gray-500">Tap preview to open</div>
         </button>
 
         {/* Open button after the preview (mobile-first order) */}
@@ -789,7 +786,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   const hero = (
     <section id="hero" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-gradient-to-br from-neutral-950 via-black to-neutral-950" />
+      <div className="absolute inset-0 bg-black/35" />
       <InkLandscape accent="#ef4444" />
       <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
       <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
@@ -814,9 +811,19 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           <span className="ml-3 text-xs text-gray-500 self-center">← hover / tap</span>
         </div>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-500">
-          {["450+ Words", "1000+ Examples", "4 Study Modes", "HSK 1 & 2"].map((s) => (
-            <span key={s} className="px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800">{s}</span>
+        <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-200">
+          {[
+            "All the words you need!",
+            "Thousands of Examples",
+            "Various Study Modes",
+            "HSK 3.0 Conform",
+          ].map((s) => (
+            <span
+              key={s}
+              className="px-3 py-1.5 rounded-full bg-neutral-950/40 backdrop-blur border border-white/10"
+            >
+              {s}
+            </span>
           ))}
         </div>
 
@@ -861,7 +868,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   const footer = (
     <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-gradient-to-br from-red-950/10 via-black to-black" />
+      <div className="absolute inset-0 bg-black/35" />
       <InkLandscape accent="#ef4444" />
 
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-2xl mx-auto px-4"}>
@@ -906,6 +913,19 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   return (
     <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden">
+      {/* China-themed background behind the landing scroll area */}
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0 opacity-[0.35]"
+          style={{
+            backgroundImage: `url(${chinaLandscapeUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center bottom",
+          }}
+        />
+        {/* Dark overlay to ensure readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black" />
+      </div>
       {/* Desktop-only dot nav */}
       {!isMobile && (
         <div className="fixed right-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-2.5 hidden sm:flex">

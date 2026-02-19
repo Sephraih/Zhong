@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#ef4444" stop-opacity="0.22"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0b0f" stop-opacity="0.0"/>
+      <stop offset="1" stop-color="#0b0b0f" stop-opacity="0.45"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+  </defs>
+
+  <!-- subtle sky wash -->
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+
+  <!-- ink mountains -->
+  <g filter="url(#blur)" opacity="0.95">
+    <path d="M-40 720 C120 650 280 650 420 690 C590 735 720 660 900 610 C1080 560 1240 590 1640 640 L1640 1040 L-40 1040 Z" fill="url(#mist)"/>
+    <path d="M-40 780 C220 820 360 770 520 760 C720 745 820 830 1040 805 C1240 780 1360 730 1640 780 L1640 1040 L-40 1040 Z" fill="#ef4444" opacity="0.08"/>
+    <path d="M-40 835 C260 900 420 840 600 840 C840 840 940 930 1180 900 C1380 870 1460 820 1640 860 L1640 1040 L-40 1040 Z" fill="#ef4444" opacity="0.06"/>
+  </g>
+
+  <!-- Great Wall hint (silhouette) -->
+  <g opacity="0.12" filter="url(#soft)">
+    <path d="M220 610 C260 585 300 580 340 600 C380 620 410 610 450 590 C490 570 530 565 570 585 C610 605 650 600 700 580 C750 560 820 560 900 590" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+    <path d="M240 606 v-18 h18 v18" fill="#ffffff"/>
+    <path d="M415 615 v-18 h18 v18" fill="#ffffff"/>
+    <path d="M660 600 v-18 h18 v18" fill="#ffffff"/>
+  </g>
+
+  <!-- pagoda silhouette -->
+  <g opacity="0.16" filter="url(#soft)">
+    <path d="M220 650 l46 -34 l46 34 h-26 v26 h22 v28 h-22 v28 h22 v28 h-22 v56 h-40 v-56 h-22 v-28 h22 v-28 h-22 v-28 h22 v-26 Z" fill="#ffffff"/>
+  </g>
+
+  <!-- lanterns -->
+  <g opacity="0.16">
+    <circle cx="1260" cy="170" r="54" fill="#ef4444"/>
+    <rect x="1244" y="224" width="32" height="62" rx="16" fill="#ef4444"/>
+    <circle cx="1360" cy="240" r="30" fill="#ef4444" opacity="0.75"/>
+    <rect x="1350" y="270" width="20" height="44" rx="10" fill="#ef4444" opacity="0.75"/>
+  </g>
+
+  <!-- small birds -->
+  <g opacity="0.10" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M980 260 q18 -14 36 0"/>
+    <path d="M1020 248 q18 -14 36 0"/>
+    <path d="M1085 270 q18 -14 36 0"/>
+  </g>
+</svg>
