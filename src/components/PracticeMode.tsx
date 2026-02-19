@@ -513,9 +513,9 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         <div className="hidden lg:block" />
 
         <div className="w-full flex justify-center">
-          <div className="max-w-lg w-full">
+          <div className="max-w-lg w-full flex flex-col min-h-[calc(var(--app-inner-h,100svh)-240px)] md:min-h-0">
             {/* Controls row: HSK level + Direction toggle */}
-            <div className="mb-6">
+            <div className="mb-4 sm:mb-6">
               <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
                 {/* HSK Level selector */}
                 <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
@@ -615,7 +615,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             )}
 
             {/* Progress header */}
-            <div className="mb-6">
+            <div className="mb-4">
               <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
                 <span>
                   Card {currentIndex + 1} of {sessionWords.length}
@@ -655,19 +655,12 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </div>
             </div>
 
-            {/* Flashcard — taller on mobile to use more screen space */}
+            {/* Flashcard */}
             <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
+              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(680px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
                 feedback,
                 currentWord.sessionProgress >= 5
               )}`}
-              style={{
-                height: isMobile
-                  ? "calc(var(--app-inner-h, 100svh) - 200px)"
-                  : "min(580px, calc(var(--app-inner-h, 100svh) - 300px))",
-                minHeight: isMobile ? "420px" : "480px",
-                maxHeight: isMobile ? "calc(var(--app-inner-h, 100svh) - 180px)" : "620px",
-              }}
               onClick={(e) => {
                 // On mobile, ignore taps that originated from a HoverCharacter
                 if (isHoverCharacterEvent(e)) return;
@@ -852,7 +845,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             </button>
 
             {/* Dot indicators */}
-            <div className="flex justify-center gap-2 mt-6">
+            <div className="flex justify-center gap-2 mt-auto pt-6">
               {sessionWords.map((w, i) => {
                 const isCurrent = i === currentIndex;
                 const color = getProgressColor(w.sessionProgress);
@@ -868,7 +861,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               })}
             </div>
 
-            <div className="mt-10 text-center">
+            <div className="mt-4 pb-2 text-center">
               <button
                 onClick={() => {
                   clearSession();
