@@ -74,6 +74,35 @@ function AppContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
+  // Stable viewport height for mobile cards:
+  // Mobile browser chrome (address bar) can change the effective viewport height while scrolling,
+  // which causes dvh/vh based layouts to jitter. We set a stable CSS var once and only update on
+  // orientation changes.
+  useEffect(() => {
+    const setInnerH = () => {
+      document.documentElement.style.setProperty("--app-inner-h", `${window.innerHeight}px`);
+    };
+
+    setInnerH();
+
+    if (isMobile) {
+      const onOrientation = () => {
+        // give the browser a moment to settle
+        setTimeout(setInnerH, 250);
+      };
+      window.addEventListener("orientationchange", onOrientation);
+      return () => {
+        window.removeEventListener("orientationchange", onOrientation);
+      };
+    }
+
+    // Desktop/tablet: keep it updated with resize.
+    window.addEventListener("resize", setInnerH);
+    return () => {
+      window.removeEventListener("resize", setInnerH);
+    };
+  }, [isMobile]);
+
   // Background refresh:
   // - If we started from cache, bypass cache to fetch fresh data.
   // - If we started from fallback, use cache if available.
@@ -178,6 +207,19 @@ function AppContent() {
     setAuthModalOpen(true);
   };
 
+  const navigate = (mode: ViewMode) => {
+    setViewMode(mode);
+    setMobileMenuOpen(false);
+
+    // Mobile UX: when switching modes, reset scroll position.
+    // Otherwise the new mode renders at whatever scrollY the landing page was at.
+    if (isMobile) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header — hides on scroll down on mobile */}
@@ -192,8 +234,7 @@ function AppContent() {
           <div className="flex items-center justify-between h-16">
             <button
               onClick={() => {
-                setViewMode("home");
-                setMobileMenuOpen(false);
+                navigate("home");
               }}
               className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
@@ -217,7 +258,7 @@ function AppContent() {
               ].map((mode) => (
                 <button
                   key={mode.id}
-                  onClick={() => setViewMode(mode.id)}
+                  onClick={() => navigate(mode.id)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
@@ -231,7 +272,7 @@ function AppContent() {
 
             {/* Auth Section */}
             <div className="flex items-center gap-2">
-              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
+              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
 
               {/* Mobile menu button */}
               <button
@@ -262,8 +303,7 @@ function AppContent() {
                   <button
                     key={mode.id}
                     onClick={() => {
-                      setViewMode(mode.id);
-                      setMobileMenuOpen(false);
+                      navigate(mode.id);
                     }}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       viewMode === mode.id ? "bg-red-600 text-white" : "text-gray-400 bg-neutral-800"
@@ -342,14 +382,14 @@ function AppContent() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewMode === "home" && <LandingPage onSelectMode={(mode) => setViewMode(mode)} />}
+        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
 
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
-            onBack={() => setViewMode("browse")}
+            onBack={() => navigate("browse")}
           />
         )}
 
