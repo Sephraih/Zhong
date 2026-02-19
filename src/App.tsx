@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useTransition } from "react";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   buildFallbackVocabulary,
   fetchVocabularyFromSupabase,
@@ -17,6 +17,68 @@ import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
 import { useIsMobile } from "./hooks/useIsMobile";
+
+// Mobile-only compact user button
+function MobileUserButton({
+  onOpenAuth,
+  onOpenProfile,
+}: {
+  onOpenAuth: (mode: "login" | "signup") => void;
+  onOpenProfile: () => void;
+}) {
+  const { user, isPremium } = useAuth();
+  const [showMenu, setShowMenu] = useState(false);
+
+  if (!user) {
+    return (
+      <button
+        onClick={() => onOpenAuth("login")}
+        className="sm:hidden w-9 h-9 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-700 text-gray-400 hover:text-white hover:border-neutral-600 transition-all"
+        title="Sign in"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </button>
+    );
+  }
+
+  return (
+    <div className="sm:hidden relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+          isPremium
+            ? "bg-gradient-to-br from-yellow-500 to-yellow-700 text-black"
+            : "bg-gradient-to-br from-red-600 to-red-800 text-white"
+        }`}
+        title="Profile"
+      >
+        <span className="text-sm font-bold">{user.email?.charAt(0).toUpperCase()}</span>
+      </button>
+
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 mt-2 w-40 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl z-20 overflow-hidden">
+            <button
+              onClick={() => {
+                setShowMenu(false);
+                onOpenProfile();
+              }}
+              className="w-full px-4 py-3 text-left text-sm text-gray-200 hover:bg-neutral-800 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Profile
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
@@ -74,6 +136,35 @@ function AppContent() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
+  // Stable viewport height for mobile cards:
+  // Mobile browser chrome (address bar) can change the effective viewport height while scrolling,
+  // which causes dvh/vh based layouts to jitter. We set a stable CSS var once and only update on
+  // orientation changes.
+  useEffect(() => {
+    const setInnerH = () => {
+      document.documentElement.style.setProperty("--app-inner-h", `${window.innerHeight}px`);
+    };
+
+    setInnerH();
+
+    if (isMobile) {
+      const onOrientation = () => {
+        // give the browser a moment to settle
+        setTimeout(setInnerH, 250);
+      };
+      window.addEventListener("orientationchange", onOrientation);
+      return () => {
+        window.removeEventListener("orientationchange", onOrientation);
+      };
+    }
+
+    // Desktop/tablet: keep it updated with resize.
+    window.addEventListener("resize", setInnerH);
+    return () => {
+      window.removeEventListener("resize", setInnerH);
+    };
+  }, [isMobile]);
+
   // Background refresh:
   // - If we started from cache, bypass cache to fetch fresh data.
   // - If we started from fallback, use cache if available.
@@ -116,7 +207,6 @@ function AppContent() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flashcardKey, setFlashcardKey] = useState(0);
   const [flashcardStatusFilter, setFlashcardStatusFilter] = useState<FlashcardFilter>("all");
   const [quizKey, setQuizKey] = useState(0);
@@ -178,6 +268,18 @@ function AppContent() {
     setAuthModalOpen(true);
   };
 
+  const navigate = (mode: ViewMode) => {
+    setViewMode(mode);
+
+    // Mobile UX: when switching modes, reset scroll position.
+    // Otherwise the new mode renders at whatever scrollY the landing page was at.
+    if (isMobile) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header — hides on scroll down on mobile */}
@@ -190,16 +292,16 @@ function AppContent() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            {/* Logo */}
             <button
               onClick={() => {
-                setViewMode("home");
-                setMobileMenuOpen(false);
+                navigate("home");
               }}
-              className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
+              className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
-              <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
-                <span className="text-white text-lg font-bold">汉</span>
+              <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
+                <span className="text-white text-sm sm:text-lg font-bold">汉</span>
               </div>
               <div className="hidden sm:block text-left">
                 <h1 className="text-lg font-bold text-white leading-tight">汉语学习</h1>
@@ -207,74 +309,42 @@ function AppContent() {
               </div>
             </button>
 
-            {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1">
+            {/* Mode Nav — visible on both mobile and desktop */}
+            <nav className="flex items-center gap-0.5 sm:gap-1">
               {[
-                { id: "browse" as ViewMode, label: "📚 Browse" },
-                { id: "practice" as ViewMode, label: "🔥 Practice" },
-                { id: "flashcards" as ViewMode, label: "🃏 Flashcards" },
-                { id: "quiz" as ViewMode, label: "✏️ Quiz" },
+                { id: "browse" as ViewMode, label: "Browse", icon: "📚" },
+                { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
+                { id: "flashcards" as ViewMode, label: "Cards", icon: "🃏" },
+                { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
               ].map((mode) => (
                 <button
                   key={mode.id}
-                  onClick={() => setViewMode(mode.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  onClick={() => navigate(mode.id)}
+                  className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
                       : "text-gray-400 hover:bg-neutral-800 hover:text-white"
                   }`}
+                  title={mode.label}
                 >
-                  {mode.label}
+                  {/* Show only icon on mobile, icon+label on desktop */}
+                  <span className="sm:hidden">{mode.icon}</span>
+                  <span className="hidden sm:inline">{mode.icon} {mode.label}</span>
                 </button>
               ))}
             </nav>
 
-            {/* Auth Section */}
-            <div className="flex items-center gap-2">
-              <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => setViewMode("profile")} />
-
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-neutral-800"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
+            {/* Auth Section — compact on mobile */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* Desktop: full auth header */}
+              <div className="hidden sm:block">
+                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
+              </div>
+              
+              {/* Mobile: small user icon */}
+              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
             </div>
           </div>
-
-          {/* Mobile Nav */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-3 border-t border-neutral-800">
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "browse" as ViewMode, label: "📚 Browse" },
-                  { id: "practice" as ViewMode, label: "🔥 Practice" },
-                  { id: "flashcards" as ViewMode, label: "🃏 Flashcards" },
-                  { id: "quiz" as ViewMode, label: "✏️ Quiz" },
-                ].map((mode) => (
-                  <button
-                    key={mode.id}
-                    onClick={() => {
-                      setViewMode(mode.id);
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      viewMode === mode.id ? "bg-red-600 text-white" : "text-gray-400 bg-neutral-800"
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </header>
 
@@ -342,22 +412,14 @@ function AppContent() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewMode === "home" && (
-          <LandingPage
-            onSelectMode={(mode) => {
-              // Ensure modes start at top on mobile (and desktop too)
-              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-              setViewMode(mode);
-            }}
-          />
-        )}
+        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
 
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
-            onBack={() => setViewMode("browse")}
+            onBack={() => navigate("browse")}
           />
         )}
 

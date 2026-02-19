@@ -655,12 +655,19 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </div>
             </div>
 
-            {/* Flashcard */}
+            {/* Flashcard — taller on mobile to use more screen space */}
             <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(580px,calc(100svh-300px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
+              className={`bg-neutral-900 rounded-3xl shadow-2xl border flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
                 feedback,
                 currentWord.sessionProgress >= 5
               )}`}
+              style={{
+                height: isMobile
+                  ? "calc(var(--app-inner-h, 100svh) - 200px)"
+                  : "min(580px, calc(var(--app-inner-h, 100svh) - 300px))",
+                minHeight: isMobile ? "420px" : "480px",
+                maxHeight: isMobile ? "calc(var(--app-inner-h, 100svh) - 180px)" : "620px",
+              }}
               onClick={(e) => {
                 // On mobile, ignore taps that originated from a HoverCharacter
                 if (isHoverCharacterEvent(e)) return;
