@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
-import chinaLandscapeUrl from "../assets/china-landscape.svg";
+import chinaLandscapeUrl from "../assets/landscape-bg.png";
 
 // Prefer a user-provided PNG in /public (not bundled into JS).
 // If it’s missing, the SVG fallback will still render.
