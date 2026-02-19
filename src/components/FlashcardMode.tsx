@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import type { VocabWord } from "../data/vocabulary";
@@ -15,113 +15,106 @@ interface FlashcardModeProps {
 function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars: number): string {
   const syllables = splitPinyin(fullPinyin);
   if (totalChars === 1) return fullPinyin;
-  if (charIndex < syllables.length) {
-    return syllables[charIndex];
-  }
+  if (charIndex < syllables.length) return syllables[charIndex];
   return fullPinyin;
 }
 
 function splitPinyin(pinyin: string): string[] {
   const result: string[] = [];
   let current = "";
-
   const vowels = "aeiouüāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ";
-
   for (let i = 0; i < pinyin.length; i++) {
     const ch = pinyin[i];
-    if (ch === " ") {
-      if (current) result.push(current);
-      current = "";
-      continue;
-    }
+    if (ch === " ") { if (current) result.push(current); current = ""; continue; }
     current += ch;
-
     if (i < pinyin.length - 1) {
       const next = pinyin[i + 1];
       if (next === " ") continue;
       const isCurrentVowel = vowels.includes(ch.toLowerCase());
       const isNextConsonant = !vowels.includes(next.toLowerCase());
-
       if (isCurrentVowel && isNextConsonant) {
         const remaining = pinyin.slice(i + 1);
         const nextSyllableMatch = remaining.match(/^[bpmfdtnlgkhjqxzhchshrzcsyw]/i);
         if (nextSyllableMatch) {
-          if (ch === "n" || (ch === "g" && current.endsWith("ng"))) {
-            continue;
-          }
-          result.push(current);
-          current = "";
+          if (ch === "n" || (ch === "g" && current.endsWith("ng"))) continue;
+          result.push(current); current = "";
         }
       }
     }
   }
-
-  if (current) {
-    result.push(current);
-  }
-
-  if (result.length === 0) {
-    return [pinyin];
-  }
-
-  return result;
+  if (current) result.push(current);
+  return result.length === 0 ? [pinyin] : result;
 }
 
 export function FlashcardMode({ words, learnedState, wordStatusFilter }: FlashcardModeProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [sessionKnown, setSessionKnown] = useState<Set<number>>(new Set());
-  const [sessionUnknown, setSessionUnknown] = useState<Set<number>>(new Set());
+  const [isShuffled, setIsShuffled] = useState(false);
+  const [shuffleSeed, setShuffleSeed] = useState(0);
 
-  const { markAsLearned, markAsStillLearning, isLearned } = learnedState;
+  const { toggleLearned, isLearned, learnedCount } = learnedState;
 
-  // Filter words based on word status filter, then shuffle
-  const shuffledWords = useMemo(() => {
+  // Filter words — ordered by default, shuffled if requested
+  const displayWords = useMemo(() => {
     let filtered = words;
     if (wordStatusFilter === "still-learning") {
       filtered = words.filter((w) => !isLearned(w.id));
     } else if (wordStatusFilter === "learned") {
       filtered = words.filter((w) => isLearned(w.id));
     }
-    return [...filtered].sort(() => Math.random() - 0.5);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, wordStatusFilter]);
-
-  const currentWord = shuffledWords[currentIndex];
-
-  const handleKnown = () => {
-    setSessionKnown((prev) => new Set(prev).add(currentWord.id));
-    markAsLearned(currentWord.id);
-    nextCard();
-  };
-
-  const handleUnknown = () => {
-    setSessionUnknown((prev) => new Set(prev).add(currentWord.id));
-    markAsStillLearning(currentWord.id);
-    nextCard();
-  };
-
-  const nextCard = () => {
-    setIsFlipped(false);
-    if (currentIndex < shuffledWords.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
+    if (isShuffled) {
+      // Use shuffleSeed to trigger re-shuffle
+      const arr = [...filtered];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
     }
-  };
+    return filtered;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [words, wordStatusFilter, isShuffled, shuffleSeed]);
 
-  const restart = () => {
+  const currentWord = displayWords[currentIndex];
+
+  // Loop: last -> first, first -> last
+  const goNext = useCallback(() => {
+    setIsFlipped(false);
+    setCurrentIndex((prev) => (prev + 1) % displayWords.length);
+  }, [displayWords.length]);
+
+  const goPrev = useCallback(() => {
+    setIsFlipped(false);
+    setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length);
+  }, [displayWords.length]);
+
+  const handleToggleLearned = useCallback(() => {
+    if (!currentWord) return;
+    toggleLearned(currentWord.id);
+  }, [currentWord, toggleLearned]);
+
+  // Shuffle is always clickable to reshuffle
+  const handleShuffle = () => {
+    setIsShuffled(true);
+    setShuffleSeed((s) => s + 1);
     setCurrentIndex(0);
     setIsFlipped(false);
-    setSessionKnown(new Set());
-    setSessionUnknown(new Set());
   };
 
-  const progress = shuffledWords.length > 0 ? ((currentIndex + 1) / shuffledWords.length) * 100 : 0;
-  const isComplete =
-    shuffledWords.length > 0 &&
-    currentIndex >= shuffledWords.length - 1 &&
-    (sessionKnown.has(currentWord?.id) || sessionUnknown.has(currentWord?.id));
+  // Reset to ordered
+  const handleReset = () => {
+    setIsShuffled(false);
+    setCurrentIndex(0);
+    setIsFlipped(false);
+  };
 
-  if (shuffledWords.length === 0) {
+  // Counts from actual learned state (not session)
+  const totalLearned = learnedCount;
+  const totalLearning = words.length - learnedCount;
+
+  const progress = displayWords.length > 0 ? ((currentIndex + 1) / displayWords.length) * 100 : 0;
+
+  if (displayWords.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">📭</div>
@@ -137,53 +130,58 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
     );
   }
 
-  if (isComplete) {
-    return (
-      <div className="max-w-lg mx-auto text-center py-12">
-        <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8">
-          <div className="text-6xl mb-4">🎉</div>
-          <h2 className="text-2xl font-bold text-white mb-2">Session Complete!</h2>
-          <p className="text-gray-400 mb-6">You reviewed {shuffledWords.length} words</p>
+  if (!currentWord) return null;
 
-          <div className="flex justify-center gap-8 mb-8">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-emerald-400">{sessionKnown.size}</div>
-              <div className="text-sm text-gray-400">Learned</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-red-400">{sessionUnknown.size}</div>
-              <div className="text-sm text-gray-400">Still Learning</div>
-            </div>
-          </div>
-
-          <p className="text-gray-500 text-xs mb-6">Your progress has been saved automatically.</p>
-
-          <button
-            onClick={restart}
-            className="px-8 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30"
-          >
-            Start Over
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const currentIsLearned = isLearned(currentWord.id);
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex justify-between text-sm text-gray-400 mb-2">
-          <span>
-            Card {currentIndex + 1} of {shuffledWords.length}
-          </span>
-          <span>
-            ✅ {sessionKnown.size} · ❌ {sessionUnknown.size}
-          </span>
+      {/* Top bar: counter + shuffle + learned stats */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        {/* Learned / Learning counts */}
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-emerald-400 font-semibold">✅ {totalLearned}</span>
+          <span className="text-gray-600">·</span>
+          <span className="text-red-400 font-semibold">📖 {totalLearning}</span>
         </div>
-        <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+
+        {/* Card counter */}
+        <span className="text-sm text-gray-400 font-medium">
+          {currentIndex + 1} / {displayWords.length}
+        </span>
+
+        {/* Shuffle / Reset buttons */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleShuffle}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-neutral-900 text-gray-400 border-neutral-700 hover:border-red-700/60 hover:text-white hover:bg-neutral-800"
+            title="Shuffle cards (click again to reshuffle)"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Shuffle
+          </button>
+          {isShuffled && (
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600 hover:text-white"
+              title="Reset to original order"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-4">
+        <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -191,7 +189,11 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
       {/* Flashcard */}
       <div
-        className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[min(580px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative pb-4 overflow-hidden"
+        className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(560px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all relative overflow-hidden ${
+          currentIsLearned
+            ? "border-emerald-700/50 hover:border-emerald-600/70"
+            : "border-neutral-800 hover:border-neutral-700"
+        }`}
         onClick={(e) => {
           if (isHoverCharacterEvent(e)) return;
           setIsFlipped(!isFlipped);
@@ -208,7 +210,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           >
             HSK {currentWord.hskLevel}
           </span>
-          {isLearned(currentWord.id) && (
+          {currentIsLearned && (
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
               <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -220,7 +222,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
         </div>
 
-        {/* Front Content (always visible, transforms when flipped) */}
+        {/* Front Content */}
         <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
           <div className="flex items-end gap-2 justify-center">
             {currentWord.hanzi.split("").map((char, i) => (
@@ -229,6 +231,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
                 char={char}
                 pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)}
                 size="2xl"
+                wordId={currentWord.id}
               />
             ))}
           </div>
@@ -242,21 +245,21 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
         {/* Revealed Info (Overlay) */}
         <div
-          className={`absolute inset-0 pt-36 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 ${
+          className={`absolute inset-0 pt-28 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 ${
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
           }`}
         >
           <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
-          <p className="text-white text-3xl font-bold mb-6 text-center">{currentWord.english}</p>
+          <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
 
           {currentWord.examples.length > 0 && (
-            <div className="space-y-3 mt-4 text-left w-full">
+            <div className="space-y-3 mt-2 text-left w-full">
               {currentWord.examples.slice(0, 3).map((example, idx) => (
                 <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
                       {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                        <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" wordId={currentWord.id} />
                       ))}
                     </div>
                     <p className="text-gray-400 text-xs leading-relaxed">{example.english}</p>
@@ -269,19 +272,55 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-4 mt-6">
+      {/* Action Buttons: Prev | Toggle Learned | Next */}
+      <div className="flex gap-3 mt-4">
+        {/* Previous (loops) */}
         <button
-          onClick={handleUnknown}
-          className="flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-semibold hover:bg-red-950/50 transition-colors border border-red-900/40 hover:border-red-700/60"
+          onClick={goPrev}
+          className="px-5 py-4 bg-neutral-900 text-gray-400 rounded-xl font-semibold hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 hover:border-neutral-700 flex items-center gap-2"
+          title="Previous card"
         >
-          ❌ Still Learning
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
         </button>
+
+        {/* Toggle Learned */}
         <button
-          onClick={handleKnown}
-          className="flex-1 py-4 bg-neutral-900 text-emerald-400 rounded-xl font-semibold hover:bg-emerald-950/50 transition-colors border border-emerald-900/40 hover:border-emerald-700/60"
+          onClick={handleToggleLearned}
+          className={`flex-1 py-4 rounded-xl font-semibold transition-all border flex items-center justify-center gap-2 ${
+            currentIsLearned
+              ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/60 hover:bg-red-950/30 hover:text-red-400 hover:border-red-800/60"
+              : "bg-neutral-900 text-gray-400 border-neutral-800 hover:bg-emerald-950/30 hover:text-emerald-400 hover:border-emerald-800/60"
+          }`}
+          title={currentIsLearned ? "Mark as Still Learning" : "Mark as Learned"}
         >
-          ✅ I Know This
+          {currentIsLearned ? (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Learned ✓
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Mark Learned
+            </>
+          )}
+        </button>
+
+        {/* Next (loops) */}
+        <button
+          onClick={goNext}
+          className="px-5 py-4 bg-neutral-900 text-gray-400 rounded-xl font-semibold hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 hover:border-neutral-700 flex items-center gap-2"
+          title="Next card"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
         </button>
       </div>
     </div>

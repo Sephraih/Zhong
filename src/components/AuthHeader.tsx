@@ -4,14 +4,9 @@ import { useAuth } from "../contexts/AuthContext";
 interface AuthHeaderProps {
   onOpenAuth: (mode: "login" | "signup") => void;
   onOpenProfile: () => void;
-  /**
-   * Compact mode for mobile headers: renders a small icon/avatar button.
-   * Desktop keeps the richer button + labels.
-   */
-  compact?: boolean;
 }
 
-export function AuthHeader({ onOpenAuth, onOpenProfile, compact = false }: AuthHeaderProps) {
+export function AuthHeader({ onOpenAuth, onOpenProfile }: AuthHeaderProps) {
   const { user, logout, isPremium, startCheckout, isCheckingOut } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -25,36 +20,31 @@ export function AuthHeader({ onOpenAuth, onOpenProfile, compact = false }: AuthH
       <div className="relative">
         <button
           onClick={() => setShowDropdown(!showDropdown)}
-          className={`flex items-center rounded-lg hover:bg-neutral-800 transition-colors ${
-            compact ? "p-2" : "gap-2 px-3 py-1.5"
-          }`}
-          aria-label="User menu"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-neutral-800 transition-colors"
         >
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center border border-red-900/40">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
             <span className="text-white text-sm font-medium">
               {user.email?.charAt(0).toUpperCase()}
             </span>
           </div>
-
-          {!compact && (
-            <div className="hidden sm:block text-left">
-              <p className="text-white text-sm font-medium truncate max-w-[120px]">
-                {user.email?.split("@")[0]}
-              </p>
-              <p className="text-gray-500 text-[10px]">{isPremium ? "⭐ Premium" : "Free"}</p>
-            </div>
-          )}
-
-          {!compact && (
-            <svg
-              className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          )}
+          <div className="hidden sm:block text-left">
+            <p className="text-white text-sm font-medium truncate max-w-[120px]">
+              {user.email?.split("@")[0]}
+            </p>
+            <p className="text-gray-500 text-[10px]">
+              {isPremium ? "⭐ Premium" : "Free"}
+            </p>
+          </div>
+          <svg
+            className={`w-4 h-4 text-gray-500 transition-transform ${
+              showDropdown ? "rotate-180" : ""
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </button>
 
         {showDropdown && (
@@ -126,32 +116,12 @@ export function AuthHeader({ onOpenAuth, onOpenProfile, compact = false }: AuthH
 
   return (
     <div className="flex items-center">
-      {compact ? (
-        <button
-          onClick={() => onOpenAuth("login")}
-          className="p-2 rounded-lg hover:bg-neutral-800 transition-colors"
-          aria-label="Sign in"
-          title="Sign in"
-        >
-          <div className="w-9 h-9 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </div>
-        </button>
-      ) : (
-        <button
-          onClick={() => onOpenAuth("login")}
-          className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-lg shadow-red-900/30"
-        >
-          Sign In / Sign Up
-        </button>
-      )}
+      <button
+        onClick={() => onOpenAuth("login")}
+        className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-lg shadow-red-900/30"
+      >
+        Sign In / Sign Up
+      </button>
     </div>
   );
 }

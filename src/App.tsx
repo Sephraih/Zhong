@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useTransition } from "react";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   buildFallbackVocabulary,
   fetchVocabularyFromSupabase,
@@ -16,7 +16,70 @@ import { AuthModal } from "./components/AuthModal";
 import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
+import { AppBackground } from "./components/AppBackground";
 import { useIsMobile } from "./hooks/useIsMobile";
+
+// Mobile-only compact user button
+function MobileUserButton({
+  onOpenAuth,
+  onOpenProfile,
+}: {
+  onOpenAuth: (mode: "login" | "signup") => void;
+  onOpenProfile: () => void;
+}) {
+  const { user, isPremium } = useAuth();
+  const [showMenu, setShowMenu] = useState(false);
+
+  if (!user) {
+    return (
+      <button
+        onClick={() => onOpenAuth("login")}
+        className="sm:hidden w-9 h-9 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-700 text-gray-400 hover:text-white hover:border-neutral-600 transition-all"
+        title="Sign in"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </button>
+    );
+  }
+
+  return (
+    <div className="sm:hidden relative">
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+          isPremium
+            ? "bg-gradient-to-br from-yellow-500 to-yellow-700 text-black"
+            : "bg-gradient-to-br from-red-600 to-red-800 text-white"
+        }`}
+        title="Profile"
+      >
+        <span className="text-sm font-bold">{user.email?.charAt(0).toUpperCase()}</span>
+      </button>
+
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 mt-2 w-40 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl z-20 overflow-hidden">
+            <button
+              onClick={() => {
+                setShowMenu(false);
+                onOpenProfile();
+              }}
+              className="w-full px-4 py-3 text-left text-sm text-gray-200 hover:bg-neutral-800 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Profile
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
 type HSKFilter = "all" | 1 | 2;
@@ -218,11 +281,18 @@ function AppContent() {
     }
   };
 
+  // Show background on all modes except home (landing page has its own background)
+  const showAppBackground = viewMode !== "home";
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white relative">
+      {/* Global background for all modes except landing page */}
+      {showAppBackground && <AppBackground darken />}
       {/* Header — hides on scroll down on mobile */}
       <header
-        className={`sticky top-0 z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800 transition-all duration-300 ${
+        className={`sticky top-0 z-50 backdrop-blur-xl border-b border-neutral-800 transition-all duration-300 ${
+          showAppBackground ? "bg-neutral-950/80" : "bg-neutral-950/90"
+        } ${
           !headerVisible && isMobile
             ? "-translate-y-full opacity-0 pointer-events-none"
             : "translate-y-0 opacity-100"
@@ -230,15 +300,16 @@ function AppContent() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            {/* Logo */}
             <button
               onClick={() => {
                 navigate("home");
               }}
-              className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
+              className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
-              <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
-                <span className="text-white text-lg font-bold">汉</span>
+              <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
+                <span className="text-white text-sm sm:text-lg font-bold">汉</span>
               </div>
               <div className="hidden sm:block text-left">
                 <h1 className="text-lg font-bold text-white leading-tight">汉语学习</h1>
@@ -246,68 +317,47 @@ function AppContent() {
               </div>
             </button>
 
-            {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1">
+            {/* Mode Nav — visible on both mobile and desktop */}
+            <nav className="flex items-center gap-0.5 sm:gap-1">
               {[
-                { id: "browse" as ViewMode, label: "📚 Browse" },
-                { id: "practice" as ViewMode, label: "🔥 Practice" },
-                { id: "flashcards" as ViewMode, label: "🃏 Flashcards" },
-                { id: "quiz" as ViewMode, label: "✏️ Quiz" },
+                { id: "browse" as ViewMode, label: "Browse", icon: "📚" },
+                { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
+                { id: "flashcards" as ViewMode, label: "Cards", icon: "🃏" },
+                { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
               ].map((mode) => (
                 <button
                   key={mode.id}
                   onClick={() => navigate(mode.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
                       : "text-gray-400 hover:bg-neutral-800 hover:text-white"
                   }`}
+                  title={mode.label}
                 >
-                  {mode.label}
+                  {/* Show only icon on mobile, icon+label on desktop */}
+                  <span className="sm:hidden">{mode.icon}</span>
+                  <span className="hidden sm:inline">{mode.icon} {mode.label}</span>
                 </button>
               ))}
             </nav>
 
-            {/* Mobile Nav (modes in header) */}
-            <nav className="md:hidden flex-1 mx-3 overflow-x-auto scrollbar-hide">
-              <div className="flex items-center gap-1 min-w-max">
-                {[
-                  { id: "browse" as ViewMode, label: "📚" , title: "Browse" },
-                  { id: "practice" as ViewMode, label: "🔥" , title: "Practice" },
-                  { id: "flashcards" as ViewMode, label: "🃏" , title: "Cards" },
-                  { id: "quiz" as ViewMode, label: "✏️" , title: "Quiz" },
-                ].map((mode) => (
-                  <button
-                    key={mode.id}
-                    onClick={() => navigate(mode.id)}
-                    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      viewMode === mode.id
-                        ? "bg-red-600 text-white"
-                        : "bg-neutral-900 border border-neutral-800 text-gray-300"
-                    }`}
-                    title={mode.title}
-                    aria-label={mode.title}
-                  >
-                    <span className="text-base leading-none">{mode.label}</span>
-                  </button>
-                ))}
+            {/* Auth Section — compact on mobile */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* Desktop: full auth header */}
+              <div className="hidden sm:block">
+                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
               </div>
-            </nav>
-
-            {/* Auth Section */}
-            <div className="flex items-center gap-2">
-              <AuthHeader
-                compact={isMobile}
-                onOpenAuth={openAuthModal}
-                onOpenProfile={() => navigate("profile")}
-              />
+              
+              {/* Mobile: small user icon */}
+              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
             </div>
           </div>
         </div>
       </header>
 
       {/* Stats Banner */}
-      <div className="bg-neutral-950 border-b border-neutral-800/60">
+      <div className={`border-b border-neutral-800/60 relative z-10 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
@@ -369,7 +419,7 @@ function AppContent() {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
 
         {viewMode === "profile" && (
@@ -541,18 +591,16 @@ function AppContent() {
 
         {viewMode === "practice" && (
           <div>
-            {!isMobile && (
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-white mb-2">🔥 Practice Session</h2>
-              </div>
-            )}
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-white mb-2">🔥 Practice Session</h2>
+            </div>
             <PracticeMode allWords={vocabulary} learnedState={learnedState} />
           </div>
         )}
 
         {viewMode === "flashcards" && (
           <div>
-            <div className={`text-center ${isMobile ? "mb-5" : "mb-8"}`}>
+            <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">🃏 Flashcard Mode</h2>
               <p className="text-gray-400">Tap to reveal · Hover characters for pinyin</p>
 
@@ -652,7 +700,7 @@ function AppContent() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-neutral-950 border-t border-neutral-800 mt-16">
+      <footer className={`border-t border-neutral-800 mt-16 relative z-10 ${showAppBackground ? "bg-neutral-950/80 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
             <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1 & 2 Vocabulary</p>

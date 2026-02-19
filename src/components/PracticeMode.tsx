@@ -513,9 +513,9 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
         <div className="hidden lg:block" />
 
         <div className="w-full flex justify-center">
-          <div className="max-w-lg w-full flex flex-col min-h-[calc(var(--app-inner-h,100svh)-240px)] md:min-h-0">
+          <div className="max-w-lg w-full">
             {/* Controls row: HSK level + Direction toggle */}
-            <div className="mb-4 sm:mb-6">
+            <div className="mb-6">
               <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
                 {/* HSK Level selector */}
                 <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
@@ -543,7 +543,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                   ))}
                 </div>
 
-                {/* Direction toggle + mobile help */}
+                {/* Direction toggle + help toggle (desktop: ? shown here when minimized) */}
                 <div className="inline-flex items-center gap-2">
                   <button
                     onClick={toggleDirection}
@@ -568,6 +568,25 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                       </>
                     )}
                   </button>
+
+                  {/* Desktop: show (?) toggle here when minimized, always show when expanded */}
+                  {!isMobile && (
+                    <button
+                      onClick={() => {
+                        const next = !infoMinimized;
+                        setInfoMinimized(next);
+                        saveSession(sessionWords, currentIndex, cycleCount, hskLevel, next, direction);
+                      }}
+                      className={`w-8 h-8 inline-flex items-center justify-center rounded-lg border transition-all text-sm font-bold ${
+                        infoMinimized
+                          ? "bg-neutral-900 border-neutral-800 text-gray-500 hover:text-white hover:border-neutral-700"
+                          : "bg-neutral-900 border-neutral-700 text-gray-300 hover:text-white"
+                      }`}
+                      title={infoMinimized ? "Show help" : "Hide help"}
+                    >
+                      {infoMinimized ? "?" : "—"}
+                    </button>
+                  )}
 
                   {/* Mobile: show help toggle right here */}
                   {isMobile && (
@@ -615,7 +634,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             )}
 
             {/* Progress header */}
-            <div className="mb-4">
+            <div className="mb-6">
               <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
                 <span>
                   Card {currentIndex + 1} of {sessionWords.length}
@@ -655,12 +674,19 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               </div>
             </div>
 
-            {/* Flashcard */}
+            {/* Flashcard — taller on mobile to use more screen space */}
             <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(680px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
+              className={`bg-neutral-900 rounded-3xl shadow-2xl border flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(
                 feedback,
                 currentWord.sessionProgress >= 5
               )}`}
+              style={{
+                height: isMobile
+                  ? "calc(var(--app-inner-h, 100svh) - 200px)"
+                  : "min(580px, calc(var(--app-inner-h, 100svh) - 300px))",
+                minHeight: isMobile ? "420px" : "480px",
+                maxHeight: isMobile ? "calc(var(--app-inner-h, 100svh) - 180px)" : "620px",
+              }}
               onClick={(e) => {
                 // On mobile, ignore taps that originated from a HoverCharacter
                 if (isHoverCharacterEvent(e)) return;
@@ -845,7 +871,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             </button>
 
             {/* Dot indicators */}
-            <div className="flex justify-center gap-2 mt-auto pt-6">
+            <div className="flex justify-center gap-2 mt-6">
               {sessionWords.map((w, i) => {
                 const isCurrent = i === currentIndex;
                 const color = getProgressColor(w.sessionProgress);
@@ -861,7 +887,7 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
               })}
             </div>
 
-            <div className="mt-4 pb-2 text-center">
+            <div className="mt-10 text-center">
               <button
                 onClick={() => {
                   clearSession();
@@ -875,24 +901,9 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
           </div>
         </div>
 
-        {/* Right column: collapsible info toast (desktop only) */}
-        <div className={`hidden lg:block justify-self-end ${isMobile ? "hidden" : ""}`}>
-          {infoMinimized ? (
-            /* Minimized state: just a (?) button */
-            <button
-              onClick={() => {
-                setInfoMinimized(false);
-                saveSession(sessionWords, currentIndex, cycleCount, hskLevel, false, direction);
-              }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-neutral-900 border border-neutral-800 text-gray-500 hover:text-white hover:border-neutral-700 transition-all shadow-lg sticky top-24"
-              title="Show help"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          ) : (
-            /* Expanded state: full info panel */
+        {/* Right column: info panel (desktop only, shown when not minimized) */}
+        <div className="hidden lg:block justify-self-end">
+          {!infoMinimized && (
             <div className="bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-4 pr-11 shadow-xl sticky top-24 max-w-[300px]">
               <div className="text-xs leading-relaxed text-gray-400">
                 <p className="font-semibold text-white">How to:</p>
@@ -926,18 +937,6 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
                   Chinese→English and English→Chinese practice modes.
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setInfoMinimized(true);
-                  saveSession(sessionWords, currentIndex, cycleCount, hskLevel, true, direction);
-                }}
-                className="absolute top-3 right-3 w-8 h-8 inline-flex items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-neutral-800 transition-colors"
-                title="Minimize"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
-                </svg>
-              </button>
             </div>
           )}
         </div>
