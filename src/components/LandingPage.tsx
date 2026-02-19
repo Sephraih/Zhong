@@ -2,27 +2,25 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
-import chinaLandscapeUrl from "../assets/china-landscape.svg";
 
-// Background images (optional):
-// Drop files into `src/assets/` and they will be bundled automatically.
-// Expected names:
-//  - landscape.jpeg (desktop)
-//  - portrait.png   (mobile)
+// Background images (expected):
+//  - src/assets/landscape.jpeg (desktop)
+//  - src/assets/portrait.png   (mobile)
 //
-// We use `import.meta.glob` so missing files won't break builds in sandbox/preview.
-const desktopBgAssets = import.meta.glob("../assets/landscape*.{jpg,jpeg,png,webp}", {
+// We intentionally use `import.meta.glob` so the app still compiles even if the
+// images are not present (preview/sandbox). If missing, we fall back to black.
+const desktopBgExact = import.meta.glob("../assets/landscape.jpeg", {
   eager: true,
   import: "default",
 }) as Record<string, string>;
 
-const mobileBgAssets = import.meta.glob("../assets/portrait*.{jpg,jpeg,png,webp}", {
+const mobileBgExact = import.meta.glob("../assets/portrait.png", {
   eager: true,
   import: "default",
 }) as Record<string, string>;
 
-const DESKTOP_BG_ASSET = Object.values(desktopBgAssets)[0];
-const MOBILE_BG_ASSET = Object.values(mobileBgAssets)[0];
+const DESKTOP_BG_ASSET = Object.values(desktopBgExact)[0] ?? null;
+const MOBILE_BG_ASSET = Object.values(mobileBgExact)[0] ?? null;
 
 interface LandingPageProps {
   onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
@@ -877,18 +875,19 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       {/* China-themed background behind the landing scroll area */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute inset-0 opacity-[0.60]"
+          className="absolute inset-0 opacity-[0.65]"
           style={{
-            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.12), rgba(0,0,0,0.38), rgba(0,0,0,0.84)), ${
-              (isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET)
-                ? `url(${isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET})`
-                : "none"
-            }, url(${chinaLandscapeUrl})`,
-            backgroundSize: "cover, cover, cover",
-            backgroundRepeat: "no-repeat, no-repeat, no-repeat",
-            backgroundPosition: isMobile
-              ? "center top, center top, center bottom"
-              : "center center, center center, center bottom",
+            backgroundImage: (() => {
+              const img = isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET;
+              // If the expected asset is missing, use only the gradient (black background).
+              if (!img) {
+                return "linear-gradient(to bottom, rgba(0,0,0,0.20), rgba(0,0,0,0.55), rgba(0,0,0,0.92))";
+              }
+              return `linear-gradient(to bottom, rgba(0,0,0,0.18), rgba(0,0,0,0.50), rgba(0,0,0,0.90)), url(${img})`;
+            })(),
+            backgroundSize: "cover, cover",
+            backgroundRepeat: "no-repeat, no-repeat",
+            backgroundPosition: isMobile ? "center top, center top" : "center center, center center",
           }}
         />
       </div>
