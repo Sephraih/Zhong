@@ -872,25 +872,32 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   return (
     <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden">
-      {/* China-themed background behind the landing scroll area */}
-      <div className="pointer-events-none absolute inset-0">
-        <div
-          className="absolute inset-0 opacity-[0.65]"
-          style={{
-            backgroundImage: (() => {
-              const img = isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET;
-              // If the expected asset is missing, use only the gradient (black background).
-              if (!img) {
-                return "linear-gradient(to bottom, rgba(0,0,0,0.20), rgba(0,0,0,0.55), rgba(0,0,0,0.92))";
-              }
-              return `linear-gradient(to bottom, rgba(0,0,0,0.18), rgba(0,0,0,0.50), rgba(0,0,0,0.90)), url(${img})`;
-            })(),
-            backgroundSize: "cover, cover",
-            backgroundRepeat: "no-repeat, no-repeat",
-            backgroundPosition: isMobile ? "center top, center top" : "center center, center center",
-          }}
-        />
+      {/*
+        Fixed viewport background (NOT tied to scroll height).
+        This prevents the mobile image from becoming extremely zoomed (because the old
+        absolute background covered the entire tall scroll area and `cover` scaled to that height).
+        It also ensures the background spans the full viewport width on desktop.
+      */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        {/* Image layer */}
+        {(isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET) ? (
+          <img
+            src={(isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET) as string}
+            alt="Chinese landscape background"
+            className="w-full h-full object-cover"
+            style={{
+              objectPosition: isMobile ? "50% 15%" : "50% 50%",
+              opacity: 0.85,
+              filter: "saturate(1.05) contrast(1.05)",
+            }}
+            draggable={false}
+          />
+        ) : null}
+
+        {/* Gradient overlay for readability (works even if the image is missing) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-black/55 to-black/90" />
       </div>
+
       {/* Desktop-only dot nav */}
       {!isMobile && (
         <div className="fixed right-6 top-1/2 -translate-y-1/2 z-40 flex-col gap-2.5 hidden sm:flex">
