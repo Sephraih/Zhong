@@ -2,11 +2,27 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
-import chinaLandscapeUrl from "../assets/landscape-bg.png";
+import chinaLandscapeUrl from "../assets/china-landscape.svg";
 
-// Prefer a user-provided PNG in /public (not bundled into JS).
-// If it’s missing, the SVG fallback will still render.
-const LANDSCAPE_BG_PNG = "/landscape-bg.png";
+// Background images (optional):
+// Drop files into `src/assets/` and they will be bundled automatically.
+// Expected names:
+//  - landscape.jpeg (desktop)
+//  - portrait.png   (mobile)
+//
+// We use `import.meta.glob` so missing files won't break builds in sandbox/preview.
+const desktopBgAssets = import.meta.glob("../assets/landscape*.{jpg,jpeg,png,webp}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+const mobileBgAssets = import.meta.glob("../assets/portrait*.{jpg,jpeg,png,webp}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+const DESKTOP_BG_ASSET = Object.values(desktopBgAssets)[0];
+const MOBILE_BG_ASSET = Object.values(mobileBgAssets)[0];
 
 interface LandingPageProps {
   onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
@@ -863,10 +879,16 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         <div
           className="absolute inset-0 opacity-[0.60]"
           style={{
-            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.10), rgba(0,0,0,0.35), rgba(0,0,0,0.82)), url(${LANDSCAPE_BG_PNG}), url(${chinaLandscapeUrl})`,
+            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.12), rgba(0,0,0,0.38), rgba(0,0,0,0.84)), ${
+              (isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET)
+                ? `url(${isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET})`
+                : "none"
+            }, url(${chinaLandscapeUrl})`,
             backgroundSize: "cover, cover, cover",
             backgroundRepeat: "no-repeat, no-repeat, no-repeat",
-            backgroundPosition: "center center, center center, center bottom",
+            backgroundPosition: isMobile
+              ? "center top, center top, center bottom"
+              : "center center, center center, center bottom",
           }}
         />
       </div>
