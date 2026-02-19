@@ -2,7 +2,11 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
-import chinaLandscapeUrl from "../assets/landscape-bg.png";
+import chinaLandscapeUrl from "../assets/china-landscape.svg";
+
+// Prefer a user-provided PNG in /public (not bundled into JS).
+// If it’s missing, the SVG fallback will still render.
+const LANDSCAPE_BG_PNG = "/landscape-bg.png";
 
 interface LandingPageProps {
   onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
@@ -12,53 +16,11 @@ type ModeId = "browse" | "practice" | "flashcards" | "quiz";
 
 type SectionId = "hero" | ModeId | "footer";
 
-function svgDataUri(svg: string) {
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
-
-function InkLandscape({ accent = "#ef4444" }: { accent?: string }) {
-  const svg = `
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>
-  <defs>
-    <linearGradient id='mist' x1='0' y1='0' x2='0' y2='1'>
-      <stop offset='0' stop-color='${accent}' stop-opacity='0.00'/>
-      <stop offset='1' stop-color='${accent}' stop-opacity='0.25'/>
-    </linearGradient>
-    <filter id='blur' x='-20%' y='-20%' width='140%' height='140%'>
-      <feGaussianBlur stdDeviation='8'/>
-    </filter>
-  </defs>
-  <rect width='1200' height='800' fill='transparent'/>
-  <g filter='url(#blur)'>
-    <path d='M0 560 C120 520 180 500 260 520 C330 540 380 520 470 480 C560 440 650 430 760 470 C860 505 920 470 1020 430 C1100 400 1160 410 1200 430 L1200 800 L0 800 Z' fill='url(#mist)' opacity='0.55'/>
-    <path d='M0 610 C130 600 220 560 310 560 C410 560 480 600 580 585 C680 570 740 540 860 560 C980 580 1040 630 1200 610 L1200 800 L0 800 Z' fill='${accent}' opacity='0.10'/>
-    <path d='M0 660 C150 690 240 640 330 640 C460 640 520 705 650 680 C770 655 850 610 970 630 C1080 650 1130 700 1200 690 L1200 800 L0 800 Z' fill='${accent}' opacity='0.08'/>
-  </g>
-  <g opacity='0.12'>
-    <circle cx='950' cy='160' r='60' fill='${accent}'/>
-    <circle cx='1020' cy='190' r='22' fill='${accent}' opacity='0.6'/>
-  </g>
-</svg>`;
-
-  return (
-    <div
-      aria-hidden
-      className="absolute inset-0 opacity-25 pointer-events-none"
-      style={{
-        backgroundImage: svgDataUri(svg),
-        backgroundSize: "cover",
-        backgroundPosition: "center bottom",
-      }}
-    />
-  );
-}
-
 function PreviewFrame({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="relative w-full max-w-md mx-auto">
-      <div className="absolute -inset-6 bg-white/5 rounded-[2rem] blur-2xl" />
-      <div className="relative rounded-[1.35rem] border-2 border-white/25 shadow-[0_0_70px_rgba(255,255,255,0.08)] ring-1 ring-white/10 overflow-hidden bg-neutral-950/70 backdrop-blur-md">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/70 backdrop-blur">
+      <div className="relative rounded-[1.35rem] border-2 border-white/30 shadow-2xl ring-1 ring-white/10 overflow-hidden bg-neutral-950/80">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-neutral-950/80">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-red-500/60" />
             <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
@@ -67,7 +29,7 @@ function PreviewFrame({ title, children }: { title: string; children: ReactNode 
           <div className="ml-3 text-xs text-gray-300 truncate">{title}</div>
           <div className="ml-auto w-20 h-6 rounded-md bg-white/5" />
         </div>
-        <div className="bg-neutral-900/35">{children}</div>
+        <div className="bg-neutral-900/50">{children}</div>
       </div>
     </div>
   );
@@ -511,7 +473,6 @@ function ModeSectionDesktop({
   subtitle,
   description,
   bullets,
-  accent,
   Preview,
   onSelectMode,
   onPrev,
@@ -524,7 +485,6 @@ function ModeSectionDesktop({
   subtitle: string;
   description: string;
   bullets: string[];
-  accent: string;
   Preview: () => ReactElement;
   onSelectMode: (id: ModeId) => void;
   onPrev: () => void;
@@ -546,9 +506,6 @@ function ModeSectionDesktop({
 
   return (
     <section className="snap-center min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-      <div className="absolute inset-0 bg-black/20" />
-      <InkLandscape accent={accent} />
-
       <div className="relative z-10 w-full max-w-6xl mx-auto px-6 lg:px-8">
         <div
           className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center ${
@@ -623,7 +580,6 @@ function ModeSectionMobile({
   subtitle,
   description,
   bullets,
-  accent,
   Preview,
   onSelectMode,
 }: {
@@ -633,7 +589,6 @@ function ModeSectionMobile({
   subtitle: string;
   description: string;
   bullets: string[];
-  accent: string;
   Preview: () => ReactElement;
   onSelectMode: (id: ModeId) => void;
 }) {
@@ -650,9 +605,6 @@ function ModeSectionMobile({
 
   return (
     <section id={id} className="relative overflow-hidden py-14">
-      <div className="absolute inset-0 bg-black/20" />
-      <InkLandscape accent={accent} />
-
       <div className="relative z-10 max-w-md mx-auto px-4">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-3xl">{icon}</span>
@@ -731,7 +683,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         "Expand 1–3 real example sentences per word",
         "Hover (desktop) or tap (mobile) for per-character pinyin",
       ],
-      accent: "#ef4444",
       Preview: BrowsePreview,
     },
     {
@@ -747,7 +698,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         "Got it / Forgot it adjusts difficulty",
         "Learned it removes the word from the session",
       ],
-      accent: "#f97316",
       Preview: PracticePreview,
     },
     {
@@ -763,7 +713,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         "Filter by learned / still-learning status",
         "Audio pronunciation with one tap",
       ],
-      accent: "#3b82f6",
       Preview: FlashcardPreview,
     },
     {
@@ -779,17 +728,14 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         "Instant feedback: green correct / red wrong",
         "Hover/tap hanzi to reveal pinyin",
       ],
-      accent: "#eab308",
       Preview: QuizPreview,
     },
   ];
 
   const hero = (
     <section id="hero" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-black/20" />
-      <InkLandscape accent="#ef4444" />
-      <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
+      <div className="absolute top-1/4 left-1/4 w-56 h-56 bg-red-600/10 rounded-full blur-2xl" />
+      <div className="absolute bottom-1/4 right-1/4 w-44 h-44 bg-red-400/8 rounded-full blur-2xl" />
 
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-3xl mx-auto"}>
         <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
@@ -800,7 +746,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           Learn Mandarin
         </h1>
         <p className="mt-3 text-xl font-light text-red-400">One focused session at a time.</p>
-        <div className="mt-5 inline-block rounded-2xl bg-neutral-950/40 backdrop-blur-md border border-white/10 px-5 py-4">
+        <div className="mt-5 inline-block rounded-2xl bg-neutral-950/65 border border-white/10 px-5 py-4">
           <p className="text-gray-200/80 leading-relaxed">
             HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
           </p>
@@ -822,7 +768,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           ].map((s) => (
             <span
               key={s}
-              className="px-3 py-1.5 rounded-full bg-neutral-950/40 backdrop-blur border border-white/10"
+              className="px-3 py-1.5 rounded-full bg-neutral-950/55 border border-white/10"
             >
               {s}
             </span>
@@ -870,9 +816,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   const footer = (
     <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-black/20" />
-      <InkLandscape accent="#ef4444" />
-
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-2xl mx-auto px-4"}>
         <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
           <span className="text-white text-2xl font-bold">汉</span>
@@ -918,15 +861,14 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       {/* China-themed background behind the landing scroll area */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute inset-0 opacity-[0.70] filter brightness-125 contrast-125 saturate-150"
+          className="absolute inset-0 opacity-[0.60]"
           style={{
-            backgroundImage: `url(${chinaLandscapeUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center bottom",
+            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.10), rgba(0,0,0,0.35), rgba(0,0,0,0.82)), url(${LANDSCAPE_BG_PNG}), url(${chinaLandscapeUrl})`,
+            backgroundSize: "cover, cover, cover",
+            backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+            backgroundPosition: "center center, center center, center bottom",
           }}
         />
-        {/* Dark overlay to ensure readability (lighter so the image is actually visible) */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/55 to-black/85" />
       </div>
       {/* Desktop-only dot nav */}
       {!isMobile && (
@@ -958,7 +900,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               subtitle={m.subtitle}
               description={m.description}
               bullets={m.bullets}
-              accent={m.accent}
               Preview={m.Preview}
               onSelectMode={onSelectMode}
             />
@@ -981,7 +922,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               subtitle={m.subtitle}
               description={m.description}
               bullets={m.bullets}
-              accent={m.accent}
               Preview={m.Preview}
               onSelectMode={onSelectMode}
               onPrev={scrollPrev}
