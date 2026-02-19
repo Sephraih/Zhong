@@ -191,7 +191,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
       {/* Flashcard */}
       <div
-        className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[min(580px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative pb-4 overflow-hidden"
+        className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 h-[min(580px,calc(100svh-260px))] flex flex-col items-center justify-center cursor-pointer select-none hover:border-neutral-700 transition-all relative pb-4 overflow-hidden"
         onClick={(e) => {
           if (isHoverCharacterEvent(e)) return;
           setIsFlipped(!isFlipped);
