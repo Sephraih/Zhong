@@ -546,7 +546,7 @@ function ModeSectionDesktop({
 
   return (
     <section className="snap-center min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-      <div className="absolute inset-0 bg-black/35" />
+      <div className="absolute inset-0 bg-black/20" />
       <InkLandscape accent={accent} />
 
       <div className="relative z-10 w-full max-w-6xl mx-auto px-6 lg:px-8">
@@ -650,7 +650,7 @@ function ModeSectionMobile({
 
   return (
     <section id={id} className="relative overflow-hidden py-14">
-      <div className="absolute inset-0 bg-black/35" />
+      <div className="absolute inset-0 bg-black/20" />
       <InkLandscape accent={accent} />
 
       <div className="relative z-10 max-w-md mx-auto px-4">
@@ -786,7 +786,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
   const hero = (
     <section id="hero" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-black/35" />
+      <div className="absolute inset-0 bg-black/20" />
       <InkLandscape accent="#ef4444" />
       <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/10 rounded-full blur-3xl" />
       <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-red-400/8 rounded-full blur-3xl" />
@@ -800,9 +800,11 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           Learn Mandarin
         </h1>
         <p className="mt-3 text-xl font-light text-red-400">One focused session at a time.</p>
-        <p className="mt-5 text-gray-400 leading-relaxed">
-          HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
-        </p>
+        <div className="mt-5 inline-block rounded-2xl bg-neutral-950/40 backdrop-blur-md border border-white/10 px-5 py-4">
+          <p className="text-gray-200/80 leading-relaxed">
+            HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
+          </p>
+        </div>
 
         <div className="mt-8 inline-flex items-end gap-2 px-6 py-4 rounded-2xl bg-neutral-900/80 border border-neutral-700 shadow-xl">
           {[{ c: "你", p: "nǐ" }, { c: "好", p: "hǎo" }, { c: "！", p: "" }].map((x, i) => (
@@ -867,8 +869,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
   );
 
   const footer = (
-    <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden bg-black pb-[max(2rem,env(safe-area-inset-bottom))]"}>
-      <div className="absolute inset-0 bg-black/35" />
+    <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden pb-[max(2rem,env(safe-area-inset-bottom))]"}>
+      <div className="absolute inset-0 bg-black/20" />
       <InkLandscape accent="#ef4444" />
 
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-2xl mx-auto px-4"}>
@@ -916,15 +918,15 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       {/* China-themed background behind the landing scroll area */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute inset-0 opacity-[0.35]"
+          className="absolute inset-0 opacity-[0.70] filter brightness-125 contrast-125 saturate-150"
           style={{
             backgroundImage: `url(${chinaLandscapeUrl})`,
             backgroundSize: "cover",
             backgroundPosition: "center bottom",
           }}
         />
-        {/* Dark overlay to ensure readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/70 to-black" />
+        {/* Dark overlay to ensure readability (lighter so the image is actually visible) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/55 to-black/85" />
       </div>
       {/* Desktop-only dot nav */}
       {!isMobile && (
