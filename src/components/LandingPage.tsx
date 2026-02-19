@@ -3,18 +3,20 @@ import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
 
-// Background images (expected):
-//  - src/assets/landscape.jpeg (desktop)
-//  - src/assets/portrait.png   (mobile)
+// Background images (expected in src/assets/):
+//  - landscape.(jpg|jpeg|png|webp)  (desktop)
+//  - portrait.(jpg|jpeg|png|webp)   (mobile)
 //
 // We intentionally use `import.meta.glob` so the app still compiles even if the
 // images are not present (preview/sandbox). If missing, we fall back to black.
-const desktopBgExact = import.meta.glob("../assets/landscape.jpeg", {
+//
+// NOTE: paths + filenames are case-sensitive.
+const desktopBgExact = import.meta.glob("../assets/landscape.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}", {
   eager: true,
   import: "default",
 }) as Record<string, string>;
 
-const mobileBgExact = import.meta.glob("../assets/portrait.png", {
+const mobileBgExact = import.meta.glob("../assets/portrait.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}", {
   eager: true,
   import: "default",
 }) as Record<string, string>;
@@ -871,14 +873,14 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
   );
 
   return (
-    <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden">
+    <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden z-10">
       {/*
         Fixed viewport background (NOT tied to scroll height).
         This prevents the mobile image from becoming extremely zoomed (because the old
         absolute background covered the entire tall scroll area and `cover` scaled to that height).
         It also ensures the background spans the full viewport width on desktop.
       */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
+      <div className="pointer-events-none fixed inset-0 z-0">
         {/* Image layer */}
         {(isMobile ? MOBILE_BG_ASSET : DESKTOP_BG_ASSET) ? (
           <img
