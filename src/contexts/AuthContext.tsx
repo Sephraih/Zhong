@@ -220,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      setIsLoading(true);
       console.log(`🛒 Starting HSK ${level} purchase...`);
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
@@ -238,12 +239,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (body.url) {
         console.log("🔗 Redirecting to Stripe...");
-        window.location.href = body.url;
+        window.location.assign(body.url);
+        return;
       }
+
+      throw new Error("No checkout URL returned from server");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Purchase failed";
       console.error("❌ Purchase error:", message);
       setError(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -255,6 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      setIsLoading(true);
       console.log("🛒 Starting Premium purchase...");
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
@@ -272,12 +279,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (body.url) {
         console.log("🔗 Redirecting to Stripe...");
-        window.location.href = body.url;
+        window.location.assign(body.url);
+        return;
       }
+
+      throw new Error("No checkout URL returned from server");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Purchase failed";
       console.error("❌ Purchase error:", message);
       setError(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 

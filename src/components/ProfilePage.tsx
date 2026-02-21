@@ -196,6 +196,10 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 >
                   Upgrade to Premium
                 </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  If nothing happens, open DevTools → Network and look for <code>/api/create-checkout-session</code>.
+                </p>
+                <p className="text-xs text-gray-400 mt-2">If nothing happens, open DevTools → Network and check <code>/api/create-checkout-session</code>.</p>
               </div>
             </div>
           </div>
