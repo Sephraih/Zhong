@@ -39,33 +39,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get profile with account tier
+    // Get profile with account_tier
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_tier, stripe_customer_id')
+      .select('account_tier, is_premium, stripe_customer_id')
       .eq('id', user.id)
       .single();
 
     // Get purchased levels
-    const { data: purchases } = await supabase
+    const { data: purchasedLevelsData } = await supabase
       .from('purchased_levels')
       .select('hsk_level')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .order('hsk_level', { ascending: true });
 
-    // Build purchased levels array (always include level 1 for free)
-    let purchasedLevels = [1]; // Level 1 is always free for logged-in users
-    
-    if (profile?.account_tier === 'premium') {
-      // Premium users get all levels
-      purchasedLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-    } else if (purchases && purchases.length > 0) {
-      const levels = purchases.map(p => p.hsk_level);
-      purchasedLevels = [...new Set([1, ...levels])].sort((a, b) => a - b);
+    const purchasedLevels = purchasedLevelsData?.map(p => p.hsk_level) || [];
+
+    // Determine account tier
+    // Check both account_tier column and legacy is_premium boolean
+    let accountTier = profile?.account_tier || 'free';
+    if (profile?.is_premium === true && accountTier === 'free') {
+      accountTier = 'premium';
+    }
+
+    // Also check auth metadata for premium status
+    const authPremium = user.app_metadata?.account_tier === 'premium' || user.app_metadata?.is_premium === true;
+    if (authPremium && accountTier === 'free') {
+      accountTier = 'premium';
     }
 
     res.json({
       user,
-      account_tier: profile?.account_tier || 'free',
+      account_tier: accountTier,
       purchased_levels: purchasedLevels,
       stripe_customer_id: profile?.stripe_customer_id || null,
     });

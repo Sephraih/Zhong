@@ -1,57 +1,80 @@
 # 汉语学习 — Chinese Language Learning App
 
-A modern HSK 1 & 2 vocabulary learning app built with React, Vite, and Tailwind CSS.
+A modern Chinese vocabulary learning app featuring HSK 1-4 words with examples, interactive flashcards, practice sessions, and quizzes.
 
 ## Features
 
-- 📚 **Browse** — Search and filter vocabulary by HSK level, category, and learning status
-- 🔥 **Practice** — Spaced repetition sessions with progress tracking
-- 🃏 **Flashcards** — Quick drilling with Chinese ↔ English toggle
-- ✏️ **Quiz** — Multiple choice questions to test your knowledge
-- 📱 **Mobile-friendly** — Tap-to-reveal pinyin on touch devices
-- 🔊 **Text-to-speech** — Hear native pronunciation (works best in Edge/Chrome)
+- **Browse Mode**: Search and filter vocabulary by HSK level, category, and learned status
+- **Practice Mode**: Spaced repetition with progress tracking (8 new + 2 review words per session)
+- **Flashcard Mode**: Quick drilling with shuffle, prev/next navigation, and learned/learning toggle
+- **Quiz Mode**: Multiple choice questions to test recall
+- **Pinyin Hover/Tap**: Hover (desktop) or tap (mobile) any Chinese character to see its pinyin
+- **Text-to-Speech**: Click the speaker icon to hear pronunciation
+- **Mobile Optimized**: Responsive design with touch-friendly interactions
+- **Progress Persistence**: Learning progress saved to localStorage
 
-## Quick Start (Offline Mode)
+## User Tiers
 
-The app works out of the box with built-in fallback vocabulary (~160 words):
+| Tier | Access |
+|------|--------|
+| **Anonymous** (not logged in) | Top 200 HSK 1 words only |
+| **Free** (logged in) | Full HSK 1 access |
+| **Per-level Purchase** | Buy individual HSK levels (2, 3, 4) |
+| **Premium** | All current and future levels (1-9) |
+
+## Quick Start
 
 ```bash
+# Install dependencies
 npm install
+
+# Run development server
 npm run dev
+
+# Build for production
+npm run build
 ```
 
-Open http://localhost:5173 in your browser.
+The app works offline with fallback vocabulary data (~160 words). For full functionality, configure Supabase and Stripe.
 
-## Enabling Supabase (Full 450+ Words)
+---
 
-To load the complete HSK vocabulary from your Supabase database:
+## Supabase Setup
 
-### 1. Set Environment Variables
+### 1. Create Supabase Project
 
-Create a `.env` file in the project root:
+1. Go to [supabase.com](https://supabase.com) and create a new project
+2. Note your **Project URL** and **anon public key** from Settings → API
 
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-```
+### 2. Run Database Migrations
 
-### 2. Create Database Tables
+Run these SQL scripts in **Supabase Dashboard → SQL Editor**:
 
-Run this SQL in your Supabase SQL Editor:
-
+#### Basic Tables (`SUPABASE_SETUP.sql`)
 ```sql
--- HSK Words table
-CREATE TABLE IF NOT EXISTS hsk_words (
+-- Creates: profiles, subscriptions tables
+-- Run the contents of SUPABASE_SETUP.sql
+```
+
+#### Tiered Access Tables (`supabase_tiered_access.sql`)
+```sql
+-- Creates: purchased_levels table, account_tier column, get_user_access() function
+-- Run the contents of supabase_tiered_access.sql
+```
+
+#### HSK Vocabulary Tables
+```sql
+CREATE TABLE hsk_words (
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   hanzi       TEXT NOT NULL UNIQUE,
   pinyin      TEXT NOT NULL,
   english     TEXT NOT NULL,
   hsk_level   INTEGER NOT NULL,
+  word_type   TEXT,
   created_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- Example sentences table
-CREATE TABLE IF NOT EXISTS example_sentences (
+CREATE TABLE example_sentences (
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   word_id     BIGINT NOT NULL REFERENCES hsk_words(id) ON DELETE CASCADE,
   hanzi       TEXT NOT NULL,
@@ -62,97 +85,59 @@ CREATE TABLE IF NOT EXISTS example_sentences (
   UNIQUE(word_id, hanzi)
 );
 
--- Enable Row Level Security
+-- Enable RLS
 ALTER TABLE hsk_words ENABLE ROW LEVEL SECURITY;
 ALTER TABLE example_sentences ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access (required for the app to fetch data)
-CREATE POLICY "Public read hsk_words" ON hsk_words FOR SELECT USING (true);
-CREATE POLICY "Public read example_sentences" ON example_sentences FOR SELECT USING (true);
+-- Public read access
+CREATE POLICY "public read hsk_words" ON hsk_words FOR SELECT USING (true);
+CREATE POLICY "public read examples" ON example_sentences FOR SELECT USING (true);
+```
 
--- Create indexes for faster lookups
-CREATE INDEX IF NOT EXISTS idx_hsk_words_level ON hsk_words(hsk_level);
-CREATE INDEX IF NOT EXISTS idx_example_sentences_word ON example_sentences(word_id);
+#### Create Materialized View (for fast queries)
+```sql
+CREATE MATERIALIZED VIEW hsk_words_with_examples AS
+SELECT
+  w.id AS word_id,
+  w.hanzi,
+  w.pinyin,
+  w.english,
+  w.hsk_level,
+  w.word_type,
+  COALESCE(
+    json_agg(
+      json_build_object('id', s.id, 'hanzi', s.hanzi, 'pinyin', s.pinyin, 'english', s.english)
+      ORDER BY s.id
+    ) FILTER (WHERE s.id IS NOT NULL),
+    '[]'::json
+  ) AS examples
+FROM hsk_words w
+LEFT JOIN example_sentences s ON s.word_id = w.id
+GROUP BY w.id, w.hanzi, w.pinyin, w.english, w.hsk_level, w.word_type;
+
+CREATE UNIQUE INDEX idx_mv_word_id ON hsk_words_with_examples(word_id);
+CREATE INDEX idx_mv_hsk_level ON hsk_words_with_examples(hsk_level);
+
+GRANT SELECT ON hsk_words_with_examples TO anon, authenticated;
 ```
 
 ### 3. Import Vocabulary Data
 
-Import your HSK vocabulary data into the `hsk_words` table and example sentences into `example_sentences`.
-
-The app expects this JSON format for words:
-```json
-{
-  "hanzi": "你好",
-  "pinyin": "nǐ hǎo", 
-  "english": "hello, hi",
-  "hsk_level": 1
-}
+Import your HSK vocabulary data into `hsk_words` and `example_sentences` tables, then refresh the view:
+```sql
+REFRESH MATERIALIZED VIEW hsk_words_with_examples;
 ```
 
-And this format for example sentences:
-```json
-{
-  "word_id": 1,
-  "hanzi": "你好，很高兴认识你。",
-  "pinyin": "nǐ hǎo ， hěn gāo xìng rèn shi nǐ 。",
-  "english": "Hello, nice to meet you."
-}
-```
+---
 
-### 4. Restart the Dev Server
+## Stripe Setup (Payments)
 
-```bash
-npm run dev
-```
+### 1. Create Stripe Products
 
-The app will automatically fetch from Supabase if the environment variables are set. If Supabase is unavailable, it falls back to the built-in vocabulary.
+In **Stripe Dashboard → Products**, create these one-time payment products:
 
-## Deployment to Vercel
-
-### Environment Variables
-
-Set these in your Vercel project settings (Settings → Environment Variables):
-
-| Variable | Description |
-|----------|-------------|
-| `VITE_SUPABASE_URL` | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
-
-### Deploy
-
-```bash
-vercel
-```
-
-Or connect your GitHub repo to Vercel for automatic deployments.
-
-## Tiered Access System
-
-The app supports a tiered access system:
-
-| User Type | Access |
-|-----------|--------|
-| **Anonymous** (not logged in) | Top 200 HSK 1 words only (preview) |
-| **Free** (logged in) | Full HSK 1 access |
-| **Purchased Level** | Access to specific purchased HSK levels (2, 3, 4) |
-| **Premium** | All HSK levels (1-9), including future content |
-
-### Setting Up Tiered Access
-
-#### 1. Run Supabase Migration
-
-Run the SQL from `supabase_tiered_access.sql` in Supabase SQL Editor. This will:
-- Add `account_tier` column to profiles ('free' or 'premium')
-- Create `purchased_levels` table for individual level purchases
-- Add RLS policies
-- Create helper function `get_user_access()`
-
-#### 2. Create Stripe Products (One-Time Payments)
-
-In **Stripe Dashboard → Products**, create:
-
-| Product | Price | Environment Variable |
-|---------|-------|---------------------|
+| Product | Suggested Price | Environment Variable |
+|---------|----------------|---------------------|
 | HSK Level 2 | $4.99 | `STRIPE_PRICE_HSK2` |
 | HSK Level 3 | $6.99 | `STRIPE_PRICE_HSK3` |
 | HSK Level 4 | $9.99 | `STRIPE_PRICE_HSK4` |
@@ -160,101 +145,153 @@ In **Stripe Dashboard → Products**, create:
 
 **Important**: Create as **one-time payments**, not subscriptions!
 
-#### 3. Configure Stripe Webhook
+### 2. Configure Webhook
 
-In Stripe Dashboard, add webhook endpoint:
-- URL: `https://your-app.vercel.app/api/webhook`
-- Events: `checkout.session.completed`, `payment_intent.succeeded`, `payment_intent.payment_failed`
+In **Stripe Dashboard → Developers → Webhooks**, add endpoint:
+
+- **URL**: `https://your-app.vercel.app/api/webhook`
+- **Events to listen**: 
+  - `checkout.session.completed`
+  - `payment_intent.succeeded`
+  - `payment_intent.payment_failed`
+
+Copy the **Signing secret** for `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
-## Enabling Auth & Premium Features
+## Environment Variables
 
-The app includes optional authentication and Stripe payment integration. To enable:
-
-### 1. Additional Environment Variables
+### Local Development (`.env`)
 
 ```env
-# Supabase (service role for server-side operations)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### Vercel Deployment
+
+Set these in **Vercel Dashboard → Settings → Environment Variables**:
+
+```env
+# Frontend (VITE_ prefix)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+
+# Backend API routes
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Stripe
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SECRET_KEY=sk_live_xxx (or sk_test_xxx for testing)
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+STRIPE_PRICE_HSK2=price_xxx
+STRIPE_PRICE_HSK3=price_xxx
+STRIPE_PRICE_HSK4=price_xxx
+STRIPE_PRICE_PREMIUM=price_xxx
 
-# Stripe price IDs for tiered purchases (one-time payments)
-STRIPE_PRICE_HSK2=price_...
-STRIPE_PRICE_HSK3=price_...
-STRIPE_PRICE_HSK4=price_...
-STRIPE_PRICE_PREMIUM=price_...
-
-# Frontend URL (for Stripe redirects)
+# URLs
 FRONTEND_URL=https://your-app.vercel.app
 ```
 
-### 2. Set Up Auth Tables in Supabase
-
-Run the SQL from `SUPABASE_SETUP.sql` to create the `profiles` and `subscriptions` tables.
-
-### 3. Configure Stripe Webhook
-
-In your Stripe Dashboard, add a webhook endpoint:
-- URL: `https://your-app.vercel.app/api/webhook`
-- Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
-
-### 4. Auth is Enabled by Default
-
-The auth components are already imported and working in `src/App.tsx`:
-- `AuthProvider` wraps the entire app
-- `AuthHeader` shows Sign In button (or user menu when logged in)
-- `AuthModal` handles login/signup
-- `ProfilePage` shows subscription status and upgrade button
-
-**Note:** If Supabase is not configured, auth operations will show a friendly "not available in preview mode" message instead of crashing.
+---
 
 ## Project Structure
 
 ```
-src/
-├── App.tsx                 # Main app component
-├── main.tsx                # Entry point
-├── index.css               # Tailwind CSS
-├── supabaseClient.ts       # Supabase client (safe if env vars missing)
-├── components/
-│   ├── LandingPage.tsx     # Home page with mode selection
-│   ├── VocabCard.tsx       # Vocabulary card for Browse mode
-│   ├── FlashcardMode.tsx   # Flashcard study mode
-│   ├── PracticeMode.tsx    # Spaced repetition practice
-│   ├── QuizMode.tsx        # Multiple choice quiz
-│   ├── HoverCharacter.tsx  # Pinyin hover/tap component
-│   ├── SpeakerButton.tsx   # Text-to-speech button
-│   ├── AuthHeader.tsx      # User menu (auth enabled)
-│   ├── AuthModal.tsx       # Login/signup modal (auth enabled)
-│   └── ProfilePage.tsx     # User profile (auth enabled)
-├── contexts/
-│   └── AuthContext.tsx     # Auth state management
-├── data/
-│   ├── vocabulary.ts       # VocabWord type definition
-│   ├── fallbackData.ts     # Built-in vocabulary (offline mode)
-│   └── supabaseVocab.ts    # Supabase data fetching
-├── hooks/
-│   ├── useLearnedState.ts  # Learning progress (localStorage)
-│   └── useIsMobile.ts      # Mobile device detection
-└── utils/
-    └── cn.ts               # Tailwind class merging utility
-
-api/                        # Vercel serverless functions
-├── auth/
-│   ├── login.ts
-│   ├── logout.ts
-│   ├── me.ts
-│   └── signup.ts
-├── create-checkout-session.ts
-├── subscription.ts
-├── webhook.ts
-└── health.ts
+├── src/
+│   ├── App.tsx              # Main app component
+│   ├── main.tsx             # React entry point
+│   ├── index.css            # Tailwind imports
+│   ├── supabaseClient.ts    # Supabase client (safe with missing env vars)
+│   │
+│   ├── components/
+│   │   ├── LandingPage.tsx     # Home page with mode previews
+│   │   ├── VocabCard.tsx       # Individual vocabulary card
+│   │   ├── FlashcardMode.tsx   # Flashcard study mode
+│   │   ├── PracticeMode.tsx    # Spaced repetition practice
+│   │   ├── QuizMode.tsx        # Multiple choice quiz
+│   │   ├── ProfilePage.tsx     # User profile & purchases
+│   │   ├── AuthModal.tsx       # Login/signup modal
+│   │   ├── AuthHeader.tsx      # Header auth controls
+│   │   ├── HoverCharacter.tsx  # Pinyin hover/tap component
+│   │   ├── SpeakerButton.tsx   # Text-to-speech button
+│   │   └── ...
+│   │
+│   ├── contexts/
+│   │   └── AuthContext.tsx     # Authentication state
+│   │
+│   ├── data/
+│   │   ├── vocabulary.ts       # VocabWord type definition
+│   │   ├── supabaseVocab.ts    # Fetch vocabulary from Supabase
+│   │   └── fallbackData.ts     # Offline fallback vocabulary
+│   │
+│   ├── hooks/
+│   │   ├── useLearnedState.ts  # Track learned words in localStorage
+│   │   └── useIsMobile.ts      # Mobile device detection
+│   │
+│   └── utils/
+│       ├── cn.ts               # Tailwind class merging
+│       ├── hskColors.ts        # HSK badge color helpers
+│       └── hskAccess.ts        # Access level utilities
+│
+├── api/                        # Vercel serverless functions
+│   ├── auth/
+│   │   ├── login.ts
+│   │   ├── signup.ts
+│   │   ├── logout.ts
+│   │   └── me.ts
+│   ├── create-checkout-session.ts
+│   ├── webhook.ts
+│   ├── subscription.ts
+│   └── health.ts
+│
+├── public/
+│   ├── landscape.jpeg         # Desktop background
+│   └── portrait.png           # Mobile background
+│
+└── Configuration files
+    ├── vercel.json            # Vercel deployment config
+    ├── tsconfig.json          # TypeScript config
+    └── vite.config.ts         # Vite build config
 ```
+
+---
+
+## Deployment to Vercel
+
+1. Push your code to GitHub
+2. Import the repository in Vercel
+3. Set all environment variables (see above)
+4. Deploy!
+
+Vercel will automatically:
+- Build the frontend with Vite
+- Deploy API routes as serverless functions
+- Apply rewrites from `vercel.json`
+
+---
+
+## Development Notes
+
+### Offline Mode
+The app works without any backend connection:
+- Falls back to ~160 HSK 1-2 words from `fallbackData.ts`
+- Authentication features are gracefully disabled
+- All study modes remain functional
+
+### Mobile Support
+- Touch-friendly tap-to-reveal pinyin
+- Auto-hiding header on scroll
+- Responsive card sizing with stable viewport height
+- Swipe gestures in Practice mode (optional)
+
+### Performance
+- Vocabulary data is cached in localStorage (14-day TTL)
+- Browse mode uses pagination to avoid rendering 1000+ cards
+- Supabase queries use a materialized view for fast joins
+- Background data refresh uses React transitions
+
+---
 
 ## License
 

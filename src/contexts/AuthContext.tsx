@@ -25,13 +25,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Use same-origin API in production, configurable for local dev
+// Use same-origin API calls (works on Vercel)
 const API_URL = import.meta.env.VITE_API_BASE || "";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
-  const [purchasedLevels, setPurchasedLevels] = useState<number[]>([1]); // Level 1 always free for logged-in users
+  const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,20 +51,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await response.json();
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
-        setPurchasedLevels(data.purchased_levels || [1]);
+        setPurchasedLevels(data.purchased_levels || []);
         console.log("Auth refreshed. Tier:", data.account_tier, "Levels:", data.purchased_levels);
         return data;
       } else {
         localStorage.removeItem("hanyu_auth_token");
         setUser(null);
         setAccountTier('free');
-        setPurchasedLevels([1]);
+        setPurchasedLevels([]);
       }
     } catch {
       console.error("Failed to fetch user");
       setUser(null);
       setAccountTier('free');
-      setPurchasedLevels([1]);
+      setPurchasedLevels([]);
     }
     return null;
   }, []);
@@ -95,15 +95,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Remove the query param from URL
         window.history.replaceState({}, "", window.location.pathname);
 
-        // Poll for purchase status update (webhook may take a moment)
+        // Poll for status update (webhook may take a moment)
         let attempts = 0;
         const pollInterval = setInterval(async () => {
           attempts++;
           console.log(`🔄 Checking purchase status... (attempt ${attempts})`);
-          await fetchUser(token);
-          if (attempts >= 10) {
+          const data = await fetchUser(token);
+          if (data?.account_tier === 'premium' || (data?.purchased_levels && data.purchased_levels.length > 0) || attempts >= 10) {
             clearInterval(pollInterval);
-            console.log("✅ Finished polling for purchase status");
+            if (data?.account_tier === 'premium') {
+              console.log("✅ Premium status confirmed!");
+            } else if (data?.purchased_levels?.length > 0) {
+              console.log("✅ Level purchase confirmed!");
+            } else {
+              console.log("⚠️ Purchase status not yet updated. It may take a moment.");
+            }
           }
         }, 2000);
       } else if (paymentStatus === "cancelled") {
@@ -114,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, [fetchUser]);
 
-  // Re-fetch when tab becomes visible (e.g. returning from Stripe)
+  // Re-fetch when tab becomes visible
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -157,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
-        setPurchasedLevels(data.purchased_levels || [1]);
+        setPurchasedLevels(data.purchased_levels || []);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -189,13 +195,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Email confirmation required
         setUser(null);
         setAccountTier('free');
-        setPurchasedLevels([1]);
+        setPurchasedLevels([]);
         localStorage.removeItem("hanyu_auth_token");
       } else if (data.session?.access_token) {
         localStorage.setItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier('free');
-        setPurchasedLevels([1]);
+        setPurchasedLevels([]);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Signup failed";
@@ -214,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log(`🛒 Starting purchase for HSK Level ${level}...`);
+      console.log(`🛒 Starting HSK ${level} purchase...`);
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
         headers: {
@@ -222,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          product_type: 'hsk_level',
+          product_type: "hsk_level",
           hsk_level: level,
         }),
       });
@@ -249,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log("🛒 Starting premium purchase...");
+      console.log("🛒 Starting Premium purchase...");
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
         headers: {
@@ -257,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          product_type: 'premium',
+          product_type: "premium",
         }),
       });
 
@@ -269,8 +275,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.href = body.url;
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Checkout failed";
-      console.error("❌ Checkout error:", message);
+      const message = err instanceof Error ? err.message : "Purchase failed";
+      console.error("❌ Purchase error:", message);
       setError(message);
     }
   };
@@ -292,7 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("hanyu_auth_token");
     setUser(null);
     setAccountTier('free');
-    setPurchasedLevels([1]);
+    setPurchasedLevels([]);
   };
 
   return (

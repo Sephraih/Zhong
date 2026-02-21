@@ -36,32 +36,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Fetch account tier and purchased levels
     let accountTier = 'free';
-    let purchasedLevels = [1]; // Level 1 is always free for logged-in users
-
+    let purchasedLevels: number[] = [];
+    
     if (data.user) {
       // Get profile
       const { data: profile } = await supabase
         .from('profiles')
-        .select('account_tier')
+        .select('account_tier, is_premium')
         .eq('id', data.user.id)
         .single();
       
+      // Determine tier
       accountTier = profile?.account_tier || 'free';
-
-      if (accountTier === 'premium') {
-        purchasedLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-      } else {
-        // Get purchased levels
-        const { data: purchases } = await supabase
-          .from('purchased_levels')
-          .select('hsk_level')
-          .eq('user_id', data.user.id);
-
-        if (purchases && purchases.length > 0) {
-          const levels = purchases.map(p => p.hsk_level);
-          purchasedLevels = [...new Set([1, ...levels])].sort((a, b) => a - b);
-        }
+      if (profile?.is_premium === true && accountTier === 'free') {
+        accountTier = 'premium';
       }
+
+      // Get purchased levels
+      const { data: purchasedLevelsData } = await supabase
+        .from('purchased_levels')
+        .select('hsk_level')
+        .eq('user_id', data.user.id)
+        .order('hsk_level', { ascending: true });
+
+      purchasedLevels = purchasedLevelsData?.map(p => p.hsk_level) || [];
     }
 
     res.json({

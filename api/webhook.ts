@@ -20,12 +20,23 @@ export const config = {
 };
 
 async function setUserPremium(userId: string) {
-  console.log(`🔧 Setting user ${userId} to premium`);
+  console.log(`🔧 Upgrading user ${userId} to premium`);
   
+  // Update auth metadata
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+    app_metadata: { account_tier: 'premium' },
+  });
+  
+  if (authError) {
+    console.error('❌ Auth metadata update error:', authError);
+  } else {
+    console.log('✅ Auth metadata updated to premium');
+  }
+
   // Update profiles table
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ account_tier: 'premium' })
+    .update({ account_tier: 'premium', is_premium: true })
     .eq('id', userId);
     
   if (profileError) {
@@ -35,24 +46,25 @@ async function setUserPremium(userId: string) {
   }
 }
 
-async function addPurchasedLevel(userId: string, hskLevel: number, paymentId: string) {
-  console.log(`🔧 Adding HSK Level ${hskLevel} for user ${userId}`);
+async function addPurchasedLevel(userId: string, level: number, paymentId: string) {
+  console.log(`🔧 Adding HSK ${level} to user ${userId}`);
   
+  // Insert into purchased_levels
   const { error } = await supabase
     .from('purchased_levels')
     .upsert({
       user_id: userId,
-      hsk_level: hskLevel,
+      hsk_level: level,
       stripe_payment_id: paymentId,
       purchased_at: new Date().toISOString(),
     }, {
-      onConflict: 'user_id,hsk_level'
+      onConflict: 'user_id,hsk_level',
     });
     
   if (error) {
-    console.error('❌ Purchase insert error:', error);
+    console.error('❌ Purchased level insert error:', error);
   } else {
-    console.log(`✅ HSK Level ${hskLevel} added for user`);
+    console.log(`✅ HSK ${level} added to user's purchased levels`);
   }
 }
 
@@ -87,9 +99,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       signature!,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-  } catch (err: any) {
-    console.error('❌ Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ Webhook signature verification failed:', message);
+    return res.status(400).send(`Webhook Error: ${message}`);
   }
 
   console.log(`📩 Webhook received: ${event.type}`);
@@ -105,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('💳 Checkout completed for session:', session.id);
         console.log('👤 User ID:', userId);
         console.log('📦 Product type:', productType);
-        console.log('📚 HSK Level:', hskLevel);
+        console.log('📊 HSK Level:', hskLevel);
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
@@ -121,12 +134,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (!existingProfile) {
           console.log('⚠️ Profile not found, creating one...');
-          const { data: user } = await supabase.auth.admin.getUserById(userId);
-          if (user) {
+          const { data: userData } = await supabase.auth.admin.getUserById(userId);
+          if (userData?.user) {
             await supabase.from('profiles').insert({
               id: userId,
-              email: user.user.email,
+              email: userData.user.email,
               account_tier: 'free',
+              is_premium: false,
             });
             console.log('✅ Profile created');
           }
@@ -134,26 +148,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Handle based on product type
         if (productType === 'premium') {
+          console.log('🔄 Processing Premium purchase...');
           await setUserPremium(userId);
         } else if (productType === 'hsk_level' && hskLevel) {
-          const level = parseInt(hskLevel, 10);
-          if (!isNaN(level)) {
-            await addPurchasedLevel(userId, level, session.id);
-          }
+          console.log(`🔄 Processing HSK ${hskLevel} purchase...`);
+          await addPurchasedLevel(userId, parseInt(hskLevel, 10), session.payment_intent as string);
+        } else {
+          // Fallback: treat as premium purchase for backwards compatibility
+          console.log('🔄 Processing legacy premium purchase...');
+          await setUserPremium(userId);
         }
 
-        console.log('✅ Purchase complete!');
+        console.log('✅ Purchase processing complete!');
         break;
       }
 
       case 'payment_intent.succeeded': {
-        // Additional handling if needed
-        console.log('💰 Payment intent succeeded');
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        console.log('💰 Payment succeeded:', paymentIntent.id);
+        // The checkout.session.completed event handles the actual logic
         break;
       }
 
       case 'payment_intent.payment_failed': {
-        console.log('❌ Payment failed');
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        console.log('❌ Payment failed:', paymentIntent.id);
+        console.log('Failure message:', paymentIntent.last_payment_error?.message);
         break;
       }
     }
