@@ -11,6 +11,8 @@ export interface CachedVocab {
   words: VocabWord[];
   hsk1Count: number;
   hsk2Count: number;
+  hsk3Count?: number;
+  hsk4Count?: number;
   totalCount: number;
   cachedAt: number;
 }
@@ -45,6 +47,7 @@ interface HskWordsWithExamplesRow {
   pinyin: string;
   english: string;
   hsk_level: number;
+  word_type?: string | null;
   // materialized view returns json aggregated array
   examples: Array<{
     id: number;
@@ -141,6 +144,8 @@ export interface FetchResult {
   words: VocabWord[];
   hsk1Count: number;
   hsk2Count: number;
+  hsk3Count?: number;
+  hsk4Count?: number;
   totalCount: number;
   source: "supabase" | "fallback";
 }
@@ -183,8 +188,8 @@ export async function fetchVocabularyFromSupabase(
 
       const { data, error } = await supabase
         .from("hsk_words_with_examples")
-        .select("word_id, hanzi, pinyin, english, hsk_level, examples")
-        .in("hsk_level", [1, 2])
+        .select("word_id, hanzi, pinyin, english, hsk_level, word_type, examples")
+        .in("hsk_level", [1, 2, 3, 4])
         .order("hsk_level", { ascending: true })
         .order("word_id", { ascending: true })
         .range(from, to);
@@ -213,19 +218,25 @@ export async function fetchVocabularyFromSupabase(
         english: ex.english,
       }));
 
+      const category = row.word_type && row.word_type.trim()
+        ? row.word_type.trim()
+        : inferCategory(row.english, hskLevel);
+
       return {
         id: row.word_id,
         hanzi: row.hanzi,
         pinyin: row.pinyin,
         english: limitEnglish(row.english, 3),
         hskLevel,
-        category: inferCategory(row.english, hskLevel),
+        category,
         examples,
       } satisfies VocabWord;
     });
 
     const hsk1Count = rows.filter((r) => r.hsk_level === 1).length;
     const hsk2Count = rows.filter((r) => r.hsk_level === 2).length;
+    const hsk3Count = rows.filter((r) => r.hsk_level === 3).length;
+    const hsk4Count = rows.filter((r) => r.hsk_level === 4).length;
 
     saveCachedSupabaseVocabulary({
       words,
@@ -233,9 +244,19 @@ export async function fetchVocabularyFromSupabase(
       hsk2Count,
       totalCount: words.length,
       cachedAt: Date.now(),
-    });
+      hsk3Count,
+      hsk4Count,
+    } as unknown as CachedVocab);
 
-    return { words, hsk1Count, hsk2Count, totalCount: words.length, source: "supabase" };
+    return {
+      words,
+      hsk1Count,
+      hsk2Count,
+      hsk3Count,
+      hsk4Count,
+      totalCount: words.length,
+      source: "supabase",
+    } as unknown as FetchResult;
   } catch (err) {
     console.error("[supabaseVocab] Unexpected error:", err);
     return { words: [], hsk1Count: 0, hsk2Count: 0, totalCount: 0, source: "fallback" };

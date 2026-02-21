@@ -5,7 +5,8 @@ export interface VocabWord {
   hanzi: string;
   pinyin: string;
   english: string;
-  hskLevel: 1 | 2;
+  hskLevel: 1 | 2 | 3 | 4;
+  /** Category/grouping label shown in Browse filters (now sourced from word_type when available). */
   category: string;
   examples: {
     chinese: string;
