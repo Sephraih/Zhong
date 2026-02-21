@@ -39,28 +39,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Check premium status from BOTH sources
-    // 1. Auth metadata (set by webhook)
-    const authPremium = user.app_metadata?.is_premium === true;
-
-    // 2. Profiles table (more reliable for persistence)
-    let dbPremium = false;
+    // Get profile with account tier
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_premium, stripe_customer_id')
+      .select('account_tier, stripe_customer_id')
       .eq('id', user.id)
       .single();
 
-    if (profile) {
-      dbPremium = profile.is_premium === true;
-    }
+    // Get purchased levels
+    const { data: purchases } = await supabase
+      .from('purchased_levels')
+      .select('hsk_level')
+      .eq('user_id', user.id);
 
-    // User is premium if EITHER source says so
-    const isPremium = authPremium || dbPremium;
+    // Build purchased levels array (always include level 1 for free)
+    let purchasedLevels = [1]; // Level 1 is always free for logged-in users
+    
+    if (profile?.account_tier === 'premium') {
+      // Premium users get all levels
+      purchasedLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    } else if (purchases && purchases.length > 0) {
+      const levels = purchases.map(p => p.hsk_level);
+      purchasedLevels = [...new Set([1, ...levels])].sort((a, b) => a - b);
+    }
 
     res.json({
       user,
-      is_premium: isPremium,
+      account_tier: profile?.account_tier || 'free',
+      purchased_levels: purchasedLevels,
       stripe_customer_id: profile?.stripe_customer_id || null,
     });
   } catch (error) {

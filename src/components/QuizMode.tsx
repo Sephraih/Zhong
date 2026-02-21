@@ -171,97 +171,80 @@ export function QuizMode({ allWords }: QuizModeProps) {
     setQuizKey((k) => k + 1);
   };
 
+  const progress = ((currentIndex + 1) / questions.length) * 100;
+
+  // HSK Filter component - always rendered
+  const HskFilterButtons = () => (
+    <div className="mb-4">
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          onClick={selectAllLevels}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+            allLevelsSelected
+              ? "bg-red-600 text-white border-red-700"
+              : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
+          }`}
+        >
+          All
+        </button>
+        {availableLevels.map((level) => (
+          <button
+            key={level}
+            onClick={() => toggleLevel(level)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
+              level,
+              selectedLevels.has(level)
+            )}`}
+          >
+            HSK {level}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Not enough words state
   if (filteredWords.length < 4) {
     return (
       <div className="max-w-lg mx-auto">
-        {/* HSK Level Multi-Select */}
-        <div className="mb-6">
-          <div className="flex flex-wrap justify-center gap-2">
-            <button
-              onClick={selectAllLevels}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-                allLevelsSelected
-                  ? "bg-red-600 text-white border-red-700"
-                  : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
-              }`}
-            >
-              All
-            </button>
-            {availableLevels.map((level) => (
-              <button
-                key={level}
-                onClick={() => toggleLevel(level)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
-                  level,
-                  selectedLevels.has(level)
-                )}`}
-              >
-                HSK {level}
-              </button>
-            ))}
-          </div>
-        </div>
+        <HskFilterButtons />
         <div className="text-center py-16 text-gray-400">
-          Need at least 4 words to create a quiz. Adjust your filters.
+          Need at least 4 words to create a quiz. Try enabling more HSK levels above.
         </div>
       </div>
     );
   }
 
+  // Quiz complete state
   if (isComplete) {
     const percentage = Math.round((score / answered) * 100);
     return (
-      <div className="max-w-lg mx-auto text-center py-12">
-        <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8">
-          <div className="text-6xl mb-4">{percentage >= 80 ? "🏆" : percentage >= 60 ? "👍" : "💪"}</div>
-          <h2 className="text-2xl font-bold text-white mb-2">Quiz Complete!</h2>
-          <p className="text-gray-400 mb-2">
-            You scored {score} out of {answered}
-          </p>
-          <p className="text-3xl font-bold text-red-400 mb-6">{percentage}%</p>
+      <div className="max-w-lg mx-auto">
+        <HskFilterButtons />
+        <div className="text-center py-12">
+          <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8">
+            <div className="text-6xl mb-4">{percentage >= 80 ? "🏆" : percentage >= 60 ? "👍" : "💪"}</div>
+            <h2 className="text-2xl font-bold text-white mb-2">Quiz Complete!</h2>
+            <p className="text-gray-400 mb-2">
+              You scored {score} out of {answered}
+            </p>
+            <p className="text-3xl font-bold text-red-400 mb-6">{percentage}%</p>
 
-          <button
-            onClick={restart}
-            className="px-8 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30"
-          >
-            Try Again
-          </button>
+            <button
+              onClick={restart}
+              className="px-8 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  const progress = ((currentIndex + 1) / questions.length) * 100;
-
   return (
     <div className="max-w-lg mx-auto">
-      {/* HSK Level Multi-Select */}
-      <div className="mb-4">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            onClick={selectAllLevels}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-              allLevelsSelected
-                ? "bg-red-600 text-white border-red-700"
-                : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
-            }`}
-          >
-            All
-          </button>
-          {availableLevels.map((level) => (
-            <button
-              key={level}
-              onClick={() => toggleLevel(level)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
-                level,
-                selectedLevels.has(level)
-              )}`}
-            >
-              HSK {level}
-            </button>
-          ))}
-        </div>
-      </div>
+      <HskFilterButtons />
 
       {/* Progress */}
       <div className="mb-6">

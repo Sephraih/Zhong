@@ -163,56 +163,61 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter }: Flas
   const totalLearning = allWords.length - learnedCount;
 
   const progress = displayWords.length > 0 ? ((currentIndex + 1) / displayWords.length) * 100 : 0;
+  const currentIsLearned = currentWord ? isLearned(currentWord.id) : false;
 
-  if (displayWords.length === 0) {
+  // HSK Filter component - always rendered
+  const HskFilterButtons = () => (
+    <div className="mb-4">
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          onClick={selectAllLevels}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+            allLevelsSelected
+              ? "bg-red-600 text-white border-red-700"
+              : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
+          }`}
+        >
+          All
+        </button>
+        {availableLevels.map((level) => (
+          <button
+            key={level}
+            onClick={() => toggleLevel(level)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
+              level,
+              selectedLevels.has(level)
+            )}`}
+          >
+            HSK {level}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Empty state - but still show the filter buttons!
+  if (displayWords.length === 0 || !currentWord) {
     return (
-      <div className="text-center py-16">
-        <div className="text-5xl mb-4">📭</div>
-        <p className="text-gray-400 text-lg">No words available for the selected filters.</p>
-        <p className="text-gray-600 text-sm mt-2">
-          {wordStatusFilter === "learned"
-            ? "You haven't marked any words as learned yet."
-            : wordStatusFilter === "still-learning"
-            ? "All words are marked as learned! Great job!"
-            : "Adjust your HSK level filter to see words."}
-        </p>
+      <div className="max-w-lg mx-auto">
+        <HskFilterButtons />
+        <div className="text-center py-16">
+          <div className="text-5xl mb-4">📭</div>
+          <p className="text-gray-400 text-lg">No words available for the selected filters.</p>
+          <p className="text-gray-600 text-sm mt-2">
+            {wordStatusFilter === "learned"
+              ? "You haven't marked any words as learned yet."
+              : wordStatusFilter === "still-learning"
+              ? "All words are marked as learned! Great job!"
+              : "Try enabling more HSK levels above."}
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (!currentWord) return null;
-
-  const currentIsLearned = isLearned(currentWord.id);
-
   return (
     <div className="max-w-lg mx-auto">
-      {/* HSK Level Multi-Select */}
-      <div className="mb-4">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            onClick={selectAllLevels}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
-              allLevelsSelected
-                ? "bg-red-600 text-white border-red-700"
-                : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
-            }`}
-          >
-            All
-          </button>
-          {availableLevels.map((level) => (
-            <button
-              key={level}
-              onClick={() => toggleLevel(level)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
-                level,
-                selectedLevels.has(level)
-              )}`}
-            >
-              HSK {level}
-            </button>
-          ))}
-        </div>
-      </div>
+      <HskFilterButtons />
 
       {/* Top bar: counter + shuffle + learned stats */}
       <div className="mb-4 flex items-center justify-between gap-2">

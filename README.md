@@ -126,6 +126,48 @@ vercel
 
 Or connect your GitHub repo to Vercel for automatic deployments.
 
+## Tiered Access System
+
+The app supports a tiered access system:
+
+| User Type | Access |
+|-----------|--------|
+| **Anonymous** (not logged in) | Top 200 HSK 1 words only (preview) |
+| **Free** (logged in) | Full HSK 1 access |
+| **Purchased Level** | Access to specific purchased HSK levels (2, 3, 4) |
+| **Premium** | All HSK levels (1-9), including future content |
+
+### Setting Up Tiered Access
+
+#### 1. Run Supabase Migration
+
+Run the SQL from `supabase_tiered_access.sql` in Supabase SQL Editor. This will:
+- Add `account_tier` column to profiles ('free' or 'premium')
+- Create `purchased_levels` table for individual level purchases
+- Add RLS policies
+- Create helper function `get_user_access()`
+
+#### 2. Create Stripe Products (One-Time Payments)
+
+In **Stripe Dashboard → Products**, create:
+
+| Product | Price | Environment Variable |
+|---------|-------|---------------------|
+| HSK Level 2 | $4.99 | `STRIPE_PRICE_HSK2` |
+| HSK Level 3 | $6.99 | `STRIPE_PRICE_HSK3` |
+| HSK Level 4 | $9.99 | `STRIPE_PRICE_HSK4` |
+| Premium (All Levels) | $19.99 | `STRIPE_PRICE_PREMIUM` |
+
+**Important**: Create as **one-time payments**, not subscriptions!
+
+#### 3. Configure Stripe Webhook
+
+In Stripe Dashboard, add webhook endpoint:
+- URL: `https://your-app.vercel.app/api/webhook`
+- Events: `checkout.session.completed`, `payment_intent.succeeded`, `payment_intent.payment_failed`
+
+---
+
 ## Enabling Auth & Premium Features
 
 The app includes optional authentication and Stripe payment integration. To enable:
@@ -140,7 +182,12 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # Stripe
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID=price_...
+
+# Stripe price IDs for tiered purchases (one-time payments)
+STRIPE_PRICE_HSK2=price_...
+STRIPE_PRICE_HSK3=price_...
+STRIPE_PRICE_HSK4=price_...
+STRIPE_PRICE_PREMIUM=price_...
 
 # Frontend URL (for Stripe redirects)
 FRONTEND_URL=https://your-app.vercel.app

@@ -34,21 +34,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     if (error) return res.status(401).json({ error: error.message });
 
-    // Fetch premium status from profiles table
-    let isPremium = false;
+    // Fetch account tier and purchased levels
+    let accountTier = 'free';
+    let purchasedLevels = [1]; // Level 1 is always free for logged-in users
+
     if (data.user) {
+      // Get profile
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_premium')
+        .select('account_tier')
         .eq('id', data.user.id)
         .single();
-      isPremium = profile?.is_premium || false;
+      
+      accountTier = profile?.account_tier || 'free';
+
+      if (accountTier === 'premium') {
+        purchasedLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      } else {
+        // Get purchased levels
+        const { data: purchases } = await supabase
+          .from('purchased_levels')
+          .select('hsk_level')
+          .eq('user_id', data.user.id);
+
+        if (purchases && purchases.length > 0) {
+          const levels = purchases.map(p => p.hsk_level);
+          purchasedLevels = [...new Set([1, ...levels])].sort((a, b) => a - b);
+        }
+      }
     }
 
     res.json({
       user: data.user,
       session: data.session,
-      is_premium: isPremium,
+      account_tier: accountTier,
+      purchased_levels: purchasedLevels,
     });
   } catch (error) {
     console.error('Login error:', error);

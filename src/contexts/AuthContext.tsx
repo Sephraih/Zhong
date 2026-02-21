@@ -6,15 +6,18 @@ interface User {
   created_at: string;
 }
 
+type AccountTier = 'free' | 'premium';
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  isCheckingOut: boolean;
-  isPremium: boolean;
+  accountTier: AccountTier;
+  purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  startCheckout: () => Promise<void>;
+  purchaseLevel: (level: number) => Promise<void>;
+  purchasePremium: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   error: string | null;
   clearError: () => void;
@@ -22,28 +25,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Use VITE_API_BASE only during local development.
-// In production (Vercel), prefer same-origin /api/* to avoid misconfigured baked-in URLs.
-const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE || "") : "";
-
-function apiUrl(path: string) {
-  // If VITE_API_BASE is set, use it. Otherwise, use same-origin (Vercel rewrites /api/*).
-  if (API_URL) return `${API_URL}${path}`;
-  return path;
-}
+// Use same-origin API in production, configurable for local dev
+const API_URL = import.meta.env.VITE_API_BASE || "";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
+  const [accountTier, setAccountTier] = useState<AccountTier>('free');
+  const [purchasedLevels, setPurchasedLevels] = useState<number[]>([1]); // Level 1 always free for logged-in users
   const [isLoading, setIsLoading] = useState(true);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
 
   const fetchUser = useCallback(async (token: string) => {
     try {
-      const response = await fetch(apiUrl(`/api/auth/me`), {
+      const response = await fetch(`${API_URL}/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Cache-Control": "no-cache",
@@ -54,18 +50,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
-        setIsPremium(data.is_premium === true);
-        console.log("Auth refreshed. Premium:", data.is_premium);
+        setAccountTier(data.account_tier || 'free');
+        setPurchasedLevels(data.purchased_levels || [1]);
+        console.log("Auth refreshed. Tier:", data.account_tier, "Levels:", data.purchased_levels);
         return data;
       } else {
         localStorage.removeItem("hanyu_auth_token");
         setUser(null);
-        setIsPremium(false);
+        setAccountTier('free');
+        setPurchasedLevels([1]);
       }
     } catch {
       console.error("Failed to fetch user");
       setUser(null);
-      setIsPremium(false);
+      setAccountTier('free');
+      setPurchasedLevels([1]);
     }
     return null;
   }, []);
@@ -96,19 +95,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Remove the query param from URL
         window.history.replaceState({}, "", window.location.pathname);
 
-        // Poll for premium status update (webhook may take a moment)
+        // Poll for purchase status update (webhook may take a moment)
         let attempts = 0;
         const pollInterval = setInterval(async () => {
           attempts++;
-          console.log(`🔄 Checking premium status... (attempt ${attempts})`);
-          const data = await fetchUser(token);
-          if (data?.is_premium === true || attempts >= 10) {
+          console.log(`🔄 Checking purchase status... (attempt ${attempts})`);
+          await fetchUser(token);
+          if (attempts >= 10) {
             clearInterval(pollInterval);
-            if (data?.is_premium) {
-              console.log("✅ Premium status confirmed!");
-            } else {
-              console.log("⚠️ Premium status not yet updated. It may take a moment.");
-            }
+            console.log("✅ Finished polling for purchase status");
           }
         }, 2000);
       } else if (paymentStatus === "cancelled") {
@@ -146,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(apiUrl(`/api/auth/login`), {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -161,7 +156,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session?.access_token) {
         localStorage.setItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
-        setIsPremium(data.is_premium === true);
+        setAccountTier(data.account_tier || 'free');
+        setPurchasedLevels(data.purchased_levels || [1]);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -177,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(apiUrl(`/api/auth/signup`), {
+      const response = await fetch(`${API_URL}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -192,12 +188,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user && !data.session) {
         // Email confirmation required
         setUser(null);
-        setIsPremium(false);
+        setAccountTier('free');
+        setPurchasedLevels([1]);
         localStorage.removeItem("hanyu_auth_token");
       } else if (data.session?.access_token) {
         localStorage.setItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
-        setIsPremium(false);
+        setAccountTier('free');
+        setPurchasedLevels([1]);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Signup failed";
@@ -208,48 +206,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const startCheckout = async () => {
+  const purchaseLevel = async (level: number) => {
+    const token = localStorage.getItem("hanyu_auth_token");
+    if (!token) {
+      setError("Please sign in to purchase");
+      return;
+    }
+
+    try {
+      console.log(`🛒 Starting purchase for HSK Level ${level}...`);
+      const res = await fetch(`${API_URL}/api/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_type: 'hsk_level',
+          hsk_level: level,
+        }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
+
+      if (body.url) {
+        console.log("🔗 Redirecting to Stripe...");
+        window.location.href = body.url;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Purchase failed";
+      console.error("❌ Purchase error:", message);
+      setError(message);
+    }
+  };
+
+  const purchasePremium = async () => {
     const token = localStorage.getItem("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to upgrade");
       return;
     }
 
-    setError(null);
-    setIsCheckingOut(true);
-
     try {
-      console.log("🛒 Starting checkout...");
-      const res = await fetch(apiUrl(`/api/create-checkout-session`), {
+      console.log("🛒 Starting premium purchase...");
+      const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          product_type: 'premium',
+        }),
       });
 
-      let body: any = null;
-      try {
-        body = await res.json();
-      } catch {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Checkout failed (HTTP ${res.status})`);
-      }
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
-      if (!res.ok) throw new Error(body?.error || `Failed to create checkout session (HTTP ${res.status})`);
-
-      if (body?.url) {
+      if (body.url) {
         console.log("🔗 Redirecting to Stripe...");
-        window.location.assign(body.url);
-      } else {
-        throw new Error("No checkout URL returned");
+        window.location.href = body.url;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Checkout failed";
       console.error("❌ Checkout error:", message);
       setError(message);
-    } finally {
-      setIsCheckingOut(false);
     }
   };
 
@@ -258,7 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token) {
       try {
-        await fetch(apiUrl(`/api/auth/logout`), {
+        await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -269,7 +291,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     localStorage.removeItem("hanyu_auth_token");
     setUser(null);
-    setIsPremium(false);
+    setAccountTier('free');
+    setPurchasedLevels([1]);
   };
 
   return (
@@ -277,12 +300,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
-        isCheckingOut,
-        isPremium,
+        accountTier,
+        purchasedLevels,
         login,
         signup,
         logout,
-        startCheckout,
+        purchaseLevel,
+        purchasePremium,
         refreshAuth,
         error,
         clearError,

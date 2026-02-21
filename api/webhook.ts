@@ -9,8 +9,7 @@ const supabase = createClient(
 );
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  // Use a stable Stripe API version.
-  apiVersion: '2024-06-20',
+  apiVersion: '2024-11-20.acacia',
 });
 
 // Disable body parsing, need raw body for Stripe signature verification
@@ -20,40 +19,49 @@ export const config = {
   },
 };
 
-async function setUserPremium(userId: string, isPremium: boolean) {
-  console.log(`🔧 Updating premium status for user ${userId} to ${isPremium}`);
+async function setUserPremium(userId: string) {
+  console.log(`🔧 Setting user ${userId} to premium`);
   
-  // Update auth metadata
-  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { is_premium: isPremium },
-  });
-  
-  if (authError) {
-    console.error('❌ Auth metadata update error:', authError);
-  } else {
-    console.log('✅ Auth metadata updated');
-  }
-
   // Update profiles table
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ is_premium: isPremium })
+    .update({ account_tier: 'premium' })
     .eq('id', userId);
     
   if (profileError) {
     console.error('❌ Profile update error:', profileError);
   } else {
-    console.log('✅ Profile updated');
+    console.log('✅ Profile updated to premium');
+  }
+}
+
+async function addPurchasedLevel(userId: string, hskLevel: number, paymentId: string) {
+  console.log(`🔧 Adding HSK Level ${hskLevel} for user ${userId}`);
+  
+  const { error } = await supabase
+    .from('purchased_levels')
+    .upsert({
+      user_id: userId,
+      hsk_level: hskLevel,
+      stripe_payment_id: paymentId,
+      purchased_at: new Date().toISOString(),
+    }, {
+      onConflict: 'user_id,hsk_level'
+    });
+    
+  if (error) {
+    console.error('❌ Purchase insert error:', error);
+  } else {
+    console.log(`✅ HSK Level ${hskLevel} added for user`);
   }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS (Stripe doesn't require it, but it doesn't hurt; also allows manual testing)
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
 
-  // Stripe will POST, but adding OPTIONS prevents 405s if something sends a preflight.
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -91,17 +99,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
+        const productType = session.metadata?.product_type;
+        const hskLevel = session.metadata?.hsk_level;
 
         console.log('💳 Checkout completed for session:', session.id);
-        console.log('👤 User ID from metadata:', userId);
-        console.log('🆔 Customer ID:', session.customer);
+        console.log('👤 User ID:', userId);
+        console.log('📦 Product type:', productType);
+        console.log('📚 HSK Level:', hskLevel);
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
           break;
         }
 
-        // Ensure profile exists first
+        // Ensure profile exists
         const { data: existingProfile } = await supabase
           .from('profiles')
           .select('id')
@@ -115,125 +126,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await supabase.from('profiles').insert({
               id: userId,
               email: user.user.email,
-              is_premium: false,
+              account_tier: 'free',
             });
             console.log('✅ Profile created');
           }
         }
 
-        console.log('🔄 Setting user to premium...');
-        await setUserPremium(userId, true);
-
-        console.log('💾 Inserting subscription record...');
-        const { error: subError } = await supabase.from('subscriptions').insert({
-          user_id: userId,
-          stripe_customer_id: session.customer as string,
-          stripe_subscription_id: (session.subscription as string) || null,
-          stripe_price_id: process.env.STRIPE_PRICE_ID!,
-          stripe_session_id: session.id,
-          status: 'active',
-          current_period_start: new Date().toISOString(),
-        });
-
-        if (subError) {
-          console.error('❌ Subscription insert error:', subError);
-        } else {
-          console.log('✅ Premium activation complete!');
+        // Handle based on product type
+        if (productType === 'premium') {
+          await setUserPremium(userId);
+        } else if (productType === 'hsk_level' && hskLevel) {
+          const level = parseInt(hskLevel, 10);
+          if (!isNaN(level)) {
+            await addPurchasedLevel(userId, level, session.id);
+          }
         }
+
+        console.log('✅ Purchase complete!');
         break;
       }
 
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (profile) {
-          await setUserPremium(profile.id, false);
-          await supabase
-            .from('subscriptions')
-            .update({ status: 'cancelled' })
-            .eq('stripe_customer_id', customerId)
-            .eq('status', 'active');
-        }
+      case 'payment_intent.succeeded': {
+        // Additional handling if needed
+        console.log('💰 Payment intent succeeded');
         break;
       }
 
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (profile) {
-          const isActive =
-            subscription.status === 'active' || subscription.status === 'trialing';
-          await setUserPremium(profile.id, isActive);
-
-          await supabase
-            .from('subscriptions')
-            .update({
-              status: subscription.status,
-              cancel_at_period_end: subscription.cancel_at_period_end,
-              current_period_start: new Date(
-                subscription.current_period_start * 1000
-              ).toISOString(),
-              current_period_end: new Date(
-                subscription.current_period_end * 1000
-              ).toISOString(),
-            })
-            .eq('stripe_customer_id', customerId)
-            .eq('status', 'active');
-        }
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (profile) {
-          await setUserPremium(profile.id, false);
-          await supabase
-            .from('subscriptions')
-            .update({ status: 'past_due' })
-            .eq('stripe_customer_id', customerId);
-        }
-        break;
-      }
-
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (profile) {
-          await setUserPremium(profile.id, true);
-          await supabase
-            .from('subscriptions')
-            .update({ status: 'active' })
-            .eq('stripe_customer_id', customerId);
-        }
+      case 'payment_intent.payment_failed': {
+        console.log('❌ Payment failed');
         break;
       }
     }

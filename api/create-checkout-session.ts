@@ -8,9 +8,16 @@ const supabase = createClient(
 );
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  // Use a stable Stripe API version.
-  apiVersion: '2024-06-20',
+  apiVersion: '2024-11-20.acacia',
 });
+
+// Price IDs for different products
+const PRICE_IDS: Record<string, string | undefined> = {
+  hsk_2: process.env.STRIPE_PRICE_HSK2,
+  hsk_3: process.env.STRIPE_PRICE_HSK3,
+  hsk_4: process.env.STRIPE_PRICE_HSK4,
+  premium: process.env.STRIPE_PRICE_PREMIUM,
+};
 
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
@@ -52,10 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -72,22 +76,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    const { product_type, hsk_level } = req.body;
+
+    // Determine which price ID to use
+    let priceId: string | undefined;
+    let productDescription: string;
+
+    if (product_type === 'premium') {
+      priceId = PRICE_IDS.premium;
+      productDescription = 'Premium - All HSK Levels';
+    } else if (product_type === 'hsk_level' && hsk_level) {
+      priceId = PRICE_IDS[`hsk_${hsk_level}`];
+      productDescription = `HSK Level ${hsk_level}`;
+    } else {
+      return res.status(400).json({ error: 'Invalid product_type or hsk_level' });
+    }
+
+    if (!priceId) {
+      return res.status(500).json({ error: `Price not configured for ${productDescription}` });
+    }
+
     const customerId = await getOrCreateStripeCustomer(user.id, user.email || '');
 
-    const priceId = process.env.STRIPE_PRICE_ID;
-    if (!priceId) {
-      return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID env var' });
-    }
-
-    // Prefer configured FRONTEND_URL, but fall back to the incoming request host.
-    const origin = (req.headers.origin as string | undefined) || '';
-    const host = (req.headers.host as string | undefined) || '';
-    const fallbackBase = origin || (host ? `${host.startsWith('localhost') ? 'http' : 'https'}://${host}` : '');
-    const frontendBase = process.env.FRONTEND_URL || fallbackBase;
-
-    if (!frontendBase) {
-      return res.status(500).json({ error: 'Missing FRONTEND_URL and could not infer request origin/host' });
-    }
+    // Determine success/cancel URLs
+    const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || process.env.FRONTEND_URL || 'http://localhost:5173';
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -98,11 +110,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           quantity: 1,
         },
       ],
-      mode: 'subscription',
-      success_url: `${frontendBase}/?payment=success`,
-      cancel_url: `${frontendBase}/?payment=cancelled`,
+      mode: 'payment', // One-time payment, not subscription
+      success_url: `${origin}/?payment=success`,
+      cancel_url: `${origin}/?payment=cancelled`,
       metadata: {
         user_id: user.id,
+        product_type,
+        hsk_level: hsk_level?.toString() || '',
       },
     });
 

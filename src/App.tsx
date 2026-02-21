@@ -27,8 +27,9 @@ function MobileUserButton({
   onOpenAuth: (mode: "login" | "signup") => void;
   onOpenProfile: () => void;
 }) {
-  const { user, isPremium } = useAuth();
+  const { user, accountTier } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
+  const isPremium = accountTier === 'premium';
 
   if (!user) {
     return (
