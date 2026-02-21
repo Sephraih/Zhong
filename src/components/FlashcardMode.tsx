@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
+import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
 
@@ -63,7 +64,6 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
       filtered = words.filter((w) => isLearned(w.id));
     }
     if (isShuffled) {
-      // Use shuffleSeed to trigger re-shuffle
       const arr = [...filtered];
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -108,7 +108,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
     setIsFlipped(false);
   };
 
-  // Counts from actual learned state (not session)
+  // Counts from actual learned state
   const totalLearned = learnedCount;
   const totalLearning = words.length - learnedCount;
 
@@ -138,19 +138,16 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
     <div className="max-w-lg mx-auto">
       {/* Top bar: counter + shuffle + learned stats */}
       <div className="mb-4 flex items-center justify-between gap-2">
-        {/* Learned / Learning counts */}
         <div className="flex items-center gap-3 text-sm">
           <span className="text-emerald-400 font-semibold">✅ {totalLearned}</span>
           <span className="text-gray-600">·</span>
           <span className="text-red-400 font-semibold">📖 {totalLearning}</span>
         </div>
 
-        {/* Card counter */}
         <span className="text-sm text-gray-400 font-medium">
           {currentIndex + 1} / {displayWords.length}
         </span>
 
-        {/* Shuffle / Reset buttons */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleShuffle}
@@ -201,13 +198,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
       >
         {/* Top-left: HSK badge + learned check */}
         <div className="absolute top-5 left-6 flex items-center gap-2">
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              currentWord.hskLevel === 1
-                ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
-                : "bg-blue-950/80 text-blue-400 border border-blue-800/50"
-            }`}
-          >
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentWord.hskLevel)}`}>
             HSK {currentWord.hskLevel}
           </span>
           {currentIsLearned && (
@@ -274,7 +265,6 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
       {/* Action Buttons: Prev | Toggle Learned | Next */}
       <div className="flex gap-3 mt-4">
-        {/* Previous (loops) */}
         <button
           onClick={goPrev}
           className="px-5 py-4 bg-neutral-900 text-gray-400 rounded-xl font-semibold hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 hover:border-neutral-700 flex items-center gap-2"
@@ -285,7 +275,6 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           </svg>
         </button>
 
-        {/* Toggle Learned */}
         <button
           onClick={handleToggleLearned}
           className={`flex-1 py-4 rounded-xl font-semibold transition-all border flex items-center justify-center gap-2 ${
@@ -312,7 +301,6 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
           )}
         </button>
 
-        {/* Next (loops) */}
         <button
           onClick={goNext}
           className="px-5 py-4 bg-neutral-900 text-gray-400 rounded-xl font-semibold hover:bg-neutral-800 hover:text-white transition-all border border-neutral-800 hover:border-neutral-700 flex items-center gap-2"

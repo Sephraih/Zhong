@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 
 interface QuizModeProps {
@@ -159,6 +160,13 @@ export function QuizMode({ words }: QuizModeProps) {
 
       {/* Question */}
       <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8 text-center mb-6">
+        {/* HSK badge */}
+        <div className="flex justify-center mb-4">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentQuestion.word.hskLevel)}`}>
+            HSK {currentQuestion.word.hskLevel}
+          </span>
+        </div>
+        
         <p className="text-sm text-gray-500 mb-4">What does this mean?</p>
         
         {/* Hanzi with hover/tap pinyin */}
