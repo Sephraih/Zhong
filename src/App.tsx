@@ -375,18 +375,22 @@ function AppContent() {
                   HSK 2: <span className="font-bold text-gray-300">{hsk2Count}</span>
                 </span>
               </div>
-              <div className="hidden sm:flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
-                <span className="text-sm text-gray-500">
-                  HSK 3: <span className="font-bold text-gray-300">{hsk3Count}</span>
-                </span>
-              </div>
-              <div className="hidden sm:flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/30" />
-                <span className="text-sm text-gray-500">
-                  HSK 4: <span className="font-bold text-gray-300">{hsk4Count}</span>
-                </span>
-              </div>
+              {hsk3Count > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
+                  <span className="text-sm text-gray-500">
+                    HSK 3: <span className="font-bold text-gray-300">{hsk3Count}</span>
+                  </span>
+                </div>
+              )}
+              {hsk4Count > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
+                  <span className="text-sm text-gray-500">
+                    HSK 4: <span className="font-bold text-gray-300">{hsk4Count}</span>
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
                 <span className="text-sm text-gray-500">
@@ -480,8 +484,8 @@ function AppContent() {
                   { value: "all" as HSKFilter, label: "All Levels" },
                   { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
-                  { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
+                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
+                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
@@ -626,8 +630,8 @@ function AppContent() {
                   { value: "all" as HSKFilter, label: "All" },
                   { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
-                  { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
+                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
+                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
@@ -688,13 +692,13 @@ function AppContent() {
               <h2 className="text-2xl font-bold text-white mb-2">✏️ Quiz Mode</h2>
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
 
-              <div className="flex justify-center gap-2 mt-4">
+              <div className="flex flex-wrap justify-center gap-2 mt-4">
                 {[
                   { value: "all" as HSKFilter, label: "All" },
                   { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
-                  { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
+                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
+                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
                 ].map((filter) => (
                   <button
                     key={String(filter.value)}
@@ -723,7 +727,7 @@ function AppContent() {
       <footer className={`border-t border-neutral-800 mt-16 relative z-10 ${showAppBackground ? "bg-neutral-950/80 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1 & 2 Vocabulary</p>
+            <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1-4 Vocabulary</p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedCount} learned • 📖 {stillLearningCount} still learning
               {dataSource === "fallback" && " • ⚡ Preview mode"}

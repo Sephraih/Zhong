@@ -10,7 +10,7 @@ interface PracticeModeProps {
   learnedState: LearnedState;
 }
 
-type HskLevelFilter = "all" | 1 | 2;
+type HskLevelFilter = "all" | 1 | 2 | 3 | 4;
 type PracticeDirection = "zh-en" | "en-zh";
 
 interface StoredSession {
@@ -518,11 +518,13 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             <div className="mb-6">
               <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
                 {/* HSK Level selector */}
-                <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1">
+                <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 flex-wrap">
                   {([
                     { value: "all" as const, label: "All" },
                     { value: 1 as const, label: "HSK 1" },
                     { value: 2 as const, label: "HSK 2" },
+                    { value: 3 as const, label: "HSK 3" },
+                    { value: 4 as const, label: "HSK 4" },
                   ] satisfies { value: HskLevelFilter; label: string }[]).map((opt) => (
                     <button
                       key={String(opt.value)}
