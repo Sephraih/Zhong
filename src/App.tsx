@@ -210,7 +210,7 @@ function AppContent() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [flashcardKey, setFlashcardKey] = useState(0);
   const [flashcardStatusFilter, setFlashcardStatusFilter] = useState<FlashcardFilter>("all");
-  const [quizKey, setQuizKey] = useState(0);
+  // Quiz key is managed inside QuizMode now
 
   // Browse pagination (major perf win)
   const [browsePage, setBrowsePage] = useState(1);
@@ -261,10 +261,7 @@ function AppContent() {
 
   const canLoadMore = visibleWords.length < filteredWords.length;
 
-  const activeWords = useMemo(() => {
-    if (hskFilter === "all") return vocabulary;
-    return vocabulary.filter((w) => w.hskLevel === hskFilter);
-  }, [vocabulary, hskFilter]);
+  // activeWords is no longer used - FlashcardMode and QuizMode handle their own HSK filtering
 
   const openAuthModal = (mode: "login" | "signup") => {
     setAuthModalMode(mode);
@@ -624,33 +621,8 @@ function AppContent() {
               <h2 className="text-2xl font-bold text-white mb-2">🃏 Flashcard Mode</h2>
               <p className="text-gray-400">Tap to reveal · Hover characters for pinyin</p>
 
+              {/* Word status filter (learned/still-learning) */}
               <div className="flex flex-wrap justify-center gap-2 mt-4">
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Level:</span>
-                {[
-                  { value: "all" as HSKFilter, label: "All" },
-                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
-                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
-                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
-                ].map((filter) => (
-                  <button
-                    key={String(filter.value)}
-                    onClick={() => {
-                      setHskFilter(filter.value);
-                      setFlashcardKey((k) => k + 1);
-                    }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value
-                        ? "bg-red-600 text-white"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-2 mt-3">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Words:</span>
                 {[
                   { value: "all" as FlashcardFilter, label: "All Words", icon: "📋" },
@@ -679,7 +651,7 @@ function AppContent() {
 
             <FlashcardMode
               key={`fc-${flashcardKey}`}
-              words={activeWords}
+              allWords={vocabulary}
               learnedState={learnedState}
               wordStatusFilter={flashcardStatusFilter}
             />
@@ -691,34 +663,9 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">✏️ Quiz Mode</h2>
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
-
-              <div className="flex flex-wrap justify-center gap-2 mt-4">
-                {[
-                  { value: "all" as HSKFilter, label: "All" },
-                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
-                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
-                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
-                ].map((filter) => (
-                  <button
-                    key={String(filter.value)}
-                    onClick={() => {
-                      setHskFilter(filter.value);
-                      setQuizKey((k) => k + 1);
-                    }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value
-                        ? "bg-red-600 text-white"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            <QuizMode key={`quiz-${quizKey}`} words={activeWords} />
+            <QuizMode allWords={vocabulary} />
           </div>
         )}
       </main>

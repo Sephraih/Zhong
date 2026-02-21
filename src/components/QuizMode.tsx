@@ -5,13 +5,29 @@ import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 
 interface QuizModeProps {
-  words: VocabWord[];
+  allWords: VocabWord[];
 }
 
 interface QuizQuestion {
   word: VocabWord;
   options: string[];
   correctIndex: number;
+}
+
+const HSK_LEVELS = [1, 2, 3, 4] as const;
+type HskLevel = (typeof HSK_LEVELS)[number];
+
+function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
+  if (!isSelected) {
+    return "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600";
+  }
+  switch (level) {
+    case 1: return "bg-emerald-950/60 text-emerald-400 border-emerald-700/60";
+    case 2: return "bg-blue-950/60 text-blue-400 border-blue-700/60";
+    case 3: return "bg-purple-950/60 text-purple-400 border-purple-700/60";
+    case 4: return "bg-orange-950/60 text-orange-400 border-orange-700/60";
+    default: return "bg-red-600 text-white border-red-700";
+  }
 }
 
 function splitPinyin(pinyin: string): string[] {
@@ -56,17 +72,63 @@ function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars:
   return fullPinyin;
 }
 
-export function QuizMode({ words }: QuizModeProps) {
+export function QuizMode({ allWords }: QuizModeProps) {
   const isMobile = useIsMobile();
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(new Set([1, 2, 3, 4]));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
+  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
+
+  // Get available HSK levels from the data
+  const availableLevels = useMemo(() => {
+    const levels = new Set<HskLevel>();
+    allWords.forEach((w) => {
+      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) {
+        levels.add(w.hskLevel as HskLevel);
+      }
+    });
+    return Array.from(levels).sort((a, b) => a - b);
+  }, [allWords]);
+
+  const allLevelsSelected = availableLevels.every((l) => selectedLevels.has(l));
+
+  const toggleLevel = (level: HskLevel) => {
+    const next = new Set(selectedLevels);
+    if (next.has(level)) {
+      if (next.size > 1) next.delete(level);
+    } else {
+      next.add(level);
+    }
+    setSelectedLevels(next);
+    // Reset quiz when filter changes
+    setCurrentIndex(0);
+    setSelectedAnswer(null);
+    setScore(0);
+    setAnswered(0);
+    setQuizKey((k) => k + 1);
+  };
+
+  const selectAllLevels = () => {
+    setSelectedLevels(new Set(availableLevels));
+    // Reset quiz when filter changes
+    setCurrentIndex(0);
+    setSelectedAnswer(null);
+    setScore(0);
+    setAnswered(0);
+    setQuizKey((k) => k + 1);
+  };
+
+  // Filter words by selected HSK levels
+  const filteredWords = useMemo(() => {
+    return allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
+  }, [allWords, selectedLevels]);
 
   const questions: QuizQuestion[] = useMemo(() => {
-    const shuffled = [...words].sort(() => Math.random() - 0.5).slice(0, 10);
+    const shuffled = [...filteredWords].sort(() => Math.random() - 0.5).slice(0, 10);
     return shuffled.map((word) => {
-      const otherWords = words.filter((w) => w.id !== word.id);
+      const otherWords = filteredWords.filter((w) => w.id !== word.id);
       const wrongOptions = otherWords
         .sort(() => Math.random() - 0.5)
         .slice(0, 3)
@@ -78,7 +140,8 @@ export function QuizMode({ words }: QuizModeProps) {
 
       return { word, options, correctIndex };
     });
-  }, [words]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredWords, quizKey]);
 
   const currentQuestion = questions[currentIndex];
   const isComplete = currentIndex >= questions.length;
@@ -105,12 +168,42 @@ export function QuizMode({ words }: QuizModeProps) {
     setSelectedAnswer(null);
     setScore(0);
     setAnswered(0);
+    setQuizKey((k) => k + 1);
   };
 
-  if (words.length < 4) {
+  if (filteredWords.length < 4) {
     return (
-      <div className="text-center py-16 text-gray-400">
-        Need at least 4 words to create a quiz. Adjust your filters.
+      <div className="max-w-lg mx-auto">
+        {/* HSK Level Multi-Select */}
+        <div className="mb-6">
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              onClick={selectAllLevels}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                allLevelsSelected
+                  ? "bg-red-600 text-white border-red-700"
+                  : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
+              }`}
+            >
+              All
+            </button>
+            {availableLevels.map((level) => (
+              <button
+                key={level}
+                onClick={() => toggleLevel(level)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
+                  level,
+                  selectedLevels.has(level)
+                )}`}
+              >
+                HSK {level}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-center py-16 text-gray-400">
+          Need at least 4 words to create a quiz. Adjust your filters.
+        </div>
       </div>
     );
   }
@@ -142,6 +235,34 @@ export function QuizMode({ words }: QuizModeProps) {
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* HSK Level Multi-Select */}
+      <div className="mb-4">
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            onClick={selectAllLevels}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              allLevelsSelected
+                ? "bg-red-600 text-white border-red-700"
+                : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
+            }`}
+          >
+            All
+          </button>
+          {availableLevels.map((level) => (
+            <button
+              key={level}
+              onClick={() => toggleLevel(level)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
+                level,
+                selectedLevels.has(level)
+              )}`}
+            >
+              HSK {level}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between text-sm text-gray-400 mb-2">

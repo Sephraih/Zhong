@@ -8,9 +8,25 @@ import type { LearnedState } from "../hooks/useLearnedState";
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
 interface FlashcardModeProps {
-  words: VocabWord[];
+  allWords: VocabWord[];
   learnedState: LearnedState;
   wordStatusFilter: FlashcardFilter;
+}
+
+const HSK_LEVELS = [1, 2, 3, 4] as const;
+type HskLevel = (typeof HSK_LEVELS)[number];
+
+function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
+  if (!isSelected) {
+    return "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600";
+  }
+  switch (level) {
+    case 1: return "bg-emerald-950/60 text-emerald-400 border-emerald-700/60";
+    case 2: return "bg-blue-950/60 text-blue-400 border-blue-700/60";
+    case 3: return "bg-purple-950/60 text-purple-400 border-purple-700/60";
+    case 4: return "bg-orange-950/60 text-orange-400 border-orange-700/60";
+    default: return "bg-red-600 text-white border-red-700";
+  }
 }
 
 function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars: number): string {
@@ -47,22 +63,56 @@ function splitPinyin(pinyin: string): string[] {
   return result.length === 0 ? [pinyin] : result;
 }
 
-export function FlashcardMode({ words, learnedState, wordStatusFilter }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, wordStatusFilter }: FlashcardModeProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
   const [shuffleSeed, setShuffleSeed] = useState(0);
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(new Set([1, 2, 3, 4]));
 
   const { toggleLearned, isLearned, learnedCount } = learnedState;
 
-  // Filter words — ordered by default, shuffled if requested
-  const displayWords = useMemo(() => {
-    let filtered = words;
-    if (wordStatusFilter === "still-learning") {
-      filtered = words.filter((w) => !isLearned(w.id));
-    } else if (wordStatusFilter === "learned") {
-      filtered = words.filter((w) => isLearned(w.id));
+  // Get available HSK levels from the data
+  const availableLevels = useMemo(() => {
+    const levels = new Set<HskLevel>();
+    allWords.forEach((w) => {
+      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) {
+        levels.add(w.hskLevel as HskLevel);
+      }
+    });
+    return Array.from(levels).sort((a, b) => a - b);
+  }, [allWords]);
+
+  const allLevelsSelected = availableLevels.every((l) => selectedLevels.has(l));
+
+  const toggleLevel = (level: HskLevel) => {
+    const next = new Set(selectedLevels);
+    if (next.has(level)) {
+      if (next.size > 1) next.delete(level);
+    } else {
+      next.add(level);
     }
+    setSelectedLevels(next);
+    setCurrentIndex(0);
+    setIsFlipped(false);
+  };
+
+  const selectAllLevels = () => {
+    setSelectedLevels(new Set(availableLevels));
+    setCurrentIndex(0);
+    setIsFlipped(false);
+  };
+
+  // Filter words — by HSK level, learned status, then optionally shuffle
+  const displayWords = useMemo(() => {
+    let filtered = allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
+    
+    if (wordStatusFilter === "still-learning") {
+      filtered = filtered.filter((w) => !isLearned(w.id));
+    } else if (wordStatusFilter === "learned") {
+      filtered = filtered.filter((w) => isLearned(w.id));
+    }
+    
     if (isShuffled) {
       const arr = [...filtered];
       for (let i = arr.length - 1; i > 0; i--) {
@@ -73,7 +123,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
     }
     return filtered;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, wordStatusFilter, isShuffled, shuffleSeed]);
+  }, [allWords, selectedLevels, wordStatusFilter, isShuffled, shuffleSeed]);
 
   const currentWord = displayWords[currentIndex];
 
@@ -110,7 +160,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
   // Counts from actual learned state
   const totalLearned = learnedCount;
-  const totalLearning = words.length - learnedCount;
+  const totalLearning = allWords.length - learnedCount;
 
   const progress = displayWords.length > 0 ? ((currentIndex + 1) / displayWords.length) * 100 : 0;
 
@@ -136,6 +186,34 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
   return (
     <div className="max-w-lg mx-auto">
+      {/* HSK Level Multi-Select */}
+      <div className="mb-4">
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            onClick={selectAllLevels}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              allLevelsSelected
+                ? "bg-red-600 text-white border-red-700"
+                : "bg-neutral-900 text-gray-500 border-neutral-700 hover:border-neutral-600"
+            }`}
+          >
+            All
+          </button>
+          {availableLevels.map((level) => (
+            <button
+              key={level}
+              onClick={() => toggleLevel(level)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${getHskButtonClasses(
+                level,
+                selectedLevels.has(level)
+              )}`}
+            >
+              HSK {level}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Top bar: counter + shuffle + learned stats */}
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 text-sm">
@@ -186,7 +264,7 @@ export function FlashcardMode({ words, learnedState, wordStatusFilter }: Flashca
 
       {/* Flashcard */}
       <div
-        className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(560px,calc(var(--app-inner-h,100svh)-260px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all relative overflow-hidden ${
+        className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(560px,calc(var(--app-inner-h,100svh)-300px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all relative overflow-hidden ${
           currentIsLearned
             ? "border-emerald-700/50 hover:border-emerald-600/70"
             : "border-neutral-800 hover:border-neutral-700"
