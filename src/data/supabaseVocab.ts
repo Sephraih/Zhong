@@ -211,6 +211,16 @@ const EMPTY_RESULT: FetchResult = {
 export async function fetchVocabularyFromSupabase(
   opts?: { bypassCache?: boolean }
 ): Promise<FetchResult> {
+  // Access rules:
+  // - Anonymous users: top 200 HSK 1 words
+  // - Logged in (free): all HSK 1 words
+  // - Purchased levels: include those levels
+  // - Premium: include all levels
+  //
+  // This function does NOT know auth state (it uses anon key), so the caller should
+  // fetch the full dataset and then filter by access. We keep the function returning
+  // all levels available in Supabase (1-4) and let App.tsx filter before rendering.
+
   if (!isSupabaseConfigured() || !supabase) {
     return EMPTY_RESULT;
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
+import { HskLevelFilter } from "./HskLevelFilter";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
@@ -500,35 +501,14 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
             {/* Controls row: HSK level multi-select + Direction toggle */}
             <div className="mb-6">
               <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
-                {/* HSK Level multi-select */}
-                <div className="inline-flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 flex-wrap">
-                  <button
-                    onClick={handleSelectAll}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                      hskLevels.length === 0
-                        ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-                        : "text-gray-400 hover:text-white hover:bg-neutral-900"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {availableLevels.map((level) => (
-                    <button
-                      key={level}
-                      onClick={() => handleLevelToggle(level)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                        hskLevels.includes(level)
-                          ? level === 1 ? "bg-emerald-600 text-white" :
-                            level === 2 ? "bg-blue-600 text-white" :
-                            level === 3 ? "bg-purple-600 text-white" :
-                            "bg-orange-600 text-white"
-                          : "text-gray-400 hover:text-white hover:bg-neutral-900"
-                      }`}
-                    >
-                      HSK {level}
-                    </button>
-                  ))}
-                </div>
+                {/* HSK Level multi-select with access control */}
+                <HskLevelFilter
+                  selectedLevels={hskLevels}
+                  onToggleLevel={handleLevelToggle}
+                  onSelectAll={handleSelectAll}
+                  availableLevelsInData={availableLevels}
+                  showComingSoon={false}
+                />
 
                 {/* Direction toggle + help toggle */}
                 <div className="inline-flex items-center gap-2">

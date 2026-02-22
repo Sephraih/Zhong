@@ -11,8 +11,6 @@ type AccountTier = 'free' | 'premium';
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  /** True while we're creating a Stripe Checkout session / redirecting. */
-  isCheckingOut: boolean;
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
@@ -32,22 +30,12 @@ const API_URL = import.meta.env.VITE_API_BASE || "";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [accountTier, setAccountTier] = useState<AccountTier>("free");
+  const [accountTier, setAccountTier] = useState<AccountTier>('free');
   const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
-
-  const readJson = async (res: Response) => {
-    const text = await res.text();
-    try {
-      return text ? JSON.parse(text) : {};
-    } catch {
-      return { raw: text };
-    }
-  };
 
   const fetchUser = useCallback(async (token: string) => {
     try {
@@ -231,10 +219,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsCheckingOut(true);
-    setError(null);
-
     try {
+      setIsLoading(true);
       console.log(`🛒 Starting HSK ${level} purchase...`);
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
@@ -248,25 +234,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
-      const body = await readJson(res);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
-      if (!res.ok) {
-        // If Vercel returns a non-JSON error page, body may be { raw: "..." }
-        throw new Error(body?.error || body?.message || body?.raw || `Checkout failed (HTTP ${res.status})`);
+      if (body.url) {
+        console.log("🔗 Redirecting to Stripe...");
+        window.location.assign(body.url);
+        return;
       }
 
-      if (!body?.url) {
-        throw new Error("Checkout session created but no redirect URL was returned.");
-      }
-
-      console.log("🔗 Redirecting to Stripe...");
-      window.location.assign(body.url);
+      throw new Error("No checkout URL returned from server");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Purchase failed";
       console.error("❌ Purchase error:", message);
       setError(message);
     } finally {
-      setIsCheckingOut(false);
+      setIsLoading(false);
     }
   };
 
@@ -277,10 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsCheckingOut(true);
-    setError(null);
-
     try {
+      setIsLoading(true);
       console.log("🛒 Starting Premium purchase...");
       const res = await fetch(`${API_URL}/api/create-checkout-session`, {
         method: "POST",
@@ -293,24 +274,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
-      const body = await readJson(res);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
-      if (!res.ok) {
-        throw new Error(body?.error || body?.message || body?.raw || `Checkout failed (HTTP ${res.status})`);
+      if (body.url) {
+        console.log("🔗 Redirecting to Stripe...");
+        window.location.assign(body.url);
+        return;
       }
 
-      if (!body?.url) {
-        throw new Error("Checkout session created but no redirect URL was returned.");
-      }
-
-      console.log("🔗 Redirecting to Stripe...");
-      window.location.assign(body.url);
+      throw new Error("No checkout URL returned from server");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Purchase failed";
       console.error("❌ Purchase error:", message);
       setError(message);
     } finally {
-      setIsCheckingOut(false);
+      setIsLoading(false);
     }
   };
 
@@ -339,7 +318,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
-        isCheckingOut,
         accountTier,
         purchasedLevels,
         login,

@@ -22,7 +22,7 @@ const LEVEL_PRICES: Record<number, string> = {
 const PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, isCheckingOut, error, clearError } = useAuth();
+  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium } = useAuth();
 
   if (!user) {
     return (
@@ -46,23 +46,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
 
   return (
     <div className="max-w-5xl mx-auto">
-      {error && (
-        <div className="mb-6 p-4 rounded-2xl border border-red-900/50 bg-red-950/30 text-red-200 flex items-start justify-between gap-4">
-          <div>
-            <p className="font-semibold">Purchase error</p>
-            <p className="text-sm text-red-200/80 mt-1 break-words">{error}</p>
-            <p className="text-xs text-red-200/60 mt-2">
-              Tip: If this is running locally, Vercel serverless routes (/api/...) may not be available.
-            </p>
-          </div>
-          <button
-            onClick={clearError}
-            className="shrink-0 px-3 py-1.5 rounded-lg text-sm bg-red-900/30 hover:bg-red-900/50 border border-red-900/40"
-          >
-            Close
-          </button>
-        </div>
-      )}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-3xl font-bold text-white mb-1">👤 Your Profile</h2>
@@ -182,9 +165,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
       {!isPremium && (
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-white">Unlock More Levels</h3>
-          <p className="text-sm text-gray-500">
-            Purchases open Stripe Checkout in a new page. If nothing happens, check the error banner above.
-          </p>
           
           {/* Premium Card */}
           <div className="bg-gradient-to-r from-yellow-900/30 to-amber-900/30 border-2 border-yellow-600/50 rounded-2xl p-6 shadow-lg relative overflow-hidden">
@@ -212,11 +192,14 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 <div className="text-sm text-gray-400 mb-3">one-time payment</div>
                 <button
                   onClick={purchasePremium}
-                  disabled={isCheckingOut}
-                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 disabled:from-yellow-900/50 disabled:to-amber-900/50 disabled:text-gray-300 disabled:cursor-not-allowed text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-900/30"
+                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-900/30"
                 >
-                  {isCheckingOut ? "Redirecting…" : "Upgrade to Premium"}
+                  Upgrade to Premium
                 </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  If nothing happens, open DevTools → Network and look for <code>/api/create-checkout-session</code>.
+                </p>
+                <p className="text-xs text-gray-400 mt-2">If nothing happens, open DevTools → Network and check <code>/api/create-checkout-session</code>.</p>
               </div>
             </div>
           </div>
@@ -252,8 +235,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                       <div className="text-2xl font-bold text-white mb-3">{price}</div>
                       <button
                         onClick={() => purchaseLevel(level)}
-                        disabled={isCheckingOut}
-                        className={`w-full py-2.5 rounded-xl font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                        className={`w-full py-2.5 rounded-xl font-semibold transition-all ${
                           level === 2
                             ? "bg-blue-600 hover:bg-blue-500 text-white"
                             : level === 3
@@ -261,7 +243,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                             : "bg-orange-600 hover:bg-orange-500 text-white"
                         }`}
                       >
-                        {isCheckingOut ? "Redirecting…" : `Purchase HSK ${level}`}
+                        Purchase HSK {level}
                       </button>
                     </>
                   )}

@@ -96,9 +96,34 @@ function signature(words: VocabWord[]): string {
 }
 
 function AppContent() {
+  const { user, accountTier, purchasedLevels } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
 
+  // Access rules:
+  // - Anonymous: HSK 1 only, top 200 words
+  // - Logged in (free): all HSK 1
+  // - Purchased levels: those levels
+  // - Premium: all levels
+  const accessInfo = useMemo(
+    () => ({
+      isLoggedIn: Boolean(user),
+      accountTier,
+      purchasedLevels,
+    }),
+    [user, accountTier, purchasedLevels]
+  );
+
+  const accessibleLevels = useMemo(() => {
+    if (accessInfo.accountTier === "premium") return [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    if (!accessInfo.isLoggedIn) return [1];
+    const set = new Set<number>([1, ...accessInfo.purchasedLevels]);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [accessInfo]);
+
+  // Prevent unused variable removal by TS (and for debugging):
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  void accessibleLevels;
   // 1) Load from localStorage cache synchronously if present.
   // 2) Otherwise show fallback immediately.
   const initial = useMemo(() => {
@@ -111,6 +136,47 @@ function AppContent() {
 
   const [vocabulary, setVocabulary] = useState<VocabWord[]>(initial.words);
   const [dataSource, setDataSource] = useState<"fallback" | "supabase">(initial.source);
+
+  // Apply access control to the vocabulary actually shown in the UI.
+  // We keep the fetched vocabulary intact, but derive a "visible" list.
+  const visibleVocabulary = useMemo(() => {
+    // Anonymous: only HSK 1, top 200
+    if (!accessInfo.isLoggedIn) {
+      return vocabulary.filter((w) => w.hskLevel === 1).slice(0, 200);
+    }
+
+    // Premium: everything we have
+    if (accessInfo.accountTier === "premium") {
+      return vocabulary;
+    }
+
+    // Logged in free: HSK 1 + purchased levels
+    const allowed = new Set<number>([1, ...accessInfo.purchasedLevels]);
+    return vocabulary.filter((w) => allowed.has(w.hskLevel));
+  }, [vocabulary, accessInfo]);
+
+  const hasAccessToLevel = useCallback(
+    (level: number) => {
+      if (level >= 5) return false;
+      if (!accessInfo.isLoggedIn) return level === 1;
+      if (accessInfo.accountTier === "premium") return true;
+      if (level === 1) return true;
+      return accessInfo.purchasedLevels.includes(level);
+    },
+    [accessInfo]
+  );
+
+  const lockReasonForLevel = useCallback(
+    (level: number) => {
+      if (level >= 5) return `HSK ${level} not available yet`;
+      if (!accessInfo.isLoggedIn) return `Sign in to access HSK ${level}`;
+      if (accessInfo.accountTier === "premium") return null;
+      if (level === 1) return null;
+      if (accessInfo.purchasedLevels.includes(level)) return null;
+      return `Purchase HSK ${level} (or Premium) to unlock`;
+    },
+    [accessInfo]
+  );
   const sigRef = useRef(signature(initial.words));
   const hadSupabaseCacheRef = useRef(initial.source === "supabase");
 
@@ -220,10 +286,10 @@ function AppContent() {
   const learnedState = useLearnedState();
   const { isLearned, toggleLearned, learnedCount } = learnedState;
 
-  const hsk1Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 1).length, [vocabulary]);
-  const hsk2Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 2).length, [vocabulary]);
-  const hsk3Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
-  const hsk4Count = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
+  const hsk1Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 1).length, [visibleVocabulary]);
+  const hsk2Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 2).length, [visibleVocabulary]);
+  const hsk3Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 3).length, [visibleVocabulary]);
+  const hsk4Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 4).length, [visibleVocabulary]);
 
   const stillLearningCount = vocabulary.length - learnedCount;
 
@@ -234,7 +300,7 @@ function AppContent() {
   }, [vocabulary]);
 
   const filteredWords = useMemo(() => {
-    return vocabulary.filter((word) => {
+    return visibleVocabulary.filter((word) => {
       if (hskFilter !== "all" && word.hskLevel !== hskFilter) return false;
       if (categoryFilter !== "all" && word.category !== categoryFilter) return false;
       if (statusFilter === "learned" && !isLearned(word.id)) return false;
@@ -482,21 +548,35 @@ function AppContent() {
                   { value: "all" as HSKFilter, label: "All Levels" },
                   { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  ...(hsk3Count > 0 ? [{ value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` }] : []),
-                  ...(hsk4Count > 0 ? [{ value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` }] : []),
-                ].map((filter) => (
-                  <button
-                    key={String(filter.value)}
-                    onClick={() => setHskFilter(filter.value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      hskFilter === filter.value
-                        ? "bg-red-600 text-white shadow-sm"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-red-800/60 hover:text-white"
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
+                  { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
+                  { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
+                  // Future levels shown as coming soon
+                  // { value: 5 as any, label: "HSK 5 (soon)" },
+                ].map((filter) => {
+                  const val = filter.value;
+                  const isLocked = val !== "all" && !hasAccessToLevel(val);
+                  const lockReason = val === "all" ? null : lockReasonForLevel(val);
+                  return (
+                    <button
+                      key={String(filter.value)}
+                      onClick={() => {
+                        if (isLocked) return;
+                        setHskFilter(filter.value);
+                      }}
+                      title={isLocked && lockReason ? lockReason : undefined}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                        hskFilter === filter.value
+                          ? "bg-red-600 text-white shadow-sm border-red-500"
+                          : isLocked
+                          ? "bg-neutral-900/50 text-gray-600 border-neutral-800 cursor-not-allowed"
+                          : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-red-800/60 hover:text-white"
+                      }`}
+                    >
+                      {isLocked ? "🔒 " : ""}
+                      {filter.label}
+                    </button>
+                  );
+                })}
 
                 <div className="w-px h-6 bg-neutral-800 self-center mx-1" />
 
@@ -612,7 +692,7 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">🔥 Practice Session</h2>
             </div>
-            <PracticeMode allWords={vocabulary} learnedState={learnedState} />
+            <PracticeMode allWords={visibleVocabulary} learnedState={learnedState} />
           </div>
         )}
 
@@ -652,7 +732,7 @@ function AppContent() {
 
             <FlashcardMode
               key={`fc-${flashcardKey}`}
-              allWords={vocabulary}
+              allWords={visibleVocabulary}
               learnedState={learnedState}
               wordStatusFilter={flashcardStatusFilter}
             />
@@ -666,7 +746,7 @@ function AppContent() {
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
             </div>
 
-            <QuizMode allWords={vocabulary} />
+            <QuizMode allWords={visibleVocabulary} />
           </div>
         )}
       </main>
