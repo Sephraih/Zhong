@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
-import { HskLevelFilter } from "./HskLevelFilter";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
@@ -10,6 +9,8 @@ import type { LearnedState } from "../hooks/useLearnedState";
 interface PracticeModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
+  /** Called when the user taps a locked HSK level button (should open login or profile) */
+  onLockedLevelClick?: () => void;
 }
 
 // Multi-select: empty array = all levels, otherwise contains selected level numbers
@@ -97,7 +98,23 @@ function getFilterLabel(levels: HskLevelFilter): string {
   return levels.map(l => `HSK ${l}`).join(", ");
 }
 
-export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
+function getLockedHskButtonClasses(level: number): string {
+  // Disabled, but with a subtle hint of the level color
+  switch (level) {
+    case 1:
+      return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
+    case 2:
+      return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
+    case 3:
+      return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
+    case 4:
+      return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    default:
+      return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
+  }
+}
+
+export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: PracticeModeProps) {
   const isMobile = useIsMobile();
 
   const [sessionWords, setSessionWords] = useState<SessionWord[]>([]);
@@ -488,8 +505,11 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
     );
   };
 
-  // Determine which levels have words available
-  const availableLevels = [1, 2, 3, 4].filter(l => allWords.some(w => w.hskLevel === l));
+  // NOTE: allWords is already access-filtered by App.tsx.
+  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
+  // not currently accessible (because they were filtered out).
+  const accessibleLevels = [1, 2, 3, 4].filter((l) => allWords.some((w) => w.hskLevel === l));
+  const shownLevels = [1, 2, 3, 4];
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -498,19 +518,67 @@ export function PracticeMode({ allWords, learnedState }: PracticeModeProps) {
 
         <div className="w-full flex justify-center">
           <div className="max-w-lg w-full">
-            {/* Controls row: HSK level multi-select + Direction toggle */}
-            <div className="mb-6">
-              <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
-                {/* HSK Level multi-select with access control */}
-                <HskLevelFilter
-                  selectedLevels={hskLevels}
-                  onToggleLevel={handleLevelToggle}
-                  onSelectAll={handleSelectAll}
-                  availableLevelsInData={availableLevels}
-                  showComingSoon={false}
-                />
+            {/* Controls: HSK level selector (single-line) + Direction/help on separate row */}
+            <div className="mb-6 space-y-3">
+              {/* HSK Level multi-select (never wraps; scroll horizontally if needed) */}
+              <div className="flex justify-center">
+                <div className="max-w-full">
+                  <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
+                    <button
+                      onClick={handleSelectAll}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                        hskLevels.length === 0
+                          ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
+                          : "text-gray-400 hover:text-white hover:bg-neutral-900"
+                      }`}
+                      title="Select all available levels"
+                    >
+                      All
+                    </button>
+                    {shownLevels.map((level) => {
+                      const enabled = accessibleLevels.includes(level);
+                      const selected = hskLevels.includes(level);
+                      return (
+                        <button
+                          key={level}
+                          onClick={() => {
+                            if (!enabled) {
+                              onLockedLevelClick?.();
+                              return;
+                            }
+                            handleLevelToggle(level);
+                          }}
+                          title={
+                            enabled
+                              ? undefined
+                              : level >= 5
+                              ? `HSK ${level} not available yet`
+                              : "Sign in / purchase to unlock this level"
+                          }
+                          className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                            !enabled
+                              ? `${getLockedHskButtonClasses(level)}`
+                              : selected
+                              ? level === 1
+                                ? "bg-emerald-600 text-white"
+                                : level === 2
+                                ? "bg-blue-600 text-white"
+                                : level === 3
+                                ? "bg-purple-600 text-white"
+                                : "bg-orange-600 text-white"
+                              : "text-gray-400 hover:text-white hover:bg-neutral-900"
+                          }`}
+                        >
+                          {!enabled ? "🔒 " : ""}HSK {level}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
 
-                {/* Direction toggle + help toggle */}
+              {/* Direction toggle + help toggle (moved to its own row so HSK buttons stay single-line) */}
+              <div className="flex justify-center">
                 <div className="inline-flex items-center gap-2">
                   <button
                     onClick={toggleDirection}

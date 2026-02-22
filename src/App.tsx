@@ -177,6 +177,16 @@ function AppContent() {
     },
     [accessInfo]
   );
+
+  const handleLockedLevelClick = useCallback(() => {
+    // If level isn't accessible, guide the user appropriately.
+    if (!accessInfo.isLoggedIn) {
+      openAuthModal("login");
+      return;
+    }
+    // Logged in but locked => show unlock options
+    navigate("profile");
+  }, [accessInfo.isLoggedIn]);
   const sigRef = useRef(signature(initial.words));
   const hadSupabaseCacheRef = useRef(initial.source === "supabase");
 
@@ -284,14 +294,30 @@ function AppContent() {
   const browsePageSize = isMobile ? 18 : 30;
 
   const learnedState = useLearnedState();
-  const { isLearned, toggleLearned, learnedCount } = learnedState;
+  const { isLearned, toggleLearned } = learnedState;
 
+  // Available words (after access filtering)
+  const availableTotal = visibleVocabulary.length;
+
+  // Total words in dataset (regardless of access)
+  const totalHsk1 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 1).length, [vocabulary]);
+  const totalHsk2 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 2).length, [vocabulary]);
+  const totalHsk3 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
+  const totalHsk4 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
+
+  // Available words per level
   const hsk1Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 1).length, [visibleVocabulary]);
   const hsk2Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 2).length, [visibleVocabulary]);
   const hsk3Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 3).length, [visibleVocabulary]);
   const hsk4Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 4).length, [visibleVocabulary]);
 
-  const stillLearningCount = vocabulary.length - learnedCount;
+  // Learned counts should be computed from *available* words, not the entire dataset.
+  const learnedAvailableCount = useMemo(
+    () => visibleVocabulary.reduce((acc, w) => acc + (isLearned(w.id) ? 1 : 0), 0),
+    [visibleVocabulary, isLearned]
+  );
+  const stillLearningCount = Math.max(0, availableTotal - learnedAvailableCount);
+  const learnedCount = learnedAvailableCount; // alias for UI labels expecting learnedCount
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -430,47 +456,103 @@ function AppContent() {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
                 <span className="text-sm text-gray-500">
-                  HSK 1: <span className="font-bold text-gray-300">{hsk1Count}</span>
+                  HSK 1:{" "}
+                  <span className="font-bold text-gray-300 tabular-nums">
+                    {hsk1Count}/{totalHsk1}
+                  </span>
                 </span>
               </div>
+
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30" />
                 <span className="text-sm text-gray-500">
-                  HSK 2: <span className="font-bold text-gray-300">{hsk2Count}</span>
+                  HSK 2:{" "}
+                  {hasAccessToLevel(2) ? (
+                    <span className="font-bold text-gray-300 tabular-nums">
+                      {hsk2Count}/{totalHsk2}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-gray-400" title={lockReasonForLevel(2) || undefined}>
+                      🔒
+                    </span>
+                  )}
                 </span>
               </div>
-              {hsk3Count > 0 && (
+
+              {totalHsk3 > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
                   <span className="text-sm text-gray-500">
-                    HSK 3: <span className="font-bold text-gray-300">{hsk3Count}</span>
+                    HSK 3:{" "}
+                    {hasAccessToLevel(3) ? (
+                      <span className="font-bold text-gray-300 tabular-nums">
+                        {hsk3Count}/{totalHsk3}
+                      </span>
+                    ) : (
+                      <span className="font-bold text-gray-400" title={lockReasonForLevel(3) || undefined}>
+                        🔒
+                      </span>
+                    )}
                   </span>
                 </div>
               )}
-              {hsk4Count > 0 && (
+
+              {totalHsk4 > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
                   <span className="text-sm text-gray-500">
-                    HSK 4: <span className="font-bold text-gray-300">{hsk4Count}</span>
+                    HSK 4:{" "}
+                    {hasAccessToLevel(4) ? (
+                      <span className="font-bold text-gray-300 tabular-nums">
+                        {hsk4Count}/{totalHsk4}
+                      </span>
+                    ) : (
+                      <span className="font-bold text-gray-400" title={lockReasonForLevel(4) || undefined}>
+                        🔒
+                      </span>
+                    )}
                   </span>
                 </div>
               )}
+
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
                 <span className="text-sm text-gray-500">
-                  Total: <span className="font-bold text-gray-300">{vocabulary.length}</span>
+                  Available:{" "}
+                  <span className="font-bold text-gray-300 tabular-nums">{availableTotal}</span>
+                  <span className="text-gray-600">/{vocabulary.length}</span>
                 </span>
               </div>
 
               <div className="hidden sm:flex items-center gap-2">
                 <span className="text-sm text-gray-600">|</span>
                 <span className="text-sm text-gray-500">
-                  ✅ Learned: <span className="font-bold text-emerald-400">{learnedCount}</span>
-                </span>
-                <span className="text-sm text-gray-500">
-                  📖 Learning: <span className="font-bold text-red-400">{stillLearningCount}</span>
+                  ✅ Learned:{" "}
+                  <span className="font-bold text-emerald-400 tabular-nums">
+                    {learnedAvailableCount}/{availableTotal}
+                  </span>
                 </span>
               </div>
+
+              {!accessInfo.isLoggedIn && (
+                <button
+                  onClick={() => openAuthModal("signup")}
+                  className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                  title="Create a free account to unlock full HSK 1 and purchase higher levels"
+                >
+                  🔓 Sign up to unlock all
+                </button>
+              )}
+
+              {!accessInfo.isLoggedIn && (
+                <button
+                  onClick={() => openAuthModal("signup")}
+                  className="sm:hidden inline-flex items-center gap-2 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                  title="Sign up to unlock more levels"
+                >
+                  🔓 Sign up
+                </button>
+              )}
 
               {/* Data source indicator */}
               {dataSource === "fallback" && (
@@ -490,11 +572,13 @@ function AppContent() {
               <div className="w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                  style={{ width: `${vocabulary.length > 0 ? (learnedCount / vocabulary.length) * 100 : 0}%` }}
+                  style={{
+                    width: `${availableTotal > 0 ? (learnedAvailableCount / availableTotal) * 100 : 0}%`,
+                  }}
                 />
               </div>
               <span className="text-xs text-gray-500 font-medium">
-                {vocabulary.length > 0 ? Math.round((learnedCount / vocabulary.length) * 100) : 0}%
+                {availableTotal > 0 ? Math.round((learnedAvailableCount / availableTotal) * 100) : 0}%
               </span>
             </div>
           </div>
@@ -550,8 +634,6 @@ function AppContent() {
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
                   { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
                   { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
-                  // Future levels shown as coming soon
-                  // { value: 5 as any, label: "HSK 5 (soon)" },
                 ].map((filter) => {
                   const val = filter.value;
                   const isLocked = val !== "all" && !hasAccessToLevel(val);
@@ -560,7 +642,10 @@ function AppContent() {
                     <button
                       key={String(filter.value)}
                       onClick={() => {
-                        if (isLocked) return;
+                        if (isLocked) {
+                          handleLockedLevelClick();
+                          return;
+                        }
                         setHskFilter(filter.value);
                       }}
                       title={isLocked && lockReason ? lockReason : undefined}
@@ -568,7 +653,7 @@ function AppContent() {
                         hskFilter === filter.value
                           ? "bg-red-600 text-white shadow-sm border-red-500"
                           : isLocked
-                          ? "bg-neutral-900/50 text-gray-600 border-neutral-800 cursor-not-allowed"
+                          ? "bg-neutral-900/50 text-gray-600 border-neutral-800 hover:border-neutral-700 hover:text-gray-300"
                           : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-red-800/60 hover:text-white"
                       }`}
                     >
@@ -692,7 +777,11 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">🔥 Practice Session</h2>
             </div>
-            <PracticeMode allWords={visibleVocabulary} learnedState={learnedState} />
+            <PracticeMode
+              allWords={visibleVocabulary}
+              learnedState={learnedState}
+              onLockedLevelClick={handleLockedLevelClick}
+            />
           </div>
         )}
 
@@ -735,6 +824,7 @@ function AppContent() {
               allWords={visibleVocabulary}
               learnedState={learnedState}
               wordStatusFilter={flashcardStatusFilter}
+              onLockedLevelClick={handleLockedLevelClick}
             />
           </div>
         )}
@@ -746,7 +836,7 @@ function AppContent() {
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
             </div>
 
-            <QuizMode allWords={visibleVocabulary} />
+            <QuizMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
           </div>
         )}
       </main>
@@ -757,7 +847,7 @@ function AppContent() {
           <div className="text-center">
             <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1-4 Vocabulary</p>
             <p className="text-xs text-gray-600 mt-1">
-              {vocabulary.length} words • ✅ {learnedCount} learned • 📖 {stillLearningCount} still learning
+              {vocabulary.length} words • ✅ {learnedAvailableCount}/{availableTotal} learned
               {dataSource === "fallback" && " • ⚡ Preview mode"}
             </p>
           </div>

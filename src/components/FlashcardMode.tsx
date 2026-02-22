@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
-import { HskLevelFilter } from "./HskLevelFilter";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
@@ -12,6 +11,44 @@ interface FlashcardModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
   wordStatusFilter: FlashcardFilter;
+  /** Called when the user taps a locked HSK level button (should open login or profile) */
+  onLockedLevelClick?: () => void;
+}
+
+const HSK_LEVELS = [1, 2, 3, 4] as const;
+type HskLevel = (typeof HSK_LEVELS)[number];
+
+function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
+  if (!isSelected) {
+    return "text-gray-400 hover:text-white hover:bg-neutral-900";
+  }
+  switch (level) {
+    case 1:
+      return "bg-emerald-600 text-white";
+    case 2:
+      return "bg-blue-600 text-white";
+    case 3:
+      return "bg-purple-600 text-white";
+    case 4:
+      return "bg-orange-600 text-white";
+    default:
+      return "bg-red-600 text-white";
+  }
+}
+
+function getLockedHskButtonClasses(level: HskLevel): string {
+  switch (level) {
+    case 1:
+      return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
+    case 2:
+      return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
+    case 3:
+      return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
+    case 4:
+      return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    default:
+      return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
+  }
 }
 
 function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars: number): string {
@@ -48,59 +85,63 @@ function splitPinyin(pinyin: string): string[] {
   return result.length === 0 ? [pinyin] : result;
 }
 
-// Toggle level helper
-function toggleLevel(levels: number[], level: number): number[] {
-  if (levels.length === 0) {
-    return [level];
-  }
-  if (levels.includes(level)) {
-    const newLevels = levels.filter(l => l !== level);
-    return newLevels;
-  }
-  return [...levels, level].sort((a, b) => a - b);
-}
-
-export function FlashcardMode({ allWords, learnedState, wordStatusFilter }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick }: FlashcardModeProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
   const [shuffleSeed, setShuffleSeed] = useState(0);
-  const [selectedLevels, setSelectedLevels] = useState<number[]>([]);
+  // selectedLevels is initialized after availableLevels is computed (see below)
 
   const { toggleLearned, isLearned, learnedCount } = learnedState;
 
-  // Get available HSK levels from the data
-  const availableLevels = useMemo(() => {
-    const levels = new Set<number>();
+  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
+  // Still: show disabled level selectors for locked / not-yet-available levels.
+
+  // NOTE: allWords is already access-filtered by App.tsx.
+  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
+  // not currently accessible (because they were filtered out).
+  //
+  // So we treat "present in allWords" as "accessible" (for this viewer), not as "available".
+  const accessibleLevels = useMemo(() => {
+    const levels = new Set<HskLevel>();
     allWords.forEach((w) => {
-      if ([1, 2, 3, 4].includes(w.hskLevel)) {
-        levels.add(w.hskLevel);
-      }
+      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) levels.add(w.hskLevel as HskLevel);
     });
     return Array.from(levels).sort((a, b) => a - b);
   }, [allWords]);
 
-  const handleLevelToggle = (level: number) => {
-    const newLevels = toggleLevel(selectedLevels, level);
-    setSelectedLevels(newLevels);
+  const shownLevels: HskLevel[] = [1, 2, 3, 4];
+
+  // default: select all levels that are currently present
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(shownLevels));
+
+  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
+
+  // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
+  const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
+
+  const toggleLevel = (level: HskLevel) => {
+    if (!isLevelEnabled(level)) return;
+    const next = new Set(selectedLevels);
+    if (next.has(level)) {
+      if (next.size > 1) next.delete(level);
+    } else {
+      next.add(level);
+    }
+    setSelectedLevels(next);
     setCurrentIndex(0);
     setIsFlipped(false);
   };
 
-  const handleSelectAll = () => {
-    setSelectedLevels([]);
+  const selectAllLevels = () => {
+    setSelectedLevels(new Set(shownLevels));
     setCurrentIndex(0);
     setIsFlipped(false);
   };
 
   // Filter words — by HSK level, learned status, then optionally shuffle
   const displayWords = useMemo(() => {
-    let filtered = allWords;
-    
-    // Filter by selected levels
-    if (selectedLevels.length > 0) {
-      filtered = filtered.filter((w) => selectedLevels.includes(w.hskLevel));
-    }
+    let filtered = allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
     
     if (wordStatusFilter === "still-learning") {
       filtered = filtered.filter((w) => !isLearned(w.id));
@@ -160,19 +201,65 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter }: Flas
   const progress = displayWords.length > 0 ? ((currentIndex + 1) / displayWords.length) * 100 : 0;
   const currentIsLearned = currentWord ? isLearned(currentWord.id) : false;
 
+  // HSK Filter component - always rendered
+  const HskFilterButtons = () => (
+    <div className="mb-5 flex justify-center">
+      <div className="max-w-full">
+        <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
+          <button
+            onClick={selectAllLevels}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              allLevelsSelected
+                ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
+                : "text-gray-400 hover:text-white hover:bg-neutral-900"
+            }`}
+            title="Select all available levels"
+          >
+            All
+          </button>
+
+          {shownLevels.map((level) => {
+            const enabled = isLevelEnabled(level);
+            const selected = selectedLevels.has(level);
+            return (
+              <button
+                key={level}
+                onClick={() => {
+                  if (!enabled) {
+                    onLockedLevelClick?.();
+                    return;
+                  }
+                  toggleLevel(level);
+                }}
+                title={
+                  enabled
+                    ? undefined
+                    : level >= 5
+                    ? `HSK ${level} not available yet`
+                    : "Sign in / purchase to unlock this level"
+                }
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  !enabled
+                    ? `${getLockedHskButtonClasses(level)}`
+                    : selected
+                    ? getHskButtonClasses(level, true)
+                    : getHskButtonClasses(level, false)
+                }`}
+              >
+                {!enabled ? "🔒 " : ""}HSK {level}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
   // Empty state - but still show the filter buttons!
   if (displayWords.length === 0 || !currentWord) {
     return (
       <div className="max-w-lg mx-auto">
-        <div className="mb-4 flex justify-center">
-          <HskLevelFilter
-            selectedLevels={selectedLevels}
-            onToggleLevel={handleLevelToggle}
-            onSelectAll={handleSelectAll}
-            availableLevelsInData={availableLevels}
-            showComingSoon={false}
-          />
-        </div>
+        <HskFilterButtons />
         <div className="text-center py-16">
           <div className="text-5xl mb-4">📭</div>
           <p className="text-gray-400 text-lg">No words available for the selected filters.</p>
@@ -190,16 +277,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter }: Flas
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* HSK Level Filter with access control */}
-      <div className="mb-4 flex justify-center">
-        <HskLevelFilter
-          selectedLevels={selectedLevels}
-          onToggleLevel={handleLevelToggle}
-          onSelectAll={handleSelectAll}
-          availableLevelsInData={availableLevels}
-          showComingSoon={false}
-        />
-      </div>
+      <HskFilterButtons />
 
       {/* Top bar: counter + shuffle + learned stats */}
       <div className="mb-4 flex items-center justify-between gap-2">
