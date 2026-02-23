@@ -300,8 +300,6 @@ function AppContent() {
   const availableTotal = visibleVocabulary.length;
 
   // Total words in dataset (regardless of access)
-  const totalHsk1 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 1).length, [vocabulary]);
-  const totalHsk2 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 2).length, [vocabulary]);
   const totalHsk3 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
   const totalHsk4 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
 
@@ -314,6 +312,24 @@ function AppContent() {
   // Learned counts should be computed from *available* words, not the entire dataset.
   const learnedAvailableCount = useMemo(
     () => visibleVocabulary.reduce((acc, w) => acc + (isLearned(w.id) ? 1 : 0), 0),
+    [visibleVocabulary, isLearned]
+  );
+
+  // Learned per level (within the *available* subset)
+  const learnedHsk1Count = useMemo(
+    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 1 && isLearned(w.id) ? 1 : 0), 0),
+    [visibleVocabulary, isLearned]
+  );
+  const learnedHsk2Count = useMemo(
+    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 2 && isLearned(w.id) ? 1 : 0), 0),
+    [visibleVocabulary, isLearned]
+  );
+  const learnedHsk3Count = useMemo(
+    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 3 && isLearned(w.id) ? 1 : 0), 0),
+    [visibleVocabulary, isLearned]
+  );
+  const learnedHsk4Count = useMemo(
+    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 4 && isLearned(w.id) ? 1 : 0), 0),
     [visibleVocabulary, isLearned]
   );
   const stillLearningCount = Math.max(0, availableTotal - learnedAvailableCount);
@@ -448,142 +464,198 @@ function AppContent() {
         </div>
       </header>
 
-      {/* Stats Banner */}
-      <div className={`border-b border-neutral-800/60 relative z-10 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-wrap gap-4 items-center justify-between">
-            <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
-                <span className="text-sm text-gray-500">
-                  HSK 1:{" "}
-                  <span className="font-bold text-gray-300 tabular-nums">
-                    {hsk1Count}/{totalHsk1}
-                  </span>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30" />
-                <span className="text-sm text-gray-500">
-                  HSK 2:{" "}
-                  {hasAccessToLevel(2) ? (
-                    <span className="font-bold text-gray-300 tabular-nums">
-                      {hsk2Count}/{totalHsk2}
-                    </span>
-                  ) : (
-                    <span className="font-bold text-gray-400" title={lockReasonForLevel(2) || undefined}>
-                      🔒
-                    </span>
-                  )}
-                </span>
-              </div>
-
-              {totalHsk3 > 0 && (
+      {/* Stats / CTA Banner */}
+      {viewMode === "home" ? (
+        <div className="border-b border-neutral-800/60 relative z-10 bg-neutral-950/70 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              {/* Left: free preview indicator */}
+              <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
                   <span className="text-sm text-gray-500">
-                    HSK 3:{" "}
-                    {hasAccessToLevel(3) ? (
-                      <span className="font-bold text-gray-300 tabular-nums">
-                        {hsk3Count}/{totalHsk3}
-                      </span>
-                    ) : (
-                      <span className="font-bold text-gray-400" title={lockReasonForLevel(3) || undefined}>
+                    HSK 1: <span className="font-bold text-gray-300 tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
+                    {!accessInfo.isLoggedIn && (
+                      <span className="ml-1 text-gray-400" title="Sign in to see all">
                         🔒
                       </span>
                     )}
                   </span>
                 </div>
-              )}
 
-              {totalHsk4 > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
-                  <span className="text-sm text-gray-500">
-                    HSK 4:{" "}
-                    {hasAccessToLevel(4) ? (
-                      <span className="font-bold text-gray-300 tabular-nums">
-                        {hsk4Count}/{totalHsk4}
-                      </span>
-                    ) : (
-                      <span className="font-bold text-gray-400" title={lockReasonForLevel(4) || undefined}>
-                        🔒
-                      </span>
-                    )}
+                {dataSource === "fallback" && (
+                  <span className="inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
+                    ⚡ Preview
                   </span>
-                </div>
-              )}
+                )}
 
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
-                <span className="text-sm text-gray-500">
-                  Available:{" "}
-                  <span className="font-bold text-gray-300 tabular-nums">{availableTotal}</span>
-                  <span className="text-gray-600">/{vocabulary.length}</span>
-                </span>
-              </div>
-
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="text-sm text-gray-600">|</span>
-                <span className="text-sm text-gray-500">
-                  ✅ Learned:{" "}
-                  <span className="font-bold text-emerald-400 tabular-nums">
-                    {learnedAvailableCount}/{availableTotal}
+                {!accessInfo.isLoggedIn && (
+                  <span className="text-xs text-gray-500">
+                    Try 200 words free — sign up to unlock full HSK 1 & save progress.
                   </span>
-                </span>
+                )}
               </div>
 
-              {!accessInfo.isLoggedIn && (
+              {/* Right: CTA */}
+              <div className="flex items-center gap-2 ml-auto">
                 <button
-                  onClick={() => openAuthModal("signup")}
-                  className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                  title="Create a free account to unlock full HSK 1 and purchase higher levels"
+                  onClick={() => navigate("browse")}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                  title="Browse your available words"
                 >
-                  🔓 Sign up to unlock all
+                  Browse
                 </button>
-              )}
 
-              {!accessInfo.isLoggedIn && (
-                <button
-                  onClick={() => openAuthModal("signup")}
-                  className="sm:hidden inline-flex items-center gap-2 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                  title="Sign up to unlock more levels"
-                >
-                  🔓 Sign up
-                </button>
-              )}
-
-              {/* Data source indicator */}
-              {dataSource === "fallback" && (
-                <span className="hidden sm:inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
-                  ⚡ Preview
-                </span>
-              )}
-
-              {isPending && (
-                <span className="hidden sm:inline-flex text-xs text-gray-400 bg-neutral-900 px-2 py-0.5 rounded-full border border-neutral-800">
-                  Syncing…
-                </span>
-              )}
-            </div>
-
-            <div className="hidden sm:flex items-center gap-3">
-              <div className="w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${availableTotal > 0 ? (learnedAvailableCount / availableTotal) * 100 : 0}%`,
-                  }}
-                />
+                {!accessInfo.isLoggedIn ? (
+                  <button
+                    onClick={() => openAuthModal("signup")}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                    title="Create a free account to unlock full HSK 1 and save your progress!"
+                  >
+                    🔓 Sign up to unlock
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate("profile")}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                    title="View unlock options and your progress"
+                  >
+                    View unlocks
+                  </button>
+                )}
               </div>
-              <span className="text-xs text-gray-500 font-medium">
-                {availableTotal > 0 ? Math.round((learnedAvailableCount / availableTotal) * 100) : 0}%
-              </span>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className={`border-b border-neutral-800/60 relative z-10 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
+                  <span className="text-sm text-gray-500">
+                    HSK 1{" "}
+                    <span className="font-bold text-gray-300 tabular-nums">
+                      {learnedHsk1Count}/{hsk1Count}
+                    </span>
+                    {!accessInfo.isLoggedIn && (
+                      <span className="ml-1 text-gray-400" title="Sign in to see all">
+                        🔒
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30" />
+                  <span className="text-sm text-gray-500">
+                    HSK 2{" "}
+                    {hasAccessToLevel(2) ? (
+                      <span className="font-bold text-gray-300 tabular-nums">
+                        {learnedHsk2Count}/{hsk2Count}
+                      </span>
+                    ) : (
+                      <span className="font-bold text-gray-400" title={lockReasonForLevel(2) || undefined}>
+                        🔒
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                {totalHsk3 > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
+                    <span className="text-sm text-gray-500">
+                      HSK 3{" "}
+                      {hasAccessToLevel(3) ? (
+                        <span className="font-bold text-gray-300 tabular-nums">
+                          {learnedHsk3Count}/{hsk3Count}
+                        </span>
+                      ) : (
+                        <span className="font-bold text-gray-400" title={lockReasonForLevel(3) || undefined}>
+                          🔒
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {totalHsk4 > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
+                    <span className="text-sm text-gray-500">
+                      HSK 4{" "}
+                      {hasAccessToLevel(4) ? (
+                        <span className="font-bold text-gray-300 tabular-nums">
+                          {learnedHsk4Count}/{hsk4Count}
+                        </span>
+                      ) : (
+                        <span className="font-bold text-gray-400" title={lockReasonForLevel(4) || undefined}>
+                          🔒
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
+                  <span className="text-sm text-gray-500">
+                    Available{" "}
+                    <span className="font-bold text-gray-300 tabular-nums">{availableTotal}</span>
+                    <span className="text-gray-600">/{vocabulary.length}</span>
+                  </span>
+                </div>
+
+                {/* Data source indicator */}
+                {dataSource === "fallback" && (
+                  <span className="hidden sm:inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
+                    ⚡ Preview
+                  </span>
+                )}
+
+                {isPending && (
+                  <span className="hidden sm:inline-flex text-xs text-gray-400 bg-neutral-900 px-2 py-0.5 rounded-full border border-neutral-800">
+                    Syncing…
+                  </span>
+                )}
+              </div>
+
+              {/* Right side: Learned + progress + CTA aligned to the far right */}
+              <div className="flex items-center gap-3 ml-auto">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">
+                    ✅ Learned{" "}
+                    <span className="font-bold text-emerald-400 tabular-nums">
+                      {learnedAvailableCount}/{availableTotal}
+                    </span>
+                  </span>
+                  <div className="w-24 sm:w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+                      style={{ width: `${availableTotal > 0 ? (learnedAvailableCount / availableTotal) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="hidden sm:inline text-xs text-gray-500 font-medium">
+                    {availableTotal > 0 ? Math.round((learnedAvailableCount / availableTotal) * 100) : 0}%
+                  </span>
+                </div>
+
+                {!accessInfo.isLoggedIn && (
+                  <button
+                    onClick={() => openAuthModal("signup")}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+                    title="Create a free account to unlock full HSK 1 and save your progress!"
+                  >
+                    🔓 Sign up to unlock
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
@@ -625,7 +697,7 @@ function AppContent() {
                 />
               </div>
 
-              {/* Level + Status filters */}
+              {/* Level filter */}
               <div className="flex flex-wrap gap-2">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Level:</span>
                 {[
@@ -662,29 +734,6 @@ function AppContent() {
                     </button>
                   );
                 })}
-
-                <div className="w-px h-6 bg-neutral-800 self-center mx-1" />
-
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
-                {[
-                  { value: "all" as StatusFilter, label: `All Words (${vocabulary.length})`, icon: "📋" },
-                  { value: "still-learning" as StatusFilter, label: `Still Learning (${stillLearningCount})`, icon: "📖" },
-                  { value: "learned" as StatusFilter, label: `Learned (${learnedCount})`, icon: "✅" },
-                ].map((filter) => (
-                  <button
-                    key={filter.value}
-                    onClick={() => setStatusFilter(filter.value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      statusFilter === filter.value
-                        ? filter.value === "learned"
-                          ? "bg-emerald-700 text-white shadow-sm"
-                          : "bg-red-600 text-white shadow-sm"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-red-800/60 hover:text-white"
-                    }`}
-                  >
-                    {filter.icon} {filter.label}
-                  </button>
-                ))}
               </div>
 
               {/* Category filter */}
@@ -711,6 +760,34 @@ function AppContent() {
                     }`}
                   >
                     {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status filter (moved below Category) */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
+                {[
+                  {
+                    value: "all" as StatusFilter,
+                    label: `All Words (${availableTotal}/${vocabulary.length})`,
+                    icon: "📋",
+                  },
+                  { value: "still-learning" as StatusFilter, label: `Still Learning (${stillLearningCount})`, icon: "📖" },
+                  { value: "learned" as StatusFilter, label: `Learned (${learnedCount})`, icon: "✅" },
+                ].map((filter) => (
+                  <button
+                    key={filter.value}
+                    onClick={() => setStatusFilter(filter.value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      statusFilter === filter.value
+                        ? filter.value === "learned"
+                          ? "bg-emerald-700 text-white shadow-sm"
+                          : "bg-red-600 text-white shadow-sm"
+                        : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-red-800/60 hover:text-white"
+                    }`}
+                  >
+                    {filter.icon} {filter.label}
                   </button>
                 ))}
               </div>
