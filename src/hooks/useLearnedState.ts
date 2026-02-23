@@ -3,6 +3,26 @@ import type { VocabWord } from "../data/vocabulary";
 import { getSupabaseAuthedClient } from "../supabaseClient";
 
 const STORAGE_KEY = "hanyu-learned-words";
+const STORAGE_UPDATED_AT_KEY = "hanyu-learned-words-updated-at";
+
+function loadLocalUpdatedAt(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_UPDATED_AT_KEY);
+    if (!raw) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveLocalUpdatedAt(ts: number) {
+  try {
+    localStorage.setItem(STORAGE_UPDATED_AT_KEY, String(ts));
+  } catch {
+    // ignore
+  }
+}
 
 function loadLearnedWords(): Set<number> {
   try {
@@ -140,6 +160,12 @@ function getAccessToken(): string | null {
 export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedState {
   const [learned, setLearned] = useState<Set<number>>(loadLearnedWords);
 
+  // Track local last-modified time so we can do last-write-wins vs cloud.
+  const localUpdatedAtRef = useRef<number>(loadLocalUpdatedAt());
+
+  // If we apply cloud state, we don't want to immediately save it back.
+  const suppressNextSaveRef = useRef(false);
+
   // Always keep a ref to the latest set (avoid stale closures in debounce)
   const learnedRef = useRef(learned);
   useEffect(() => {
@@ -152,6 +178,9 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
   // Persist locally for instant startup/offline
   useEffect(() => {
     saveLearnedWords(learned);
+    const now = Date.now();
+    localUpdatedAtRef.current = now;
+    saveLocalUpdatedAt(now);
   }, [learned]);
 
   const cloudReadyRef = useRef(false);
@@ -184,7 +213,7 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
 
       const { data, error } = await sb
         .from("user_learned_words")
-        .select("learned_bits")
+        .select("learned_bits, updated_at")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -197,20 +226,44 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
         return;
       }
 
-      const merged = new Set<number>(learnedRef.current);
+      const cloudUpdatedAtRaw = (data as any)?.updated_at as string | null | undefined;
+      const cloudUpdatedAt = cloudUpdatedAtRaw ? new Date(cloudUpdatedAtRaw).getTime() : 0;
+      const localUpdatedAt = localUpdatedAtRef.current;
+
       const bits = (data as any)?.learned_bits as Record<string, string> | null | undefined;
 
-      if (bits && typeof bits === "object") {
-        for (const [lvlStr, b64] of Object.entries(bits)) {
-          const lvl = Number(lvlStr);
-          const ordered = levelIndex.get(lvl);
-          if (!ordered?.length) continue;
-          const decoded = decodeBitset(ordered, b64);
-          decoded.forEach((id) => merged.add(id));
+      // If cloud is newer than local, prefer cloud (this allows unlearn to propagate across devices).
+      // If local is newer, keep local and let the debounced save push it to cloud.
+      if (cloudUpdatedAt > localUpdatedAt) {
+        const fromCloud = new Set<number>();
+        if (bits && typeof bits === "object") {
+          for (const [lvlStr, b64] of Object.entries(bits)) {
+            const lvl = Number(lvlStr);
+            const ordered = levelIndex.get(lvl);
+            if (!ordered?.length) continue;
+            const decoded = decodeBitset(ordered, b64);
+            decoded.forEach((id) => fromCloud.add(id));
+          }
         }
+        suppressNextSaveRef.current = true;
+        setLearned(fromCloud);
+        localUpdatedAtRef.current = cloudUpdatedAt;
+        saveLocalUpdatedAt(cloudUpdatedAt);
+      } else {
+        // Local is newer or equal: keep local, but if the cloud has bits that local doesn't,
+        // we still merge them in (union) to avoid losing progress if timestamps are equal.
+        const merged = new Set<number>(learnedRef.current);
+        if (bits && typeof bits === "object") {
+          for (const [lvlStr, b64] of Object.entries(bits)) {
+            const lvl = Number(lvlStr);
+            const ordered = levelIndex.get(lvl);
+            if (!ordered?.length) continue;
+            const decoded = decodeBitset(ordered, b64);
+            decoded.forEach((id) => merged.add(id));
+          }
+        }
+        setLearned(merged);
       }
-
-      setLearned(merged);
     }
 
     loadFromCloud().finally(() => {
@@ -227,24 +280,26 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
     };
   }, [userId, levelIndex, levelSig]);
 
-  // Debounced cloud save
+  // Debounced + flushable cloud save
+  const SAVE_DEBOUNCE_MS = 800;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef(false);
+  const saveFnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const token = getAccessToken();
     const sb = getSupabaseAuthedClient(token);
 
-    if (!userId || !sb || levelIndex.size === 0) return;
-
-    // Don't save until we've attempted the initial cloud load.
-    if (!cloudReadyRef.current) {
-      dirtyBeforeReadyRef.current = true;
+    if (!userId || !sb || levelIndex.size === 0) {
+      saveFnRef.current = null;
+      pendingSaveRef.current = false;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = null;
       return;
     }
 
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-
-    saveTimer.current = setTimeout(async () => {
+    const saveNow = async () => {
+      pendingSaveRef.current = false;
       const learnedBits: Record<string, string> = {};
       const setToEncode = learnedRef.current;
 
@@ -259,12 +314,62 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
       if (error) {
         console.warn("[useLearnedState] cloud save error:", error.message);
       }
-    }, 2000);
+    };
+
+    // expose a flush function (used on pagehide/visibilitychange)
+    saveFnRef.current = () => {
+      // fire-and-forget; best-effort
+      void saveNow();
+    };
+
+    // Don't save until we've attempted the initial cloud load.
+    if (!cloudReadyRef.current) {
+      dirtyBeforeReadyRef.current = true;
+      return;
+    }
+
+    // If we just applied cloud state, skip one save cycle.
+    if (suppressNextSaveRef.current) {
+      suppressNextSaveRef.current = false;
+      pendingSaveRef.current = false;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      return;
+    }
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+
+    pendingSaveRef.current = true;
+    saveTimer.current = setTimeout(() => {
+      void saveNow();
+    }, SAVE_DEBOUNCE_MS);
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [learned, userId, levelIndex]);
+
+  // Flush pending save when the tab is backgrounded / navigating away.
+  useEffect(() => {
+    if (!userId) return;
+
+    const flushIfPending = () => {
+      if (!pendingSaveRef.current) return;
+      saveFnRef.current?.();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushIfPending();
+    };
+
+    window.addEventListener("pagehide", flushIfPending);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("pagehide", flushIfPending);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [userId]);
 
   const isLearned = useCallback((wordId: number) => learned.has(wordId), [learned]);
 
