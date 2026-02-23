@@ -46,20 +46,19 @@ The app works offline with fallback vocabulary data (~160 words). For full funct
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Note your **Project URL** and **anon public key** from Settings → API
 
-### 2. Run Database Migrations
+### 2. Run Database Setup
 
-Run these SQL scripts in **Supabase Dashboard → SQL Editor**:
+Run the single consolidated setup script in **Supabase Dashboard → SQL Editor**:
 
-#### Basic Tables (`SUPABASE_SETUP.sql`)
+#### `SUPABASE_SETUP.sql`
 ```sql
--- Creates: profiles, subscriptions tables
+-- Creates/updates:
+--  - profiles (+ account_tier)
+--  - purchased_levels (one-time purchases)
+--  - user_learned_words (compact learned_bits)
+--  - subscriptions (legacy compatibility)
+--  - triggers + RLS + indexes
 -- Run the contents of SUPABASE_SETUP.sql
-```
-
-#### Tiered Access Tables (`supabase_tiered_access.sql`)
-```sql
--- Creates: purchased_levels table, account_tier column, get_user_access() function
--- Run the contents of supabase_tiered_access.sql
 ```
 
 #### HSK Vocabulary Tables
