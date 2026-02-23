@@ -293,7 +293,7 @@ function AppContent() {
   const [browsePage, setBrowsePage] = useState(1);
   const browsePageSize = isMobile ? 18 : 30;
 
-  const learnedState = useLearnedState();
+  const learnedState = useLearnedState(user?.id, vocabulary);
   const { isLearned, toggleLearned } = learnedState;
 
   // Available words (after access filtering)
