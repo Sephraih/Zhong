@@ -83,6 +83,22 @@ function MobileUserButton({
 }
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
+
+function isViewMode(x: string): x is ViewMode {
+  return ["home", "browse", "flashcards", "quiz", "practice", "profile"].includes(x);
+}
+
+function getInitialViewMode(): ViewMode {
+  try {
+    const hash = window.location.hash.replace(/^#/, "").trim();
+    if (hash && isViewMode(hash)) return hash;
+    const stored = localStorage.getItem("hanyu_view_mode");
+    if (stored && isViewMode(stored)) return stored;
+  } catch {
+    // ignore
+  }
+  return "home";
+}
 type HSKFilter = "all" | 1 | 2 | 3 | 4;
 type StatusFilter = "all" | "learned" | "still-learning";
 
@@ -280,7 +296,7 @@ function AppContent() {
   }, [startTransition]);
 
   // UI state
-  const [viewMode, setViewMode] = useState<ViewMode>("home");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewMode());
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -377,11 +393,35 @@ function AppContent() {
     setAuthModalOpen(true);
   };
 
+  // Sync view mode with hash changes (back/forward navigation)
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace(/^#/, "").trim();
+      if (!hash) {
+        setViewMode("home");
+        return;
+      }
+      if (isViewMode(hash)) {
+        setViewMode(hash);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+
   const navigate = (mode: ViewMode) => {
     setViewMode(mode);
 
+    // Persist mode for refresh + deep links
+    try {
+      localStorage.setItem("hanyu_view_mode", mode);
+      window.location.hash = mode === "home" ? "" : mode;
+    } catch {
+      // ignore
+    }
+
     // Mobile UX: when switching modes, reset scroll position.
-    // Otherwise the new mode renders at whatever scrollY the landing page was at.
     if (isMobile) {
       requestAnimationFrame(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });

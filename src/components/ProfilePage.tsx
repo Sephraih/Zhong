@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { 
-  getAccessibleLevels, 
-  getHskBadgeClasses, 
-  AVAILABLE_LEVELS, 
-  COMING_SOON_LEVELS 
+import {
+  getAccessibleLevels,
+  getHskBadgeClasses,
+  AVAILABLE_LEVELS,
+  COMING_SOON_LEVELS,
 } from "../utils/hskAccess";
 
 interface ProfilePageProps {
@@ -13,16 +14,55 @@ interface ProfilePageProps {
   onBack: () => void;
 }
 
-const LEVEL_PRICES: Record<number, string> = {
+type StripePrices = {
+  premium: string | null;
+  hsk2: string | null;
+  hsk3: string | null;
+  hsk4: string | null;
+};
+
+const FALLBACK_LEVEL_PRICES: Record<number, string> = {
   2: "$4.99",
   3: "$6.99",
   4: "$9.99",
 };
 
-const PREMIUM_PRICE = "$19.99";
+const FALLBACK_PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
   const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium } = useAuth();
+
+  const [stripePrices, setStripePrices] = useState<StripePrices>({
+    premium: null,
+    hsk2: null,
+    hsk3: null,
+    hsk4: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/prices", { headers: { "Cache-Control": "no-cache" } });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.prices) {
+          setStripePrices({
+            premium: data.prices.premium ?? null,
+            hsk2: data.prices.hsk2 ?? null,
+            hsk3: data.prices.hsk3 ?? null,
+            hsk4: data.prices.hsk4 ?? null,
+          });
+        }
+      } catch {
+        // ignore; keep fallback
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!user) {
     return (
@@ -40,6 +80,13 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     accountTier,
     purchasedLevels,
   });
+
+  const premiumPrice = stripePrices.premium ?? FALLBACK_PREMIUM_PRICE;
+  const levelPriceMap: Record<number, string> = {
+    2: stripePrices.hsk2 ?? FALLBACK_LEVEL_PRICES[2],
+    3: stripePrices.hsk3 ?? FALLBACK_LEVEL_PRICES[3],
+    4: stripePrices.hsk4 ?? FALLBACK_LEVEL_PRICES[4],
+  };
 
   const learnedPercent = totalWords > 0 ? Math.round((learnedCount / totalWords) * 100) : 0;
   const learningPercent = totalWords > 0 ? Math.round((stillLearningCount / totalWords) * 100) : 0;
@@ -188,7 +235,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 </div>
               </div>
               <div className="text-center md:text-right">
-                <div className="text-3xl font-bold text-white">{PREMIUM_PRICE}</div>
+                <div className="text-3xl font-bold text-white">{premiumPrice}</div>
                 <div className="text-sm text-gray-400 mb-3">one-time payment</div>
                 <button
                   onClick={purchasePremium}
@@ -196,10 +243,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 >
                   Upgrade to Premium
                 </button>
-                <p className="text-xs text-gray-400 mt-2">
-                  If nothing happens, open DevTools → Network and look for <code>/api/create-checkout-session</code>.
-                </p>
-                <p className="text-xs text-gray-400 mt-2">If nothing happens, open DevTools → Network and check <code>/api/create-checkout-session</code>.</p>
               </div>
             </div>
           </div>
@@ -208,7 +251,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {AVAILABLE_LEVELS.filter(l => l > 1).map((level) => {
               const isOwned = accessibleLevels.includes(level);
-              const price = LEVEL_PRICES[level];
+              const price = levelPriceMap[level];
               
               return (
                 <div

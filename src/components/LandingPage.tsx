@@ -762,8 +762,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           Learn Mandarin
         </h1>
         <p className="mt-3 text-xl font-light text-red-400">One focused session at a time.</p>
-        <div className="mt-5 inline-block rounded-2xl bg-neutral-950/65 border border-white/10 px-5 py-4">
-          <p className="text-gray-200/80 leading-relaxed">
+        <div className="mt-5 inline-block rounded-2xl bg-neutral-950/80 border border-white/15 px-5 py-4">
+          <p className="text-gray-100 leading-relaxed">
             HSK vocabulary with real example sentences, per-character pinyin hover, audio, and multiple study modes.
           </p>
         </div>
