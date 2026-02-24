@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   refreshAuth: () => Promise<void>;
   error: string | null;
   clearError: () => void;
@@ -313,6 +314,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPurchasedLevels([]);
   };
 
+  const deleteAccount = async (password: string) => {
+    const token = localStorage.getItem("hanyu_auth_token");
+    if (!token) {
+      setError("Please sign in again to delete your account");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const res = await fetch(`${API_URL}/api/auth/delete-account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to delete account");
+      }
+
+      // Clear local auth + state
+      localStorage.removeItem("hanyu_auth_token");
+      setUser(null);
+      setAccountTier('free');
+      setPurchasedLevels([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete account";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -325,6 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         purchaseLevel,
         purchasePremium,
+        deleteAccount,
         refreshAuth,
         error,
         clearError,

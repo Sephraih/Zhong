@@ -30,7 +30,7 @@ const FALLBACK_LEVEL_PRICES: Record<number, string> = {
 const FALLBACK_PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium } = useAuth();
+  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, deleteAccount } = useAuth();
 
   const [stripePrices, setStripePrices] = useState<StripePrices>({
     premium: null,
@@ -38,6 +38,13 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     hsk3: null,
     hsk4: null,
   });
+
+  // Account deletion UI
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +314,113 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           </p>
         </div>
       )}
+
+      {/* Danger zone */}
+      <div className="mt-10">
+        <div className="bg-neutral-950/70 border border-red-900/40 rounded-2xl p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Danger zone</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Permanently delete your account and learning data.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen((v) => !v);
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-900/50 text-red-300 hover:text-red-200 hover:border-red-700/70 hover:bg-red-950/30 transition-colors"
+            >
+              {deleteOpen ? "Close" : "Delete account"}
+            </button>
+          </div>
+
+          {deleteOpen && (
+            <div className="mt-5">
+              <div className="p-4 rounded-xl bg-black/40 border border-red-900/40">
+                <p className="text-sm text-gray-300">
+                  This action is <span className="font-bold text-red-300">irreversible</span>.
+                </p>
+                <ul className="mt-3 space-y-1.5 text-sm text-gray-400">
+                  <li>• Your profile and purchases will be removed.</li>
+                  <li>• Your learned progress will be deleted.</li>
+                  <li>• You’ll need to sign up again to use cloud sync.</li>
+                </ul>
+              </div>
+
+              {deleteError && (
+                <div className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm password
+                  </label>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your password"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Type DELETE to confirm
+                  </label>
+                  <input
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="DELETE"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500">
+                  We require your password to prevent accidental or unauthorized deletion.
+                </p>
+
+                <button
+                  onClick={async () => {
+                    setDeleteError(null);
+                    if (deleteConfirm.trim().toUpperCase() !== "DELETE") {
+                      setDeleteError("Please type DELETE to confirm.");
+                      return;
+                    }
+                    if (!deletePassword) {
+                      setDeleteError("Please enter your password.");
+                      return;
+                    }
+                    try {
+                      setDeleteBusy(true);
+                      await deleteAccount(deletePassword);
+                      // After deletion, user is logged out; return to home.
+                      window.location.hash = "";
+                      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to delete account";
+                      setDeleteError(msg);
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  }}
+                  disabled={deleteBusy}
+                  className="px-5 py-3 rounded-xl font-bold border border-red-800/60 bg-red-950/40 text-red-200 hover:bg-red-900/40 hover:border-red-600/70 transition-colors disabled:opacity-60"
+                >
+                  {deleteBusy ? "Deleting…" : "Delete my account"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
