@@ -12,6 +12,8 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptTos, setAcceptTos] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -28,6 +30,11 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
       return;
     }
 
+    if (mode === "signup" && (!acceptTos || !acceptPrivacy)) {
+      // UI enforcement (server will also enforce)
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -36,7 +43,10 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
         onClose();
         resetForm();
       } else {
-        await signup(email, password);
+        await signup(email, password, {
+          acceptTos,
+          acceptPrivacy,
+        });
         setSuccessMessage("Check your email to confirm your account!");
         // Don't close modal - let user see the message
       }
@@ -51,6 +61,8 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     setEmail("");
     setPassword("");
     setConfirmPassword("");
+    setAcceptTos(false);
+    setAcceptPrivacy(false);
     setSuccessMessage(null);
   };
 
@@ -58,6 +70,8 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     setMode(mode === "login" ? "signup" : "login");
     clearError();
     setSuccessMessage(null);
+    setAcceptTos(false);
+    setAcceptPrivacy(false);
   };
 
   return (
@@ -148,13 +162,57 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                 {password !== confirmPassword && confirmPassword.length > 0 && (
                   <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
                 )}
+
+                <div className="mt-4 space-y-2">
+                  <label className="flex items-start gap-2 text-sm text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={acceptTos}
+                      onChange={(e) => setAcceptTos(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
+                      required
+                    />
+                    <span>
+                      I agree to the{" "}
+                      <a className="text-red-400 hover:underline" href="#tos" target="_blank" rel="noreferrer">
+                        Terms of Service
+                      </a>
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-2 text-sm text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={acceptPrivacy}
+                      onChange={(e) => setAcceptPrivacy(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
+                      required
+                    />
+                    <span>
+                      I agree to the{" "}
+                      <a className="text-red-400 hover:underline" href="#privacy" target="_blank" rel="noreferrer">
+                        Privacy Policy
+                      </a>
+                    </span>
+                  </label>
+
+                  {(!acceptTos || !acceptPrivacy) && (
+                    <p className="text-xs text-gray-500">
+                      Required to create an account.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           <button
             type="submit"
-            disabled={isSubmitting || (mode === "signup" && password !== confirmPassword)}
+            disabled={
+              isSubmitting ||
+              (mode === "signup" && password !== confirmPassword) ||
+              (mode === "signup" && (!acceptTos || !acceptPrivacy))
+            }
             className="w-full mt-6 py-3.5 bg-red-600 hover:bg-red-700 disabled:bg-red-900/50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all shadow-lg shadow-red-900/30 disabled:shadow-none"
           >
             {isSubmitting

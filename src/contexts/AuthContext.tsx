@@ -14,7 +14,7 @@ interface AuthContextType {
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => {
     setIsLoading(true);
     setError(null);
 
@@ -183,7 +183,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`${API_URL}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          accept_tos: consent?.acceptTos === true,
+          accept_privacy: consent?.acceptPrivacy === true,
+        }),
       });
 
       const data = await response.json();

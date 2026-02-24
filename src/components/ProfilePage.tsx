@@ -317,6 +317,26 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
 
       {/* Danger zone */}
       <div className="mt-10">
+        <div className="mb-8 flex justify-center gap-4 text-sm">
+          <button
+            onClick={() => {
+              window.location.hash = "tos";
+              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            }}
+            className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
+          >
+            Terms
+          </button>
+          <button
+            onClick={() => {
+              window.location.hash = "privacy";
+              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            }}
+            className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
+          >
+            Privacy
+          </button>
+        </div>
         <div className="bg-neutral-950/70 border border-red-900/40 rounded-2xl p-6">
           <div className="flex items-start justify-between gap-4">
             <div>

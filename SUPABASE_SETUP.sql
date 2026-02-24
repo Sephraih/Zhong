@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   -- new tier column
   account_tier TEXT DEFAULT 'free' CHECK (account_tier IN ('free', 'premium')),
   stripe_customer_id TEXT,
+  tos_accepted_at TIMESTAMPTZ,
+  privacy_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -36,6 +38,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- If profiles existed before, ensure the tier column exists
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS account_tier TEXT DEFAULT 'free' CHECK (account_tier IN ('free', 'premium'));
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMPTZ;
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMPTZ;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 

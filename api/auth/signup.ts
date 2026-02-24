@@ -23,13 +23,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { email, password } = req.body;
+    const { email, password, accept_tos, accept_privacy } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    if (accept_tos !== true || accept_privacy !== true) {
+      return res.status(400).json({ error: 'You must accept the Terms of Service and Privacy Policy' });
+    }
+
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) return res.status(400).json({ error: error.message });
+
+    // Record consent timestamps in profiles (profile row is created by trigger)
+    if (data.user?.id) {
+      await supabase
+        .from('profiles')
+        .update({
+          tos_accepted_at: new Date().toISOString(),
+          privacy_accepted_at: new Date().toISOString(),
+        })
+        .eq('id', data.user.id);
+    }
 
     res.json({ user: data.user, session: data.session });
   } catch (error) {

@@ -16,6 +16,8 @@ import { AuthModal } from "./components/AuthModal";
 import { AuthHeader } from "./components/AuthHeader";
 import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
+import { PrivacyPage } from "./components/PrivacyPage";
+import { TosPage } from "./components/TosPage";
 import { AppBackground } from "./components/AppBackground";
 import { useIsMobile } from "./hooks/useIsMobile";
 
@@ -82,10 +84,10 @@ function MobileUserButton({
   );
 }
 
-type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile";
+type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile" | "privacy" | "tos";
 
 function isViewMode(x: string): x is ViewMode {
-  return ["home", "browse", "flashcards", "quiz", "practice", "profile"].includes(x);
+  return ["home", "browse", "flashcards", "quiz", "practice", "profile", "privacy", "tos"].includes(x);
 }
 
 function getInitialViewMode(): ViewMode {
@@ -709,6 +711,9 @@ function AppContent() {
           />
         )}
 
+        {viewMode === "privacy" && <PrivacyPage onBack={() => navigate("home")} />}
+        {viewMode === "tos" && <TosPage onBack={() => navigate("home")} />}
+
         {viewMode === "browse" && (
           <>
             {/* Filters */}
@@ -967,6 +972,22 @@ function AppContent() {
               {vocabulary.length} words • ✅ {learnedAvailableCount}/{availableTotal} learned
               {dataSource === "fallback" && " • ⚡ Preview mode"}
             </p>
+
+            <div className="mt-3 flex items-center justify-center gap-4 text-xs">
+              <button
+                onClick={() => navigate("tos")}
+                className="text-gray-500 hover:text-gray-200 transition-colors"
+              >
+                Terms
+              </button>
+              <span className="text-gray-700">•</span>
+              <button
+                onClick={() => navigate("privacy")}
+                className="text-gray-500 hover:text-gray-200 transition-colors"
+              >
+                Privacy
+              </button>
+            </div>
           </div>
         </div>
       </footer>
