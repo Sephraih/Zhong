@@ -4,11 +4,10 @@ import { useAuth } from "../contexts/AuthContext";
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSignupSuccess?: () => void;
   initialMode?: "login" | "signup";
 }
 
-export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "login" }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,15 +47,8 @@ export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "log
           acceptTos,
           acceptPrivacy,
         });
-        setSuccessMessage("Check your email to confirm your account! Redirecting to your profile...");
-        // Redirect to profile after 3 seconds
-        setTimeout(() => {
-          onClose();
-          resetForm();
-          if (onSignupSuccess) {
-            onSignupSuccess();
-          }
-        }, 3000);
+        setSuccessMessage("Check your email to confirm your account!");
+        // Don't close modal - let user see the message
       }
     } catch {
       // Error is handled by context
