@@ -30,7 +30,7 @@ const FALLBACK_LEVEL_PRICES: Record<number, string> = {
 const FALLBACK_PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, deleteAccount } = useAuth();
+  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, deleteAccount, exportMyData } = useAuth();
 
   const [stripePrices, setStripePrices] = useState<StripePrices>({
     premium: null,
@@ -315,28 +315,54 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
         </div>
       )}
 
-      {/* Danger zone */}
+      {/* Your Data + Legal */}
       <div className="mt-10">
-        <div className="mb-8 flex justify-center gap-4 text-sm">
-          <button
-            onClick={() => {
-              window.location.hash = "tos";
-              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-            }}
-            className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
-          >
-            Terms
-          </button>
-          <button
-            onClick={() => {
-              window.location.hash = "privacy";
-              window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-            }}
-            className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
-          >
-            Privacy
-          </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Your Data</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Download a copy of the data we store about your account and learning progress.
+            </p>
+            <button
+              onClick={exportMyData}
+              className="w-full py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+            >
+              📥 Export My Data
+            </button>
+            <p className="text-xs text-gray-500 mt-3">
+              This will download a JSON file containing your profile, purchases, and learning progress.
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Legal</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Review our Terms of Service and Privacy Policy.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  window.location.hash = "tos";
+                  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                }}
+                className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+              >
+                Terms
+              </button>
+              <button
+                onClick={() => {
+                  window.location.hash = "privacy";
+                  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                }}
+                className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+              >
+                Privacy
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Danger zone */}
         <div className="bg-neutral-950/70 border border-red-900/40 rounded-2xl p-6">
           <div className="flex items-start justify-between gap-4">
             <div>

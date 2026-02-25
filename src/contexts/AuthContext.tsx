@@ -22,6 +22,7 @@ interface AuthContextType {
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  exportMyData: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   error: string | null;
   clearError: () => void;
@@ -366,6 +367,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const exportMyData = async () => {
+    const token = localStorage.getItem("hanyu_auth_token");
+    if (!token) {
+      setError("Please sign in to export your data");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const res = await fetch(`${API_URL}/api/export-my-data`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error || "Failed to export data");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `my-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to export data";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -380,6 +422,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         purchaseLevel,
         purchasePremium,
         deleteAccount,
+        exportMyData,
         refreshAuth,
         error,
         clearError,

@@ -314,6 +314,9 @@ function AppContent() {
   const [browsePage, setBrowsePage] = useState(1);
   const browsePageSize = isMobile ? 18 : 30;
 
+  // Track which page the user was on before navigating to legal pages (for Back button)
+  const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
+
   const learnedState = useLearnedState(user?.id, vocabulary, accessToken);
   const { isLearned, toggleLearned } = learnedState;
 
