@@ -1,8 +1,8 @@
 export type StorageConsentState = "unknown" | "accepted" | "declined";
 
-// We store the *consent choice* in a small, essential cookie so we can remember
-// it even if the user declines localStorage.
-const CONSENT_COOKIE = "hanyu_storage_consent";
+// This consent is for OPTIONAL analytics only.
+// Essential cookies/localStorage for login/progress are always enabled.
+const CONSENT_COOKIE = "hanyu_analytics_consent";
 
 let memoryConsent: StorageConsentState = "unknown";
 
@@ -30,14 +30,19 @@ export function setStoredConsent(state: StorageConsentState) {
   writeCookie(CONSENT_COOKIE, state, 180);
 }
 
-export function isStorageAllowed(): boolean {
+export function isAnalyticsAllowed(): boolean {
   return readStoredConsent() === "accepted";
 }
 
-// ─── Safe localStorage wrappers (only active if consent accepted) ─────────────
+// Backward-compat alias (some files may still reference this name).
+// Storage is always allowed for essential app functionality.
+export function isStorageAllowed(): boolean {
+  return true;
+}
+
+// ─── Safe localStorage wrappers (ESSENTIAL: always enabled) ───────────────────
 
 export function storageGetItem(key: string): string | null {
-  if (!isStorageAllowed()) return null;
   try {
     return localStorage.getItem(key);
   } catch {
@@ -46,7 +51,6 @@ export function storageGetItem(key: string): string | null {
 }
 
 export function storageSetItem(key: string, value: string) {
-  if (!isStorageAllowed()) return;
   try {
     localStorage.setItem(key, value);
   } catch {
@@ -64,6 +68,7 @@ export function storageRemoveItem(key: string) {
 
 export function clearAppStorage() {
   // Best-effort cleanup of app keys.
+  // NOTE: we no longer clear storage on analytics decline.
   const keys = [
     "hanyu_auth_token",
     "hanyu-learned-words",

@@ -3,13 +3,12 @@ import {
   readStoredConsent,
   setStoredConsent,
   type StorageConsentState,
-  isStorageAllowed,
-  clearAppStorage,
+  isAnalyticsAllowed,
 } from "../utils/storageConsent";
 
 interface StorageConsentContextType {
   consent: StorageConsentState;
-  allowStorage: boolean;
+  allowAnalytics: boolean;
   accept: () => void;
   decline: () => void;
 }
@@ -25,15 +24,14 @@ export function StorageConsentProvider({ children }: { children: ReactNode }) {
       setConsent("accepted");
     };
     const decline = () => {
-      // If they decline, we clear any existing app storage and avoid persisting the decline.
-      clearAppStorage();
+      // Decline only disables OPTIONAL analytics. Essential storage stays enabled.
       setStoredConsent("declined");
       setConsent("declined");
     };
 
     return {
       consent,
-      allowStorage: isStorageAllowed(),
+      allowAnalytics: isAnalyticsAllowed(),
       accept,
       decline,
     };
