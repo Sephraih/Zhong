@@ -17,16 +17,12 @@ interface AuthContextType {
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
-  signup: (
-    email: string,
-    password: string,
-    consent?: { acceptTos: boolean; acceptPrivacy: boolean }
-  ) => Promise<{ needsEmailConfirmation?: boolean } | void>;
+  signup: (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
-  updateEmail: (newEmail: string, currentPassword: string) => Promise<void>;
-  updatePassword: (newPassword: string, currentPassword: string) => Promise<void>;
+  changeEmail: (currentPassword: string, newEmail: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   exportMyData: () => Promise<void>;
   refreshAuth: () => Promise<void>;
@@ -414,6 +410,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const changeEmail = async (currentPassword: string, newEmail: string) => {
+    const token = localStorage.getItem("hanyu_auth_token");
+    if (!token) {
+      setError("Please sign in to change your email");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const res = await fetch(`${API_URL}/api/auth/account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "change-email", currentPassword, newEmail }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to change email");
+      }
+
+      // Refresh user data
+      await fetchUser(token);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to change email";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const token = localStorage.getItem("hanyu_auth_token");
+    if (!token) {
+      setError("Please sign in to change your password");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const res = await fetch(`${API_URL}/api/auth/account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to change password");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to change password";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -427,6 +492,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         purchaseLevel,
         purchasePremium,
+        changeEmail,
+        changePassword,
         deleteAccount,
         exportMyData,
         refreshAuth,
