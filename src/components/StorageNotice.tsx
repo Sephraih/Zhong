@@ -10,7 +10,9 @@ export function StorageNotice({ onOpenPrivacy, onOpenTos }: StorageNoticeProps) 
   const { consent, accept, decline } = useStorageConsent();
   const [expanded, setExpanded] = useState(false);
 
-  const shouldShow = consent === "unknown";
+  // Requirement: users must accept to continue using the site.
+  // So we show a blocking gate until consent === "accepted".
+  const shouldShow = consent !== "accepted";
 
   const summary = useMemo(
     () =>
@@ -20,15 +22,25 @@ export function StorageNotice({ onOpenPrivacy, onOpenTos }: StorageNoticeProps) 
 
   if (!shouldShow) return null;
 
+  const declined = consent === "declined";
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[60] p-3 sm:p-4">
-      <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-800 bg-neutral-950/90 backdrop-blur shadow-2xl">
-        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="flex-1">
+    <div className="fixed inset-0 z-[70]">
+      {/* Backdrop blocks the site */}
+      <div className="absolute inset-0 bg-black/80" />
+
+      <div className="relative h-full w-full flex items-end sm:items-center justify-center p-3 sm:p-6">
+        <div className="w-full max-w-2xl rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl">
+          <div className="p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-white">Local storage notice</p>
-                <p className="mt-1 text-sm text-gray-400">{summary}</p>
+                <p className="text-base font-bold text-white">Local storage notice</p>
+                <p className="mt-2 text-sm text-gray-400">{summary}</p>
+                {declined && (
+                  <p className="mt-3 text-sm text-red-300">
+                    You declined. To use the app, please accept local storage.
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setExpanded((v) => !v)}
@@ -39,7 +51,7 @@ export function StorageNotice({ onOpenPrivacy, onOpenTos }: StorageNoticeProps) 
             </div>
 
             {expanded && (
-              <div className="mt-3 text-sm text-gray-400 space-y-2">
+              <div className="mt-4 text-sm text-gray-400 space-y-3">
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     <span className="text-gray-200 font-semibold">Auth token</span> (to keep you signed in)
@@ -52,20 +64,19 @@ export function StorageNotice({ onOpenPrivacy, onOpenTos }: StorageNoticeProps) 
                   </li>
                 </ul>
                 <p className="text-xs text-gray-500">
-                  If you decline, the app will still work, but you may be signed out on refresh and could lose progress
-                  on this device.
+                  Disabling local storage may cause you to lose learning progress on this device.
                 </p>
                 <div className="flex flex-wrap gap-3 text-xs">
                   <button
                     onClick={onOpenPrivacy}
-                    className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
+                    className="text-gray-300 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
                     type="button"
                   >
                     Privacy Policy
                   </button>
                   <button
                     onClick={onOpenTos}
-                    className="text-gray-400 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
+                    className="text-gray-300 hover:text-white underline decoration-neutral-700 hover:decoration-neutral-300"
                     type="button"
                   >
                     Terms of Service
@@ -73,21 +84,21 @@ export function StorageNotice({ onOpenPrivacy, onOpenTos }: StorageNoticeProps) 
                 </div>
               </div>
             )}
-          </div>
 
-          <div className="flex gap-2 sm:flex-col sm:items-stretch">
-            <button
-              onClick={accept}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors"
-            >
-              Accept
-            </button>
-            <button
-              onClick={decline}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 hover:border-neutral-700 text-gray-200 text-sm font-semibold transition-colors"
-            >
-              Decline
-            </button>
+            <div className="mt-6 flex flex-col sm:flex-row gap-2 sm:justify-end">
+              <button
+                onClick={decline}
+                className="px-4 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 hover:border-neutral-700 text-gray-200 text-sm font-semibold transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                onClick={accept}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors"
+              >
+                Accept and continue
+              </button>
+            </div>
           </div>
         </div>
       </div>

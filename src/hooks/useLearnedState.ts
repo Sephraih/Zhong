@@ -131,7 +131,9 @@ function levelIndexSignature(levelIndex: Map<number, number[]>): string {
   return parts.join("|");
 }
 
-function getAccessToken(): string | null {
+function getAccessToken(provided?: string | null): string | null {
+  if (provided) return provided;
+  // Fallback to persisted token (only present if storage consent accepted)
   try {
     return localStorage.getItem("hanyu_auth_token");
   } catch {
@@ -142,7 +144,7 @@ function getAccessToken(): string | null {
 /**
  * Cloud-synced learned state.
  *
- * - Always uses localStorage for instant startup/offline.
+ * - Uses localStorage for instant startup/offline (only if storage consent accepted).
  * - If userId + JWT available: loads/saves to `public.user_learned_words.learned_bits`.
  *
  * IMPORTANT:
@@ -150,7 +152,7 @@ function getAccessToken(): string | null {
  * the Authorization header (because this app does auth via /api routes, not via
  * supabase-js auth sessions).
  */
-export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedState {
+export function useLearnedState(userId?: string, words?: VocabWord[], accessToken?: string | null): LearnedState {
   const [learned, setLearned] = useState<Set<number>>(loadLearnedWords);
 
   // Track local last-modified time so we can do last-write-wins vs cloud.
@@ -188,7 +190,7 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
     cloudReadyRef.current = false;
     dirtyBeforeReadyRef.current = false;
 
-    const token = getAccessToken();
+    const token = getAccessToken(accessToken);
     const sb = getSupabaseAuthedClient(token);
 
     async function loadFromCloud() {
@@ -280,7 +282,7 @@ export function useLearnedState(userId?: string, words?: VocabWord[]): LearnedSt
   const saveFnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const token = getAccessToken();
+    const token = getAccessToken(accessToken);
     const sb = getSupabaseAuthedClient(token);
 
     if (!userId || !sb || levelIndex.size === 0) {

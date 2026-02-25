@@ -997,14 +997,19 @@ function AppContent() {
 
       {/* Auth Modal */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} initialMode={authModalMode} />
+
+      {/* Storage consent gate (shown on first visit until user makes a choice) */}
+      <StorageNotice onOpenPrivacy={() => navigate("privacy")} onOpenTos={() => navigate("tos")} />
     </div>
   );
 }
 
 export function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <StorageConsentProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </StorageConsentProvider>
   );
 }
