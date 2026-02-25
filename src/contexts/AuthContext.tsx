@@ -17,16 +17,10 @@ interface AuthContextType {
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
-  signup: (
-    email: string,
-    password: string,
-    consent?: { acceptTos: boolean; acceptPrivacy: boolean }
-  ) => Promise<{ needsEmailConfirmation?: boolean } | void>;
+  signup: (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
-  updateEmail: (newEmail: string, currentPassword: string) => Promise<void>;
-  updatePassword: (newPassword: string, currentPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   exportMyData: () => Promise<void>;
   refreshAuth: () => Promise<void>;
