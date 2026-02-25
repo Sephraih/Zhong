@@ -1,5 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useTransition } from "react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { StorageConsentProvider } from "./contexts/StorageConsentContext";
+import { StorageNotice } from "./components/StorageNotice";
+import { storageGetItem, storageSetItem } from "./utils/storageConsent";
 import {
   buildFallbackVocabulary,
   fetchVocabularyFromSupabase,
@@ -94,7 +97,7 @@ function getInitialViewMode(): ViewMode {
   try {
     const hash = window.location.hash.replace(/^#/, "").trim();
     if (hash && isViewMode(hash)) return hash;
-    const stored = localStorage.getItem("hanyu_view_mode");
+    const stored = storageGetItem("hanyu_view_mode");
     if (stored && isViewMode(stored)) return stored;
   } catch {
     // ignore
@@ -114,7 +117,7 @@ function signature(words: VocabWord[]): string {
 }
 
 function AppContent() {
-  const { user, accountTier, purchasedLevels } = useAuth();
+  const { user, accountTier, purchasedLevels, accessToken } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
 
@@ -311,7 +314,7 @@ function AppContent() {
   const [browsePage, setBrowsePage] = useState(1);
   const browsePageSize = isMobile ? 18 : 30;
 
-  const learnedState = useLearnedState(user?.id, vocabulary);
+  const learnedState = useLearnedState(user?.id, vocabulary, accessToken);
   const { isLearned, toggleLearned } = learnedState;
 
   // Available words (after access filtering)
@@ -417,7 +420,7 @@ function AppContent() {
 
     // Persist mode for refresh + deep links
     try {
-      localStorage.setItem("hanyu_view_mode", mode);
+      storageSetItem("hanyu_view_mode", mode);
       window.location.hash = mode === "home" ? "" : mode;
     } catch {
       // ignore

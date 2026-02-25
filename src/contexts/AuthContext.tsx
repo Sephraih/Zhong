@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { storageGetItem, storageRemoveItem, storageSetItem } from "../utils/storageConsent";
 
 interface User {
   id: string;
@@ -10,6 +11,8 @@ type AccountTier = 'free' | 'premium';
 
 interface AuthContextType {
   user: User | null;
+  /** JWT access token (kept in memory; optionally persisted to localStorage if consent accepted) */
+  accessToken: string | null;
   isLoading: boolean;
   accountTier: AccountTier;
   purchasedLevels: number[];
@@ -31,6 +34,7 @@ const API_URL = import.meta.env.VITE_API_BASE || "";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => storageGetItem("hanyu_auth_token"));
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
   const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,16 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshAuth = useCallback(async () => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    const token = accessToken || storageGetItem("hanyu_auth_token");
     if (token) {
       await fetchUser(token);
     }
-  }, [fetchUser]);
+  }, [fetchUser, accessToken]);
 
   // Initial auth check + handle payment redirect
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem("hanyu_auth_token");
+      const token = accessToken || storageGetItem("hanyu_auth_token");
       if (token) {
         await fetchUser(token);
       }
@@ -161,7 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.session?.access_token) {
-        localStorage.setItem("hanyu_auth_token", data.session.access_token);
+        setAccessToken(data.session.access_token);
+        storageSetItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
         setPurchasedLevels(data.purchased_levels || []);
@@ -204,7 +209,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPurchasedLevels([]);
         localStorage.removeItem("hanyu_auth_token");
       } else if (data.session?.access_token) {
-        localStorage.setItem("hanyu_auth_token", data.session.access_token);
+        setAccessToken(data.session.access_token);
+        storageSetItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier('free');
         setPurchasedLevels([]);
@@ -313,7 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    localStorage.removeItem("hanyu_auth_token");
+    setAccessToken(null);
+    storageRemoveItem("hanyu_auth_token");
     setUser(null);
     setAccountTier('free');
     setPurchasedLevels([]);
@@ -345,7 +352,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Clear local auth + state
-      localStorage.removeItem("hanyu_auth_token");
+      setAccessToken(null);
+      storageRemoveItem("hanyu_auth_token");
       setUser(null);
       setAccountTier('free');
       setPurchasedLevels([]);
@@ -362,6 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        accessToken,
         isLoading,
         accountTier,
         purchasedLevels,

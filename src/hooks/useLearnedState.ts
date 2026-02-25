@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { VocabWord } from "../data/vocabulary";
 import { getSupabaseAuthedClient } from "../supabaseClient";
+import { storageGetItem, storageSetItem } from "../utils/storageConsent";
 
 const STORAGE_KEY = "hanyu-learned-words";
 const STORAGE_UPDATED_AT_KEY = "hanyu-learned-words-updated-at";
 
 function loadLocalUpdatedAt(): number {
   try {
-    const raw = localStorage.getItem(STORAGE_UPDATED_AT_KEY);
+    const raw = storageGetItem(STORAGE_UPDATED_AT_KEY);
     if (!raw) return 0;
     const n = Number(raw);
     return Number.isFinite(n) ? n : 0;
@@ -17,16 +18,12 @@ function loadLocalUpdatedAt(): number {
 }
 
 function saveLocalUpdatedAt(ts: number) {
-  try {
-    localStorage.setItem(STORAGE_UPDATED_AT_KEY, String(ts));
-  } catch {
-    // ignore
-  }
+  storageSetItem(STORAGE_UPDATED_AT_KEY, String(ts));
 }
 
 function loadLearnedWords(): Set<number> {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = storageGetItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) return new Set(parsed);
@@ -38,11 +35,7 @@ function loadLearnedWords(): Set<number> {
 }
 
 function saveLearnedWords(learned: Set<number>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(learned)));
-  } catch {
-    // ignore
-  }
+  storageSetItem(STORAGE_KEY, JSON.stringify(Array.from(learned)));
 }
 
 export interface LearnedState {
