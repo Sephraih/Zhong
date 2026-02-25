@@ -30,7 +30,7 @@ const FALLBACK_LEVEL_PRICES: Record<number, string> = {
 const FALLBACK_PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, deleteAccount, exportMyData } = useAuth();
+  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData } = useAuth();
 
   const [stripePrices, setStripePrices] = useState<StripePrices>({
     premium: null,
@@ -45,6 +45,23 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Change email UI
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailPassword, setEmailPassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+
+  // Change password UI
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -315,8 +332,213 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
         </div>
       )}
 
+      {/* Account Settings */}
+      <div className="mt-10 mb-8">
+        <h3 className="text-xl font-bold text-white mb-6">Account Settings</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Change Email */}
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h4 className="text-lg font-semibold text-white">Change Email</h4>
+                <p className="text-sm text-gray-400 mt-1">Update your email address</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEmailError(null);
+                  setEmailSuccess(null);
+                  setEmailOpen((v) => !v);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-neutral-700 text-gray-300 hover:text-white hover:border-neutral-600 hover:bg-neutral-800/50 transition-colors"
+              >
+                {emailOpen ? "Close" : "Change"}
+              </button>
+            </div>
+
+            {emailOpen && (
+              <div className="space-y-4">
+                {emailError && (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                    {emailError}
+                  </div>
+                )}
+                {emailSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 text-sm">
+                    {emailSuccess}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    New email address
+                  </label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="new@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm with your password
+                  </label>
+                  <input
+                    type="password"
+                    value={emailPassword}
+                    onChange={(e) => setEmailPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your current password"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    setEmailError(null);
+                    setEmailSuccess(null);
+                    if (!newEmail) {
+                      setEmailError("Please enter a new email address.");
+                      return;
+                    }
+                    if (!emailPassword) {
+                      setEmailError("Please enter your password to confirm.");
+                      return;
+                    }
+                    try {
+                      setEmailBusy(true);
+                      await changeEmail(emailPassword, newEmail);
+                      setEmailSuccess("Email update initiated. Check your new email to confirm.");
+                      setNewEmail("");
+                      setEmailPassword("");
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to change email";
+                      setEmailError(msg);
+                    } finally {
+                      setEmailBusy(false);
+                    }
+                  }}
+                  disabled={emailBusy}
+                  className="w-full py-3 rounded-xl font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-60"
+                >
+                  {emailBusy ? "Updating..." : "Update Email"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Change Password */}
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h4 className="text-lg font-semibold text-white">Change Password</h4>
+                <p className="text-sm text-gray-400 mt-1">Update your account password</p>
+              </div>
+              <button
+                onClick={() => {
+                  setPasswordError(null);
+                  setPasswordSuccess(null);
+                  setPasswordOpen((v) => !v);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-neutral-700 text-gray-300 hover:text-white hover:border-neutral-600 hover:bg-neutral-800/50 transition-colors"
+              >
+                {passwordOpen ? "Close" : "Change"}
+              </button>
+            </div>
+
+            {passwordOpen && (
+              <div className="space-y-4">
+                {passwordError && (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                    {passwordError}
+                  </div>
+                )}
+                {passwordSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 text-sm">
+                    {passwordSuccess}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Current password
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your current password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    New password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="At least 6 characters"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm new password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Repeat new password"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                    if (!currentPassword) {
+                      setPasswordError("Please enter your current password.");
+                      return;
+                    }
+                    if (!newPassword) {
+                      setPasswordError("Please enter a new password.");
+                      return;
+                    }
+                    if (newPassword.length < 6) {
+                      setPasswordError("New password must be at least 6 characters.");
+                      return;
+                    }
+                    if (newPassword !== confirmNewPassword) {
+                      setPasswordError("New passwords do not match.");
+                      return;
+                    }
+                    try {
+                      setPasswordBusy(true);
+                      await changePassword(currentPassword, newPassword);
+                      setPasswordSuccess("Password updated successfully!");
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmNewPassword("");
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to change password";
+                      setPasswordError(msg);
+                    } finally {
+                      setPasswordBusy(false);
+                    }
+                  }}
+                  disabled={passwordBusy}
+                  className="w-full py-3 rounded-xl font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-60"
+                >
+                  {passwordBusy ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Your Data + Legal */}
-      <div className="mt-10">
+      <div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
             <h3 className="text-lg font-semibold text-white mb-2">Your Data</h3>

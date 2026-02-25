@@ -45,7 +45,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     });
   }
 
-  const stripe = new Stripe(stripeSecretKey, { apiVersion: "2026-01-28.clover" });
+  const stripe = new Stripe(stripeSecretKey);
 
   const ids: Record<PriceKey, string | undefined> = {
     premium: process.env.STRIPE_PRICE_PREMIUM,
