@@ -416,6 +416,11 @@ function AppContent() {
 
 
   const navigate = (mode: ViewMode) => {
+    // If navigating to legal pages, remember the current mode for the Back button.
+    if (mode === "privacy" || mode === "tos") {
+      setLegalReturnMode(viewMode);
+    }
+
     setViewMode(mode);
 
     // Persist mode for refresh + deep links
@@ -714,8 +719,8 @@ function AppContent() {
           />
         )}
 
-        {viewMode === "privacy" && <PrivacyPage onBack={() => navigate("home")} />}
-        {viewMode === "tos" && <TosPage onBack={() => navigate("home")} />}
+        {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
 
         {viewMode === "browse" && (
           <>
