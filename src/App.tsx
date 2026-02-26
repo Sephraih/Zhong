@@ -1004,7 +1004,12 @@ function AppContent() {
       </footer>
 
       {/* Auth Modal */}
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} initialMode={authModalMode} />
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSignupSuccess={() => navigate("profile")}
+        initialMode={authModalMode}
+      />
 
       {/* Storage consent gate (shown on first visit until user makes a choice) */}
       <StorageNotice onOpenPrivacy={() => navigate("privacy")} onOpenTos={() => navigate("tos")} />
