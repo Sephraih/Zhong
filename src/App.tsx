@@ -89,14 +89,33 @@ function MobileUserButton({
 
 type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile" | "privacy" | "tos";
 
+const VIEW_MODES: ViewMode[] = ["home", "browse", "flashcards", "quiz", "practice", "profile", "privacy", "tos"];
+
 function isViewMode(x: string): x is ViewMode {
-  return ["home", "browse", "flashcards", "quiz", "practice", "profile", "privacy", "tos"].includes(x);
+  return VIEW_MODES.includes(x as ViewMode);
+}
+
+// viewModeToPath removed (path-based routing handled in navigate/popstate)
+
+function pathToViewMode(pathname: string): ViewMode | null {
+  const clean = pathname.split("?")[0].split("#")[0];
+  const seg = clean.replace(/^\//, "").split("/")[0].trim();
+  if (!seg) return "home";
+  if (isViewMode(seg)) return seg;
+  return null;
 }
 
 function getInitialViewMode(): ViewMode {
   try {
+    // Prefer path-based routing (SEO-friendly)
+    const fromPath = pathToViewMode(window.location.pathname);
+    if (fromPath) return fromPath;
+
+    // Backward compatibility: hash-based routing
     const hash = window.location.hash.replace(/^#/, "").trim();
     if (hash && isViewMode(hash)) return hash;
+
+    // Fallback: persisted last mode
     const stored = storageGetItem("hanyu_view_mode");
     if (stored && isViewMode(stored)) return stored;
   } catch {
@@ -401,22 +420,78 @@ function AppContent() {
     setAuthModalOpen(true);
   };
 
-  // Sync view mode with hash changes (back/forward navigation)
+  // Sync view mode with browser navigation (back/forward)
   useEffect(() => {
-    const onHashChange = () => {
-      const hash = window.location.hash.replace(/^#/, "").trim();
-      if (!hash) {
-        setViewMode("home");
-        return;
-      }
-      if (isViewMode(hash)) {
-        setViewMode(hash);
-      }
+    const onPopState = () => {
+      const fromPath = pathToViewMode(window.location.pathname);
+      setViewMode(fromPath ?? "home");
     };
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // Basic SPA SEO: update title/description/canonical per view
+  useEffect(() => {
+    const base = "https://zhong-theta.vercel.app";
+
+    const map: Record<ViewMode, { title: string; description: string; path: string }> = {
+      home: {
+        title: "ZhongCang — Learn Chinese HSK Vocabulary",
+        description:
+          "ZhongCang is a modern Chinese (Mandarin) vocabulary trainer based on HSK levels. Practice with flashcards, quizzes, and examples.",
+        path: "/",
+      },
+      browse: {
+        title: "Browse HSK Vocabulary — ZhongCang",
+        description:
+          "Browse Chinese vocabulary by HSK level. Search Hanzi, Pinyin, and English and study example sentences.",
+        path: "/browse",
+      },
+      practice: {
+        title: "Practice Session — ZhongCang",
+        description:
+          "Run focused practice sessions that mix review and new words, with pinyin hints and examples.",
+        path: "/practice",
+      },
+      flashcards: {
+        title: "Flashcards — ZhongCang",
+        description:
+          "Study Chinese vocabulary with fast flashcards, mark words learned, and review example sentences.",
+        path: "/flashcards",
+      },
+      quiz: {
+        title: "Quiz — ZhongCang",
+        description:
+          "Test your Chinese vocabulary recall with multiple-choice quizzes by HSK level.",
+        path: "/quiz",
+      },
+      profile: {
+        title: "Your Profile — ZhongCang",
+        description:
+          "Manage your account, progress, unlocks, and billing preferences.",
+        path: "/profile",
+      },
+      privacy: {
+        title: "Privacy Policy — ZhongCang",
+        description: "Read ZhongCang’s Privacy Policy.",
+        path: "/privacy",
+      },
+      tos: {
+        title: "Terms of Service — ZhongCang",
+        description: "Read ZhongCang’s Terms of Service.",
+        path: "/tos",
+      },
+    };
+
+    const next = map[viewMode];
+    document.title = next.title;
+
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.setAttribute("content", next.description);
+
+    const canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) canonical.setAttribute("href", `${base}${next.path}`);
+  }, [viewMode]);
 
   const navigate = (mode: ViewMode) => {
     // If navigating to legal pages, remember the current mode for the Back button.
@@ -426,10 +501,11 @@ function AppContent() {
 
     setViewMode(mode);
 
-    // Persist mode for refresh + deep links
+    // Persist mode for refresh (fallback) and push a clean URL path (SEO-friendly)
     try {
       storageSetItem("hanyu_view_mode", mode);
-      window.location.hash = mode === "home" ? "" : mode;
+      const nextPath = mode === "home" ? "/" : `/${mode}`;
+      window.history.pushState({}, "", nextPath);
     } catch {
       // ignore
     }
