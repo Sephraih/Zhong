@@ -3,6 +3,10 @@ import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
 
+// Logo image (ham.png) — imported via glob so the build doesn't fail if missing
+const logoImages = import.meta.glob("../assets/ham.png", { eager: true, import: "default" }) as Record<string, string>;
+const logoImage = Object.values(logoImages)[0] ?? null;
+
 // Background images (expected in src/assets/):
 //  - landscape.(jpg|jpeg|png|webp)  (desktop)
 //  - portrait.(jpg|jpeg|png|webp)   (mobile)
@@ -754,9 +758,17 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       <div className="absolute bottom-1/4 right-1/4 w-44 h-44 bg-red-400/8 rounded-full blur-2xl" />
 
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-3xl mx-auto"}>
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
-          <span className="text-white text-4xl font-bold">汉</span>
-        </div>
+        {logoImage ? (
+          <img
+            src={logoImage}
+            alt="ZhongCang Logo"
+            className="w-20 h-20 rounded-3xl shadow-2xl shadow-red-900/50 mb-8 object-cover"
+          />
+        ) : (
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
+            <span className="text-white text-4xl font-bold">汉</span>
+          </div>
+        )}
 
         <h1 className={isMobile ? "text-5xl font-black tracking-tight text-white leading-none" : "text-5xl sm:text-7xl font-black tracking-tight text-white leading-none"}>
           Learn Mandarin
@@ -833,9 +845,17 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
   const footer = (
     <section id="footer" className={isMobile ? "relative overflow-hidden py-16" : "snap-center min-h-[calc(100dvh-4rem)] flex items-center justify-center relative overflow-hidden pb-[max(2rem,env(safe-area-inset-bottom))]"}>
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-2xl mx-auto px-4"}>
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
-          <span className="text-white text-2xl font-bold">汉</span>
-        </div>
+        {logoImage ? (
+          <img
+            src={logoImage}
+            alt="ZhongCang Logo"
+            className="w-16 h-16 rounded-2xl shadow-xl shadow-red-900/40 mb-6 object-cover"
+          />
+        ) : (
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
+            <span className="text-white text-2xl font-bold">汉</span>
+          </div>
+        )}
         <h2 className="text-4xl sm:text-5xl font-black text-white">Ready to start?</h2>
         <p className="mt-4 text-gray-400">Pick a mode and begin your first session. Progress is saved locally.</p>
 

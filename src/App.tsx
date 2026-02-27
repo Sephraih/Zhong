@@ -10,6 +10,10 @@ import {
 } from "./data/supabaseVocab";
 import type { VocabWord } from "./data/vocabulary";
 import { VocabCard } from "./components/VocabCard";
+
+// Logo image (ham.png) — imported via glob so the build doesn't fail if missing
+const logoImages = import.meta.glob("./assets/ham.png", { eager: true, import: "default" }) as Record<string, string>;
+const logoImage = Object.values(logoImages)[0] ?? null;
 import { FlashcardMode } from "./components/FlashcardMode";
 import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
@@ -545,11 +549,19 @@ function AppContent() {
               className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
-              <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
-                <span className="text-white text-sm sm:text-lg font-bold">汉</span>
-              </div>
+              {logoImage ? (
+                <img
+                  src={logoImage}
+                  alt="ZhongCang Logo"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl shadow-lg shadow-red-900/40 object-cover"
+                />
+              ) : (
+                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
+                  <span className="text-white text-sm sm:text-lg font-bold">汉</span>
+                </div>
+              )}
               <div className="hidden sm:block text-left">
-                <h1 className="text-lg font-bold text-white leading-tight">汉语学习</h1>
+                <h1 className="text-lg font-bold text-white leading-tight">ZhongCang</h1>
                 <p className="text-[10px] text-gray-500 font-medium tracking-wider uppercase">Chinese Learning</p>
               </div>
             </button>
