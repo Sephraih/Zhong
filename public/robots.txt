@@ -1,0 +1,30 @@
+# robots.txt for ZhongCang - Chinese Learning App
+# https://zhong-theta.vercel.app/
+
+User-agent: *
+Allow: /
+
+# Allow all major search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# Disallow API endpoints (not useful for indexing)
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://zhong-theta.vercel.app/sitemap.xml
