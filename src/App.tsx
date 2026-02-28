@@ -1126,7 +1126,6 @@ function AppContent() {
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        onSignupSuccess={() => navigate("profile")}
         initialMode={authModalMode}
       />
 

@@ -4,11 +4,10 @@ import { useAuth } from "../contexts/AuthContext";
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSignupSuccess?: () => void;
   initialMode?: "login" | "signup";
 }
 
-export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "login" }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,15 +47,11 @@ export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "log
           acceptTos,
           acceptPrivacy,
         });
-        setSuccessMessage("Check your email to confirm your account! Redirecting to your profile...");
-        // Redirect to profile after 3 seconds
-        setTimeout(() => {
-          onClose();
-          resetForm();
-          if (onSignupSuccess) {
-            onSignupSuccess();
-          }
-        }, 3000);
+        // Supabase email confirmation is enabled: user must confirm via email.
+        setSuccessMessage(
+          "Check your email to confirm your account. After you click the confirmation link, you’ll be redirected to your profile."
+        );
+        // Do NOT auto-redirect here. User will be redirected by /auth/callback after confirming.
       }
     } catch {
       // Error is handled by context
@@ -182,7 +177,7 @@ export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "log
                     />
                     <span>
                       I agree to the{" "}
-                      <a className="text-red-400 hover:underline" href="#tos" target="_blank" rel="noreferrer">
+                      <a className="text-red-400 hover:underline" href="/tos" target="_blank" rel="noreferrer">
                         Terms of Service
                       </a>
                     </span>
@@ -198,7 +193,7 @@ export function AuthModal({ isOpen, onClose, onSignupSuccess, initialMode = "log
                     />
                     <span>
                       I agree to the{" "}
-                      <a className="text-red-400 hover:underline" href="#privacy" target="_blank" rel="noreferrer">
+                      <a className="text-red-400 hover:underline" href="/privacy" target="_blank" rel="noreferrer">
                         Privacy Policy
                       </a>
                     </span>
