@@ -32,8 +32,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Use same-origin API calls (works on Vercel)
-const API_URL = import.meta.env.VITE_API_BASE || "";
+// Prefer same-origin API calls (works on Vercel + avoids CORS). If VITE_API_BASE is set,
+// we try it first, but automatically fall back to same-origin if it fails.
+const API_URL = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
+
+async function apiFetch(path: string, init?: RequestInit) {
+  // 1) Try VITE_API_BASE (if provided)
+  if (API_URL) {
+    try {
+      return await fetch(`${API_URL}${path}`, init);
+    } catch (err) {
+      // Fall back to same-origin below
+      console.warn("API fetch failed against VITE_API_BASE; retrying same-origin", err);
+    }
+  }
+
+  // 2) Same-origin fallback
+  return fetch(path, init);
+}
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -47,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async (token: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/auth/me`, {
+      const response = await apiFetch(`/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Cache-Control": "no-cache",
@@ -63,7 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("Auth refreshed. Tier:", data.account_tier, "Levels:", data.purchased_levels);
         return data;
       } else {
-        localStorage.removeItem("hanyu_auth_token");
+        setAccessToken(null);
+        storageRemoveItem("hanyu_auth_token");
         setUser(null);
         setAccountTier('free');
         setPurchasedLevels([]);
@@ -132,13 +150,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        const token = localStorage.getItem("hanyu_auth_token");
+        const token = accessToken || storageGetItem("hanyu_auth_token");
         if (token) fetchUser(token);
       }
     };
 
     const handleFocus = () => {
-      const token = localStorage.getItem("hanyu_auth_token");
+      const token = accessToken || storageGetItem("hanyu_auth_token");
       if (token) fetchUser(token);
     };
 
@@ -155,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await apiFetch(`/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -188,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/signup`, {
+      const response = await apiFetch(`/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -229,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const purchaseLevel = async (level: number) => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    const token = accessToken || storageGetItem("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to purchase");
       return;
@@ -238,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       console.log(`🛒 Starting HSK ${level} purchase...`);
-      const res = await fetch(`${API_URL}/api/create-checkout-session`, {
+      const res = await apiFetch(`/api/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -279,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       console.log("🛒 Starting Premium purchase...");
-      const res = await fetch(`${API_URL}/api/create-checkout-session`, {
+      const res = await apiFetch(`/api/create-checkout-session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -314,7 +332,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token) {
       try {
-        await fetch(`${API_URL}/api/auth/account`, {
+        await apiFetch(`/api/auth/account`, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
@@ -345,7 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await fetch(`${API_URL}/api/auth/account`, {
+      const res = await apiFetch(`/api/auth/account`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -385,7 +403,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await fetch(`${API_URL}/api/export-my-data`, {
+      const res = await apiFetch(`/api/export-my-data`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -426,7 +444,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await fetch(`${API_URL}/api/auth/account`, {
+      const res = await apiFetch(`/api/auth/account`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -462,7 +480,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await fetch(`${API_URL}/api/auth/account`, {
+      const res = await apiFetch(`/api/auth/account`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
