@@ -18,10 +18,12 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [formHint, setFormHint] = useState<string | null>(null);
 
   const { login, signup, error, clearError } = useAuth();
 
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  const turnstileEnabled = Boolean(turnstileSiteKey);
 
   if (!isOpen) return null;
 
@@ -29,18 +31,20 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     e.preventDefault();
     clearError();
     setSuccessMessage(null);
+    setFormHint(null);
 
     if (mode === "signup" && password !== confirmPassword) {
+      setFormHint("Passwords do not match.");
       return;
     }
 
     if (mode === "signup" && (!acceptTos || !acceptPrivacy)) {
-      // UI enforcement (server will also enforce)
+      setFormHint("Please accept the Terms of Service and Privacy Policy.");
       return;
     }
 
-    if (mode === "signup" && turnstileSiteKey && !turnstileToken) {
-      // Require captcha token when Turnstile is configured
+    if (mode === "signup" && turnstileEnabled && !turnstileToken) {
+      setFormHint("Please complete the captcha to continue.");
       return;
     }
 
@@ -83,8 +87,10 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     setMode(mode === "login" ? "signup" : "login");
     clearError();
     setSuccessMessage(null);
+    setFormHint(null);
     setAcceptTos(false);
     setAcceptPrivacy(false);
+    setTurnstileToken(null);
   };
 
   return (
@@ -125,6 +131,12 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
           {successMessage && (
             <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-900/50 rounded-lg text-emerald-400 text-sm">
               {successMessage}
+            </div>
+          )}
+
+          {formHint && (
+            <div className="mb-4 p-3 bg-neutral-950/60 border border-neutral-800 rounded-lg text-gray-300 text-sm">
+              {formHint}
             </div>
           )}
 
@@ -174,6 +186,19 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                 />
                 {password !== confirmPassword && confirmPassword.length > 0 && (
                   <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
+                )}
+
+                {/* Turnstile Captcha (signup only) */}
+                {turnstileEnabled && (
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-500 mb-2">Security check</p>
+                    <TurnstileWidget
+                      siteKey={turnstileSiteKey!}
+                      onToken={(t) => setTurnstileToken(t)}
+                      theme="dark"
+                      compact
+                    />
+                  </div>
                 )}
 
                 <div className="mt-4 space-y-2">
