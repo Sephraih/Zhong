@@ -32,7 +32,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'You must accept the Terms of Service and Privacy Policy' });
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+        // Ensure email confirmation redirects back into the app
+    const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+    const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: baseUrl ? { emailRedirectTo: `${baseUrl}/auth/callback` } : undefined,
+    });
     if (error) return res.status(400).json({ error: error.message });
 
     // Record consent timestamps in profiles (profile row is created by trigger)

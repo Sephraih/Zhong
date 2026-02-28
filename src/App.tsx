@@ -25,6 +25,7 @@ import { ProfilePage } from "./components/ProfilePage";
 import { LandingPage } from "./components/LandingPage";
 import { PrivacyPage } from "./components/PrivacyPage";
 import { TosPage } from "./components/TosPage";
+import { AuthCallbackPage } from "./components/AuthCallbackPage";
 import { AppBackground } from "./components/AppBackground";
 import { useIsMobile } from "./hooks/useIsMobile";
 
@@ -91,9 +92,28 @@ function MobileUserButton({
   );
 }
 
-type ViewMode = "home" | "browse" | "flashcards" | "quiz" | "practice" | "profile" | "privacy" | "tos";
+type ViewMode =
+  | "home"
+  | "browse"
+  | "flashcards"
+  | "quiz"
+  | "practice"
+  | "profile"
+  | "privacy"
+  | "tos"
+  | "auth-callback";
 
-const VIEW_MODES: ViewMode[] = ["home", "browse", "flashcards", "quiz", "practice", "profile", "privacy", "tos"];
+const VIEW_MODES: ViewMode[] = [
+  "home",
+  "browse",
+  "flashcards",
+  "quiz",
+  "practice",
+  "profile",
+  "privacy",
+  "tos",
+  "auth-callback",
+];
 
 function isViewMode(x: string): x is ViewMode {
   return VIEW_MODES.includes(x as ViewMode);
@@ -103,6 +123,11 @@ function isViewMode(x: string): x is ViewMode {
 
 function pathToViewMode(pathname: string): ViewMode | null {
   const clean = pathname.split("?")[0].split("#")[0];
+
+  // Special auth callback route used by Supabase email confirmation.
+  // Supabase redirects to /auth/callback with either ?code=... or #access_token=...
+  if (clean.startsWith("/auth/callback")) return "auth-callback";
+
   const seg = clean.replace(/^\//, "").split("/")[0].trim();
   if (!seg) return "home";
   if (isViewMode(seg)) return seg;
@@ -485,6 +510,11 @@ function AppContent() {
         description: "Read HamHao’s Terms of Service.",
         path: "/tos",
       },
+      "auth-callback": {
+        title: "Confirm your email — HamHao",
+        description: "Email confirmation callback.",
+        path: "/auth/callback",
+      },
     };
 
     const next = map[viewMode];
@@ -812,6 +842,7 @@ function AppContent() {
 
         {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
         {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "auth-callback" && <AuthCallbackPage />}
 
         {viewMode === "browse" && (
           <>
