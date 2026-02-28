@@ -5,4 +5,4 @@ Allow: /
 Disallow: /profile
 Disallow: /api/
 
-Sitemap: https://zhong-theta.vercel.app/sitemap.xml
+Sitemap: https://hamhao.com/sitemap.xml

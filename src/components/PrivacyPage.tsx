@@ -21,11 +21,11 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
         </p>
 
         <p className="text-gray-300 mb-6">
-          This Privacy Policy describes how ZhongCang ("we", "us", "our") collects,
+          This Privacy Policy describes how HamHao ("we", "us", "our") collects,
           uses, and protects your personal information when you use our website and
           services at{" "}
-          <a href="https://zhong-theta.vercel.app" className="text-red-400 hover:text-red-300">
-            zhong-theta.vercel.app
+          <a href="https://hamhao.com" className="text-red-400 hover:text-red-300">
+            hamhao.com
           </a>{" "}
           (the "Service").
         </p>
@@ -271,7 +271,7 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
           If you have any questions about this Privacy Policy, contact us at:
         </p>
         <div className="mt-4 p-4 bg-neutral-800/50 rounded-xl">
-          <p className="text-white font-semibold">ZhongCang</p>
+          <p className="text-white font-semibold">HamHao</p>
           <p className="text-gray-300">
             Email:{" "}
             <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">

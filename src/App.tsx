@@ -436,53 +436,53 @@ function AppContent() {
 
   // Basic SPA SEO: update title/description/canonical per view
   useEffect(() => {
-    const base = "https://zhong-theta.vercel.app";
+    const base = "https://hamhao.com";
 
     const map: Record<ViewMode, { title: string; description: string; path: string }> = {
       home: {
-        title: "ZhongCang — Learn Chinese HSK Vocabulary",
+        title: "HamHao — Learn Chinese HSK Vocabulary",
         description:
-          "ZhongCang is a modern Chinese (Mandarin) vocabulary trainer based on HSK levels. Practice with flashcards, quizzes, and examples.",
+          "HamHao is a modern Chinese (Mandarin) vocabulary trainer based on HSK levels. Practice with flashcards, quizzes, and examples.",
         path: "/",
       },
       browse: {
-        title: "Browse HSK Vocabulary — ZhongCang",
+        title: "Browse HSK Vocabulary — HamHao",
         description:
           "Browse Chinese vocabulary by HSK level. Search Hanzi, Pinyin, and English and study example sentences.",
         path: "/browse",
       },
       practice: {
-        title: "Practice Session — ZhongCang",
+        title: "Practice Session — HamHao",
         description:
           "Run focused practice sessions that mix review and new words, with pinyin hints and examples.",
         path: "/practice",
       },
       flashcards: {
-        title: "Flashcards — ZhongCang",
+        title: "Flashcards — HamHao",
         description:
           "Study Chinese vocabulary with fast flashcards, mark words learned, and review example sentences.",
         path: "/flashcards",
       },
       quiz: {
-        title: "Quiz — ZhongCang",
+        title: "Quiz — HamHao",
         description:
           "Test your Chinese vocabulary recall with multiple-choice quizzes by HSK level.",
         path: "/quiz",
       },
       profile: {
-        title: "Your Profile — ZhongCang",
+        title: "Your Profile — HamHao",
         description:
           "Manage your account, progress, unlocks, and billing preferences.",
         path: "/profile",
       },
       privacy: {
-        title: "Privacy Policy — ZhongCang",
-        description: "Read ZhongCang’s Privacy Policy.",
+        title: "Privacy Policy — HamHao",
+        description: "Read HamHao’s Privacy Policy.",
         path: "/privacy",
       },
       tos: {
-        title: "Terms of Service — ZhongCang",
-        description: "Read ZhongCang’s Terms of Service.",
+        title: "Terms of Service — HamHao",
+        description: "Read HamHao’s Terms of Service.",
         path: "/tos",
       },
     };
@@ -552,7 +552,7 @@ function AppContent() {
               {logoImage ? (
                 <img
                   src={logoImage}
-                  alt="ZhongCang Logo"
+                  alt="HamHao Logo"
                   className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl shadow-lg shadow-red-900/40 object-cover"
                 />
               ) : (
@@ -561,7 +561,7 @@ function AppContent() {
                 </div>
               )}
               <div className="hidden sm:block text-left">
-                <h1 className="text-lg font-bold text-white leading-tight">ZhongCang</h1>
+                <h1 className="text-lg font-bold text-white leading-tight">HamHao</h1>
                 <p className="text-[10px] text-gray-500 font-medium tracking-wider uppercase">Chinese Learning</p>
               </div>
             </button>
@@ -1066,7 +1066,7 @@ function AppContent() {
       <footer className={`border-t border-neutral-800 mt-16 relative z-10 ${showAppBackground ? "bg-neutral-950/80 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <p className="text-sm text-gray-500">🇨🇳 汉语学习 — Chinese Language Learning — HSK 1-4 Vocabulary</p>
+            <p className="text-sm text-gray-500">🇨🇳 HamHao — Chinese Language Learning — HSK 1-4 Vocabulary</p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedAvailableCount}/{availableTotal} learned
               {dataSource === "fallback" && " • ⚡ Preview mode"}

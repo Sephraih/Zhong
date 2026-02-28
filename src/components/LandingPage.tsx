@@ -761,7 +761,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         {logoImage ? (
           <img
             src={logoImage}
-            alt="ZhongCang Logo"
+            alt="HamHao Logo"
             className="w-20 h-20 rounded-3xl shadow-2xl shadow-red-900/50 mb-8 object-cover"
           />
         ) : (
@@ -848,7 +848,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         {logoImage ? (
           <img
             src={logoImage}
-            alt="ZhongCang Logo"
+            alt="HamHao Logo"
             className="w-16 h-16 rounded-2xl shadow-xl shadow-red-900/40 mb-6 object-cover"
           />
         ) : (

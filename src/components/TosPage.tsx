@@ -21,8 +21,8 @@ export function TosPage({ onBack }: TosPageProps) {
         </p>
 
         <p className="text-gray-300 mb-6">
-          These Terms of Service ("Terms") govern your use of ZhongCang
-          (the "Service") operated by ZhongCang ("we", "us", "our").
+          These Terms of Service ("Terms") govern your use of HamHao
+          (the "Service") operated by HamHao ("we", "us", "our").
         </p>
 
         <p className="text-gray-300 mb-8">
@@ -34,7 +34,7 @@ export function TosPage({ onBack }: TosPageProps) {
 
         <h2 className="text-xl font-bold text-white mt-8 mb-4">1. The Service</h2>
         <p className="text-gray-300">
-          ZhongCang is a language learning application that helps users study
+          HamHao is a language learning application that helps users study
           Chinese vocabulary organized by HSK levels. The Service includes both
           free and paid features.
         </p>
@@ -109,7 +109,7 @@ export function TosPage({ onBack }: TosPageProps) {
         <ul className="list-disc pl-6 text-gray-300 space-y-2 mb-4">
           <li>
             The Service, including its design, code, text, and educational
-            content, is owned by ZhongCang and protected by copyright
+            content, is owned by HamHao and protected by copyright
             and other intellectual property laws.
           </li>
           <li>
@@ -238,7 +238,7 @@ export function TosPage({ onBack }: TosPageProps) {
           If you have any questions about these Terms, contact us at:
         </p>
         <div className="mt-4 p-4 bg-neutral-800/50 rounded-xl">
-          <p className="text-white font-semibold">ZhongCang</p>
+          <p className="text-white font-semibold">HamHao</p>
           <p className="text-gray-300">
             Email:{" "}
             <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">
