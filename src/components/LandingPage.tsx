@@ -569,23 +569,23 @@ function ModeSectionDesktop({
         </div>
       </div>
 
-      <div className="absolute bottom-[max(4rem,calc(env(safe-area-inset-bottom)+2rem))] left-1/2 -translate-x-1/2 flex items-center gap-6">
+      <div className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-4 px-4">
         <button
           onClick={onPrev}
-          className="group flex items-center justify-center w-12 h-12 rounded-full bg-transparent border-2 border-neutral-500 text-neutral-400 hover:border-white hover:text-white transition-all"
-          title="Previous section"
+          className="group flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition-all px-5 py-2.5 rounded-full bg-neutral-900/80 backdrop-blur-sm border border-neutral-700 hover:border-white/40 hover:bg-neutral-800/90 shadow-lg"
         >
-          <svg className="w-6 h-6 rotate-90 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <svg className="w-5 h-5 rotate-90 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
+          <span>Previous</span>
         </button>
         <button
           onClick={onNext}
-          className="group flex items-center justify-center w-12 h-12 rounded-full bg-transparent border-2 border-red-500 text-red-500 hover:border-red-400 hover:text-red-400 hover:bg-red-500/10 transition-all animate-pulse hover:animate-none"
-          title="Next section"
+          className="group flex items-center gap-2 text-sm font-medium text-white transition-all px-5 py-2.5 rounded-full bg-red-600/90 hover:bg-red-600 backdrop-blur-sm border border-red-500/50 hover:border-red-400 shadow-lg shadow-red-900/30 animate-pulse hover:animate-none"
         >
-          <svg className="w-6 h-6 -rotate-90 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          <span>Next</span>
+          <svg className="w-5 h-5 -rotate-90 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
       </div>
@@ -831,10 +831,16 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       {!isMobile && (
         <button
           onClick={scrollNext}
-          className="group absolute bottom-[max(6rem,calc(env(safe-area-inset-bottom)+4rem))] left-1/2 -translate-x-1/2 flex items-center justify-center w-14 h-14 rounded-full bg-transparent border-2 border-red-500 text-red-500 hover:bg-red-500/10 hover:border-red-400 hover:text-red-400 transition-all animate-bounce hover:animate-none"
-          title="Scroll to explore modes"
+          aria-label="Scroll to next section"
+          className="group absolute bottom-24 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full bg-transparent border-2 border-red-500/80 hover:border-red-400 text-red-400 hover:text-red-300 transition-all flex items-center justify-center shadow-[0_0_0_0_rgba(239,68,68,0.0)] hover:shadow-[0_0_24px_6px_rgba(239,68,68,0.18)]"
         >
-          <svg className="w-7 h-7 group-hover:translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <svg
+            className="w-7 h-7 transition-transform group-hover:translate-y-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
