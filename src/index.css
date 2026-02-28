@@ -1,11 +1,10 @@
 @import "tailwindcss";
 
-/* Hide scrollbar for landing page snap scrolling */
-.scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+/* Hide scrollbars (while keeping scrolling) */
+.scrollbar-none {
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
 }
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }

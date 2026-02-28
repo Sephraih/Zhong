@@ -569,22 +569,22 @@ function ModeSectionDesktop({
         </div>
       </div>
 
-      <div className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-4 px-4">
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-3 px-4">
         <button
           onClick={onPrev}
-          className="group flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition-all px-5 py-2.5 rounded-full bg-neutral-900/80 backdrop-blur-sm border border-neutral-700 hover:border-white/40 hover:bg-neutral-800/90 shadow-lg"
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
         >
-          <svg className="w-5 h-5 rotate-90 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-3.5 h-3.5 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          <span>Previous</span>
+          Prev
         </button>
         <button
           onClick={onNext}
-          className="group flex items-center gap-2 text-sm font-medium text-white transition-all px-5 py-2.5 rounded-full bg-red-600/90 hover:bg-red-600 backdrop-blur-sm border border-red-500/50 hover:border-red-400 shadow-lg shadow-red-900/30 animate-pulse hover:animate-none"
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-full bg-neutral-900/60 border border-neutral-800 hover:border-neutral-600"
         >
-          <span>Next</span>
-          <svg className="w-5 h-5 -rotate-90 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          Next
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -831,12 +831,16 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       {!isMobile && (
         <button
           onClick={scrollNext}
-          className="group absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-2 px-6 py-3 rounded-full bg-red-600/90 hover:bg-red-600 text-white font-medium transition-all shadow-lg shadow-red-900/30 border border-red-500/50 hover:border-red-400 animate-bounce hover:animate-none"
+          className="absolute bottom-[max(1.75rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 flex items-center gap-3 px-5 py-3 rounded-full bg-neutral-950/70 border border-white/10 text-gray-200 hover:text-white hover:border-white/20 shadow-xl transition-all"
+          title="Scroll to next mode"
         >
-          <span>Explore Modes</span>
-          <svg className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <span className="text-xs tracking-widest uppercase">Scroll</span>
+          <span className="text-xs text-gray-400">Next mode</span>
+          <span className="relative flex items-center justify-center w-7 h-7 rounded-full bg-red-600/80 border border-red-400/30">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </span>
         </button>
       )}
     </section>
@@ -893,7 +897,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
   );
 
   return (
-    <div className="relative w-screen -ml-[calc((100vw-100%)/2)] -mt-8 overflow-x-hidden z-10">
+    <div className="relative w-full -mt-8 sm:-mx-6 lg:-mx-8 sm:-mt-8 overflow-x-hidden z-10">
       {/*
         Fixed viewport background (NOT tied to scroll height).
         This prevents the mobile image from becoming extremely zoomed (because the old
@@ -959,12 +963,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       ) : (
         <div
           ref={containerRef}
-          className="h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-y-contain scrollbar-hide"
-          style={{ 
-            scrollSnapType: "y mandatory",
-            scrollbarWidth: "none", /* Firefox */
-            msOverflowStyle: "none", /* IE/Edge */
-          }}
+          className="h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-y-contain scrollbar-none"
+          style={{ scrollSnapType: "y mandatory" }}
         >
           {hero}
           {modes.map((m, idx) => (

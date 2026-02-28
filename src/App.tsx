@@ -798,7 +798,13 @@ function AppContent() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main
+        className={
+          viewMode === "home"
+            ? "w-full max-w-none px-0 py-0 relative z-10"
+            : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10"
+        }
+      >
         {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
 
         {viewMode === "profile" && (
