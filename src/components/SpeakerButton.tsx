@@ -3,108 +3,139 @@ interface SpeakerButtonProps {
   size?: "sm" | "md" | "lg";
 }
 
-// Firefox often returns an empty voice list initially; this helper waits briefly for voices to load.
-let voicesPromise: Promise<SpeechSynthesisVoice[]> | null = null;
-
-function getVoicesAsync(): Promise<SpeechSynthesisVoice[]> {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return Promise.resolve([]);
-
-  if (voicesPromise) return voicesPromise;
-
-  voicesPromise = new Promise<SpeechSynthesisVoice[]>((resolve) => {
-    const synth = window.speechSynthesis;
-
-    const tryResolve = () => {
-      const v = synth.getVoices();
-      if (v && v.length > 0) {
-        cleanup();
-        resolve(v);
-        return true;
-      }
-      return false;
-    };
-
-    const onVoicesChanged = () => {
-      if (tryResolve()) return;
-    };
-
-    let interval: number | null = null;
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      resolve(synth.getVoices() || []);
-    }, 1200);
-
-    const cleanup = () => {
-      synth.removeEventListener?.("voiceschanged", onVoicesChanged);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const anySynth = synth as any;
-      if (anySynth.onvoiceschanged === onVoicesChanged) anySynth.onvoiceschanged = null;
-      if (interval !== null) window.clearInterval(interval);
-      window.clearTimeout(timeout);
-    };
-
-    // Trigger loading in some browsers
-    synth.getVoices();
-
-    // Prefer addEventListener when available
-    if (synth.addEventListener) synth.addEventListener("voiceschanged", onVoicesChanged);
-    // Fallback
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (synth as any).onvoiceschanged = onVoicesChanged;
-
-    interval = window.setInterval(() => {
-      tryResolve();
-    }, 100);
-
-    // If already available, resolve immediately
-    tryResolve();
-  });
-
-  return voicesPromise;
+// Helper to find the best Chinese voice
+function findChineseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  // Priority order for best Chinese voices
+  return (
+    voices.find(v => v.name.includes("Xiaoxiao")) ||
+    voices.find(v => v.name.includes("Huihui")) ||
+    voices.find(v => v.name.includes("Kangkang")) ||
+    voices.find(v => v.name.includes("Google") && v.lang.startsWith("zh")) ||
+    voices.find(v => v.name.toLowerCase().includes("chinese")) ||
+    voices.find(v => v.name.toLowerCase().includes("mandarin")) ||
+    voices.find(v => v.lang === "zh-CN") ||
+    voices.find(v => v.lang === "zh-TW") ||
+    voices.find(v => v.lang.startsWith("zh"))
+  );
 }
 
-async function speakChinese(text: string) {
-  if (!("speechSynthesis" in window)) return;
-
-  const synth = window.speechSynthesis;
-
-  // In Firefox, synth can be "paused" until resumed.
-  try {
-    synth.cancel();
-    synth.resume();
-  } catch {
-    // ignore
+// Speak text with comprehensive browser support (including Firefox)
+function speakText(text: string) {
+  if (!("speechSynthesis" in window)) {
+    console.warn("Speech synthesis not supported in this browser");
+    return;
   }
-
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = "zh-CN";
-  utter.rate = 0.9;
-  utter.pitch = 1.0;
-
-  const voices = await getVoicesAsync();
-
-  const preferredVoice =
-    voices.find((v) => v.name.includes("Xiaoxiao")) ||
-    voices.find((v) => v.name.includes("Google") && v.lang.startsWith("zh")) ||
-    voices.find((v) => v.name.toLowerCase().includes("neural") && v.lang.startsWith("zh")) ||
-    voices.find((v) => v.name.toLowerCase().includes("online") && v.lang.startsWith("zh")) ||
-    voices.find((v) => v.lang === "zh-CN") ||
-    voices.find((v) => v.lang.startsWith("zh"));
-
-  // Only set a voice if we actually found one. Some browsers behave oddly if you set a voice
-  // with a mismatched language.
-  if (preferredVoice) {
-    utter.voice = preferredVoice;
-    if (preferredVoice.name.includes("Xiaoxiao")) utter.rate = 0.85;
+  
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel();
+  
+  // Firefox fix: speechSynthesis can get "stuck" - resume if paused
+  if (window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
   }
+  
+  const doSpeak = (voice: SpeechSynthesisVoice | undefined) => {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "zh-CN";
+    utter.rate = 0.9;
+    utter.pitch = 1.0;
 
-  synth.speak(utter);
+    if (voice) {
+      utter.voice = voice;
+      if (voice.name.includes("Xiaoxiao")) utter.rate = 0.85;
+    }
+
+    // Error handling
+    utter.onerror = (event) => {
+      console.warn("Speech synthesis error:", event.error);
+    };
+
+    // Firefox fix: wrap in try-catch and use setTimeout
+    try {
+      // Small delay helps Firefox process the speech request
+      setTimeout(() => {
+        window.speechSynthesis.speak(utter);
+        // Firefox: check if stuck and resume
+        setTimeout(() => {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }, 100);
+      }, 10);
+    } catch (err) {
+      console.warn("Speech synthesis failed:", err);
+    }
+  };
+
+  // Get voices
+  let voices = window.speechSynthesis.getVoices();
+  
+  if (voices.length > 0) {
+    // Voices already loaded (Chrome, Safari typically)
+    doSpeak(findChineseVoice(voices));
+  } else {
+    // Firefox and some browsers: voices load asynchronously
+    let hasSpoken = false;
+    
+    const attemptSpeak = () => {
+      if (hasSpoken) return;
+      hasSpoken = true;
+      voices = window.speechSynthesis.getVoices();
+      doSpeak(findChineseVoice(voices));
+    };
+    
+    // Method 1: Listen for voiceschanged event
+    const onVoicesChanged = () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+      attemptSpeak();
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", onVoicesChanged);
+    
+    // Method 2: Poll for voices (some Firefox versions need this)
+    let pollCount = 0;
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        clearInterval(pollInterval);
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        attemptSpeak();
+      } else if (pollCount > 20) {
+        // After 1 second, give up polling and try to speak anyway
+        clearInterval(pollInterval);
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        // Try to speak without a specific voice (browser default)
+        if (!hasSpoken) {
+          hasSpoken = true;
+          doSpeak(undefined);
+        }
+      }
+    }, 50);
+    
+    // Method 3: Immediate fallback for Firefox desktop
+    // Firefox desktop sometimes has voices but getVoices() returns empty initially
+    setTimeout(() => {
+      voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        clearInterval(pollInterval);
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        attemptSpeak();
+      } else if (!hasSpoken && navigator.userAgent.includes("Firefox")) {
+        // Firefox fallback: try speaking without voice selection
+        // The browser should use its default Chinese voice
+        clearInterval(pollInterval);
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
+        hasSpoken = true;
+        doSpeak(undefined);
+      }
+    }, 200);
+  }
 }
 
 export function SpeakerButton({ text, size = "sm" }: SpeakerButtonProps) {
   const handleSpeak = (e: React.MouseEvent) => {
     e.stopPropagation();
-    void speakChinese(text);
+    speakText(text);
   };
 
   const sizeClasses: Record<string, string> = {
