@@ -190,8 +190,8 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
 
                 {/* Turnstile Captcha (signup only) */}
                 {turnstileEnabled && (
-                  <div className="mt-4">
-                    <p className="text-xs text-gray-500 mb-2">Security check</p>
+                  <div className="mt-4 p-3 bg-neutral-950 border border-neutral-800 rounded-lg">
+                    <p className="text-xs text-gray-500 mb-2">Security verification</p>
                     <TurnstileWidget
                       siteKey={turnstileSiteKey!}
                       onToken={(t) => setTurnstileToken(t)}
