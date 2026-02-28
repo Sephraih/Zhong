@@ -570,22 +570,22 @@ function ModeSectionDesktop({
       </div>
 
       <div className="absolute bottom-[max(4rem,calc(env(safe-area-inset-bottom)+2rem))] left-1/2 -translate-x-1/2 flex items-center gap-6">
-        {/* Up arrow (previous section) */}
         <button
           onClick={onPrev}
           className="group flex items-center justify-center w-12 h-12 rounded-full bg-transparent border-2 border-neutral-500 text-neutral-400 hover:border-white hover:text-white transition-all"
           title="Previous section"
         >
+          {/* Up arrow */}
           <svg className="w-6 h-6 rotate-180 group-hover:-translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        {/* Down arrow (next section) */}
         <button
           onClick={onNext}
           className="group flex items-center justify-center w-12 h-12 rounded-full bg-transparent border-2 border-red-500 text-red-500 hover:border-red-400 hover:text-red-400 hover:bg-red-500/10 transition-all animate-pulse hover:animate-none"
           title="Next section"
         >
+          {/* Down arrow */}
           <svg className="w-6 h-6 group-hover:translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>

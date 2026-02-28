@@ -26,9 +26,13 @@ function speakText(text: string) {
     return;
   }
   
-  // Cancel any ongoing speech
-  window.speechSynthesis.cancel();
-  
+  // Cancel any ongoing speech (but avoid excessive cancel/restart loops on Firefox)
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    // ignore
+  }
+
   // Firefox fix: speechSynthesis can get "stuck" - resume if paused
   if (window.speechSynthesis.paused) {
     window.speechSynthesis.resume();
@@ -39,61 +43,69 @@ function speakText(text: string) {
     utter.lang = "zh-CN";
     utter.rate = 0.9;
     utter.pitch = 1.0;
-    utter.volume = 1.0; // Explicitly set maximum volume
+    utter.volume = 1;
 
     if (voice) {
       utter.voice = voice;
       if (voice.name.includes("Xiaoxiao")) utter.rate = 0.85;
     }
 
-    // Debug: log voice info
-    console.log("TTS: Speaking with voice:", voice?.name || "default", "lang:", utter.lang);
+    let started = false;
+    utter.onstart = () => {
+      started = true;
+    };
 
-    // Event handlers for debugging
-    utter.onstart = () => console.log("TTS: Started speaking");
-    utter.onend = () => console.log("TTS: Finished speaking");
+    // Error handling
     utter.onerror = (event) => {
-      console.warn("TTS: Speech synthesis error:", event.error);
-      // Firefox: try again without specific voice on error
-      if (voice && event.error !== "canceled") {
-        console.log("TTS: Retrying without specific voice...");
-        const fallbackUtter = new SpeechSynthesisUtterance(text);
-        fallbackUtter.lang = "zh-CN";
-        fallbackUtter.volume = 1.0;
-        window.speechSynthesis.speak(fallbackUtter);
+      console.warn("Speech synthesis error:", event.error);
+    };
+
+    const trySpeak = () => {
+      try {
+        window.speechSynthesis.speak(utter);
+      } catch (err) {
+        console.warn("Speech synthesis failed:", err);
       }
     };
 
-    // Firefox fix: wrap in try-catch and use setTimeout
-    try {
-      // Cancel any stuck speech first
-      window.speechSynthesis.cancel();
-      
-      // Small delay helps Firefox process the speech request
+    // Firefox fix: speak on a slight delay
+    const initialDelay = navigator.userAgent.includes("Firefox") ? 50 : 10;
+
+    setTimeout(() => {
+      trySpeak();
+
+      // If Firefox doesn't start speaking, retry once (common on some Windows setups)
       setTimeout(() => {
-        // Resume if paused (Firefox bug)
+        if (!started) {
+          console.warn("Speech synthesis did not start. Retrying once...");
+          try {
+            window.speechSynthesis.cancel();
+          } catch {
+            // ignore
+          }
+          setTimeout(trySpeak, 50);
+
+          // If still not started after retry, show a one-time hint
+          setTimeout(() => {
+            if (!started) {
+              const key = "hamhao-tts-firefox-hint-shown";
+              if (navigator.userAgent.includes("Firefox") && !sessionStorage.getItem(key)) {
+                sessionStorage.setItem(key, "1");
+                // Non-blocking hint (console) + minimal alert once per session
+                console.warn(
+                  "Firefox TTS may require an installed Chinese voice on your OS. On Windows: Settings → Time & language → Speech → Add voices (Chinese)."
+                );
+              }
+            }
+          }, 600);
+        }
+
+        // If synthesis got paused, resume
         if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume();
         }
-        
-        window.speechSynthesis.speak(utter);
-        
-        // Firefox: periodically check if stuck and resume
-        let checkCount = 0;
-        const checkInterval = setInterval(() => {
-          checkCount++;
-          if (window.speechSynthesis.paused && window.speechSynthesis.speaking) {
-            console.log("TTS: Resuming paused speech...");
-            window.speechSynthesis.resume();
-          }
-          if (checkCount > 30 || !window.speechSynthesis.speaking) {
-            clearInterval(checkInterval);
-          }
-        }, 100);
-      }, 50);
-    } catch (err) {
-      console.warn("TTS: Speech synthesis failed:", err);
-    }
+      }, 250);
+    }, initialDelay);
   };
 
   // Get voices
