@@ -208,9 +208,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user && !data.session) {
         // Email confirmation required
         setUser(null);
+        setAccessToken(null);
         setAccountTier('free');
         setPurchasedLevels([]);
-        localStorage.removeItem("hanyu_auth_token");
+        storageRemoveItem("hanyu_auth_token");
       } else if (data.session?.access_token) {
         setAccessToken(data.session.access_token);
         storageSetItem("hanyu_auth_token", data.session.access_token);

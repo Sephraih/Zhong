@@ -24,9 +24,13 @@ function parseParams() {
   // Some providers put tokens in hash fragment
   const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
 
+  const get = (k: string) => search.get(k) || hashParams.get(k);
+
   return {
-    code: search.get("code") || hashParams.get("code"),
-    accessToken: search.get("access_token") || hashParams.get("access_token"),
+    code: get("code"),
+    accessToken: get("access_token"),
+    tokenHash: get("token_hash") || get("token"),
+    type: get("type"),
   };
 }
 
@@ -37,7 +41,7 @@ export function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       try {
-        const { code, accessToken } = parseParams();
+        const { code, accessToken, tokenHash, type } = parseParams();
 
         // If the redirect contains an access token already, just use it.
         if (accessToken) {
@@ -49,16 +53,38 @@ export function AuthCallbackPage() {
           return;
         }
 
-        if (!code) {
-          setStatus("error");
-          setMessage("Missing confirmation code. Please try opening the link again.");
-          return;
-        }
-
         const supabase = getBaseClient();
         if (!supabase) {
           setStatus("error");
           setMessage("Supabase is not configured. Please try again later.");
+          return;
+        }
+
+        // Newer Supabase email confirmation flow can send token_hash + type
+        if (tokenHash && type) {
+          const { data, error } = await supabase.auth.verifyOtp({
+            type: type as any,
+            token_hash: tokenHash,
+          });
+
+          if (error || !data?.session?.access_token) {
+            setStatus("error");
+            setMessage(error?.message || "Failed to verify confirmation token.");
+            return;
+          }
+
+          storageSetItem("hanyu_auth_token", data.session.access_token);
+          sessionStorage.setItem("hamhao_email_confirmed", "1");
+          setStatus("done");
+          setMessage("Email confirmed! Redirecting to your profile…");
+          setTimeout(() => window.location.assign("/profile"), 600);
+          return;
+        }
+
+        // PKCE flow: code param
+        if (!code) {
+          setStatus("error");
+          setMessage("Missing confirmation code/token. Please try opening the link again.");
           return;
         }
 
