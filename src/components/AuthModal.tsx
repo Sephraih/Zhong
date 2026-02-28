@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,10 +15,13 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptTos, setAcceptTos] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const { login, signup, error, clearError } = useAuth();
+
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
   if (!isOpen) return null;
 
@@ -35,6 +39,11 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
       return;
     }
 
+    if (mode === "signup" && turnstileSiteKey && !turnstileToken) {
+      // Require captcha token when Turnstile is configured
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -46,6 +55,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
         await signup(email, password, {
           acceptTos,
           acceptPrivacy,
+          captchaToken: turnstileToken,
         });
         // Supabase email confirmation is enabled: user must confirm via email.
         setSuccessMessage(

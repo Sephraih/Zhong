@@ -17,7 +17,11 @@ interface AuthContextType {
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => Promise<void>;
+  signup: (
+    email: string,
+    password: string,
+    consent?: { acceptTos: boolean; acceptPrivacy: boolean; captchaToken?: string | null }
+  ) => Promise<void>;
   logout: () => Promise<void>;
   purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
@@ -201,7 +205,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, consent?: { acceptTos: boolean; acceptPrivacy: boolean }) => {
+  const signup = async (
+    email: string,
+    password: string,
+    consent?: { acceptTos: boolean; acceptPrivacy: boolean; captchaToken?: string | null }
+  ) => {
     setIsLoading(true);
     setError(null);
 
@@ -214,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           accept_tos: consent?.acceptTos === true,
           accept_privacy: consent?.acceptPrivacy === true,
+          captchaToken: consent?.captchaToken ?? null,
         }),
       });
 

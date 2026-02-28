@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { email, password, accept_tos, accept_privacy } = req.body;
+    const { email, password, accept_tos, accept_privacy, captchaToken } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -37,10 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
     const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
 
+    const options = baseUrl ? { emailRedirectTo: `${baseUrl}/auth/callback` } : undefined;
+
+    // Forward Turnstile captcha token to Supabase (required when captcha is enabled)
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: baseUrl ? { emailRedirectTo: `${baseUrl}/auth/callback` } : undefined,
+      options: {
+        ...(options || {}),
+        captchaToken: captchaToken || undefined,
+      },
     });
     if (error) return res.status(400).json({ error: error.message });
 
