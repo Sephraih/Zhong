@@ -84,8 +84,8 @@ export function TosPage({ onBack }: TosPageProps) {
           <li>
             If you are unsatisfied with the Service, you may request a full
             refund within <strong>7 days</strong> of your purchase by contacting us at{" "}
-            <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">
-              zhong@cang.com
+            <a href="mailto:support@hamhao.com" className="text-red-400 hover:text-red-300">
+              support@hamhao.com
             </a>.
           </li>
           <li>After the 7-day period, refunds are provided at our discretion.</li>
@@ -240,15 +240,15 @@ export function TosPage({ onBack }: TosPageProps) {
         <div className="mt-4 p-4 bg-neutral-800/50 rounded-xl">
           <p className="text-white font-semibold">HamHao</p>
           <p className="text-gray-300">
-            Email:{" "}
-            <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">
-              zhong@cang.com
+            Website:{" "}
+            <a href="https://hamhao.com" className="text-red-400 hover:text-red-300">
+              HamHao.com
             </a>
           </p>
           <p className="text-gray-300">
-            Website:{" "}
-            <a href="https://zhong-theta.vercel.app" className="text-red-400 hover:text-red-300">
-              zhong-theta.vercel.app
+            Email:{" "}
+            <a href="mailto:support@hamhao.com" className="text-red-400 hover:text-red-300">
+              support@hamhao.com
             </a>
           </p>
         </div>

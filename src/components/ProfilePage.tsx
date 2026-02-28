@@ -567,7 +567,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  window.location.hash = "tos";
+                  window.history.pushState({}, "", "/tos");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
                   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
                 }}
                 className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
@@ -576,7 +577,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
               </button>
               <button
                 onClick={() => {
-                  window.location.hash = "privacy";
+                  window.history.pushState({}, "", "/privacy");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
                   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
                 }}
                 className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
@@ -673,7 +675,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                       setDeleteBusy(true);
                       await deleteAccount(deletePassword);
                       // After deletion, user is logged out; return to home.
-                      window.location.hash = "";
+                      window.history.pushState({}, "", "/");
+                      window.dispatchEvent(new PopStateEvent("popstate"));
                       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
                     } catch (err) {
                       const msg = err instanceof Error ? err.message : "Failed to delete account";

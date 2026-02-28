@@ -184,8 +184,8 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
 
         <p className="text-gray-300 mb-4">
           For other requests or questions, contact us at{" "}
-          <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">
-            zhong@cang.com
+          <a href="mailto:support@hamhao.com" className="text-red-400 hover:text-red-300">
+            support@hamhao.com
           </a>
           . We will respond within 30 days.
         </p>
@@ -273,9 +273,15 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
         <div className="mt-4 p-4 bg-neutral-800/50 rounded-xl">
           <p className="text-white font-semibold">HamHao</p>
           <p className="text-gray-300">
+            Website:{" "}
+            <a href="https://hamhao.com" className="text-red-400 hover:text-red-300">
+              HamHao.com
+            </a>
+          </p>
+          <p className="text-gray-300">
             Email:{" "}
-            <a href="mailto:zhong@cang.com" className="text-red-400 hover:text-red-300">
-              zhong@cang.com
+            <a href="mailto:support@hamhao.com" className="text-red-400 hover:text-red-300">
+              support@hamhao.com
             </a>
           </p>
         </div>
