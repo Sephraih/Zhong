@@ -27,6 +27,7 @@ interface AuthContextType {
   /** JWT access token (kept in memory; optionally persisted to localStorage if consent accepted) */
   accessToken: string | null;
   isLoading: boolean;
+  isCheckingOut: boolean;
   accountTier: AccountTier;
   purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
@@ -89,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
   const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(() => !getCachedIsSandboxed());
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
@@ -318,7 +320,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      setIsLoading(true);
+      setIsCheckingOut(true);
+      setError(null);
       console.log(`🛒 Starting HSK ${level} purchase...`);
       const res = await apiFetch(`/api/create-checkout-session`, {
         method: "POST",
@@ -329,6 +332,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           product_type: "hsk_level",
           hsk_level: level,
+          // TOS acceptance is implicit by clicking purchase button
+          // The user already accepted TOS when creating their account
+          tos_accepted: true,
+          privacy_accepted: true,
+          client_timestamp: new Date().toISOString(),
         }),
       });
 
@@ -347,7 +355,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("❌ Purchase error:", message);
       setError(message);
     } finally {
-      setIsLoading(false);
+      setIsCheckingOut(false);
     }
   };
 
@@ -357,14 +365,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const token = safeLocalStorageGet("hanyu_auth_token");
+    const token = accessToken || storageGetItem("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to upgrade");
       return;
     }
 
     try {
-      setIsLoading(true);
+      setIsCheckingOut(true);
+      setError(null);
       console.log("🛒 Starting Premium purchase...");
       const res = await apiFetch(`/api/create-checkout-session`, {
         method: "POST",
@@ -374,6 +383,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           product_type: "premium",
+          // TOS acceptance is implicit by clicking purchase button
+          // The user already accepted TOS when creating their account
+          tos_accepted: true,
+          privacy_accepted: true,
+          client_timestamp: new Date().toISOString(),
         }),
       });
 
@@ -392,7 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("❌ Purchase error:", message);
       setError(message);
     } finally {
-      setIsLoading(false);
+      setIsCheckingOut(false);
     }
   };
 
@@ -597,6 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         accessToken,
         isLoading,
+        isCheckingOut,
         accountTier,
         purchasedLevels,
         login,

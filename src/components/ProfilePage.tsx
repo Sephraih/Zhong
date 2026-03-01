@@ -30,7 +30,7 @@ const FALLBACK_LEVEL_PRICES: Record<number, string> = {
 const FALLBACK_PREMIUM_PRICE = "$19.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData } = useAuth();
+  const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
 
   const [stripePrices, setStripePrices] = useState<StripePrices>({
     premium: null,
@@ -240,6 +240,14 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-white">Unlock More Levels</h3>
           
+          {/* Auth Error Display */}
+          {authError && (
+            <div className="p-4 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm flex items-center justify-between">
+              <span>{authError}</span>
+              <button onClick={clearError} className="text-red-400 hover:text-red-200 ml-4">✕</button>
+            </div>
+          )}
+          
           {/* Premium Card */}
           <div className="bg-gradient-to-r from-yellow-900/30 to-amber-900/30 border-2 border-yellow-600/50 rounded-2xl p-6 shadow-lg relative overflow-hidden">
             <div className="absolute top-3 right-3 px-2 py-1 bg-yellow-600 text-white text-xs font-bold rounded">
@@ -266,9 +274,10 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 <div className="text-sm text-gray-400 mb-3">one-time payment</div>
                 <button
                   onClick={purchasePremium}
-                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-900/30"
+                  disabled={isCheckingOut}
+                  className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-900/30 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  Upgrade to Premium
+                  {isCheckingOut ? "Redirecting to Stripe..." : "Upgrade to Premium"}
                 </button>
               </div>
             </div>
@@ -305,7 +314,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                       <div className="text-2xl font-bold text-white mb-3">{price}</div>
                       <button
                         onClick={() => purchaseLevel(level)}
-                        className={`w-full py-2.5 rounded-xl font-semibold transition-all ${
+                        disabled={isCheckingOut}
+                        className={`w-full py-2.5 rounded-xl font-semibold transition-all disabled:opacity-60 disabled:cursor-wait ${
                           level === 2
                             ? "bg-blue-600 hover:bg-blue-500 text-white"
                             : level === 3
@@ -313,7 +323,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                             : "bg-orange-600 hover:bg-orange-500 text-white"
                         }`}
                       >
-                        Purchase HSK {level}
+                        {isCheckingOut ? "Redirecting..." : `Purchase HSK ${level}`}
                       </button>
                     </>
                   )}
