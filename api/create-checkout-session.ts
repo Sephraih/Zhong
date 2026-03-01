@@ -39,8 +39,24 @@ async function getOrCreateStripeCustomer(userId: string, email: string) {
     .eq('id', userId)
     .single();
 
+  // If we have a customer ID stored, verify it exists in the current Stripe environment.
+  // This commonly breaks when switching from Stripe test → live: old cus_ IDs won't exist.
   if (profile?.stripe_customer_id) {
-    return profile.stripe_customer_id;
+    try {
+      const existing = await stripe.customers.retrieve(profile.stripe_customer_id);
+      if (existing && !('deleted' in existing && existing.deleted)) {
+        return profile.stripe_customer_id;
+      }
+      console.warn('⚠️ Stripe customer marked deleted, recreating:', profile.stripe_customer_id);
+    } catch (err: any) {
+      const msg = typeof err?.message === 'string' ? err.message : String(err);
+      // If Stripe says the customer doesn't exist, recreate it and overwrite the profile value.
+      if (msg.includes('No such customer') || err?.code === 'resource_missing') {
+        console.warn('⚠️ Stripe customer missing in this environment, recreating:', profile.stripe_customer_id);
+      } else {
+        console.error('❌ Failed to retrieve Stripe customer, recreating as fallback:', msg);
+      }
+    }
   }
 
   const customer = await stripe.customers.create({
