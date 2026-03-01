@@ -66,39 +66,6 @@ async function addPurchasedLevel(userId: string, level: number, paymentId: strin
   }
 }
 
-async function updatePurchaseRecord(
-  sessionId: string, 
-  paymentIntentId: string | null, 
-  amountCents: number | null,
-  status: 'completed' | 'failed' | 'refunded' | 'disputed'
-) {
-  const now = new Date().toISOString();
-  
-  const updateData: Record<string, unknown> = {
-    status,
-    stripe_payment_intent_id: paymentIntentId,
-    updated_at: now,
-  };
-  
-  if (status === 'completed') {
-    updateData.completed_at = now;
-    if (amountCents !== null) {
-      updateData.amount_cents = amountCents;
-    }
-  }
-  
-  const { error } = await supabase
-    .from('purchases')
-    .update(updateData)
-    .eq('stripe_session_id', sessionId);
-    
-  if (error) {
-    console.error('❌ Error updating purchase record:', error);
-  } else {
-    console.log(`📝 Updated purchase record for session ${sessionId} to status: ${status}`);
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -150,20 +117,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('👤 User ID:', userId);
         console.log('📦 Product type:', productType);
         console.log('📊 HSK Level:', hskLevel);
-        console.log('💰 Amount:', session.amount_total, session.currency);
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
           break;
         }
-
-        // Update the purchase record with completed status
-        await updatePurchaseRecord(
-          session.id,
-          session.payment_intent as string | null,
-          session.amount_total,
-          'completed'
-        );
 
         // Ensure profile exists
         const { data: existingProfile } = await supabase
@@ -186,7 +144,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // Handle based on product type
+        // 1) Always write an auditable purchase record (chargeback-proof)
+        try {
+          const amountTotal = (session.amount_total ?? null) as number | null;
+          const currency = (session.currency ?? null) as string | null;
+          const consent = (session as any).consent ?? null; // Stripe may include this depending on API version
+
+          const { error: purchaseError } = await supabase
+            .from('purchases')
+            .insert({
+              user_id: userId,
+              stripe_session_id: session.id,
+              stripe_payment_intent_id: (session.payment_intent as string) || null,
+              stripe_customer_id: (session.customer as string) || null,
+              stripe_price_id: session.metadata?.stripe_price_id || null,
+              product_type: productType || 'premium',
+              hsk_level: hskLevel ? parseInt(hskLevel, 10) : null,
+              amount_total: amountTotal,
+              currency,
+              payment_status: session.payment_status || null,
+              tos_url: session.metadata?.tos_url || null,
+              privacy_url: session.metadata?.privacy_url || null,
+              tos_version: session.metadata?.tos_version || null,
+              privacy_version: session.metadata?.privacy_version || null,
+              consent_json: consent,
+              stripe_session_json: session,
+              purchased_at: new Date().toISOString(),
+            });
+
+          if (purchaseError) {
+            console.error('❌ Purchase audit insert error:', purchaseError);
+          } else {
+            console.log('✅ Purchase audit record written');
+          }
+        } catch (e) {
+          console.error('❌ Purchase audit exception:', e);
+        }
+
+        // 2) Apply entitlements based on product type
         if (productType === 'premium') {
           console.log('🔄 Processing Premium purchase...');
           await setUserPremium(userId);
@@ -214,84 +209,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log('❌ Payment failed:', paymentIntent.id);
         console.log('Failure message:', paymentIntent.last_payment_error?.message);
-        
-        // Try to find and update the purchase record
-        // Note: We may not have the session ID directly, so we use payment_intent_id
-        const { data: purchases } = await supabase
-          .from('purchases')
-          .select('stripe_session_id')
-          .eq('stripe_payment_intent_id', paymentIntent.id)
-          .limit(1);
-          
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            paymentIntent.id,
-            null,
-            'failed'
-          );
-        }
-        break;
-      }
-
-      case 'charge.refunded': {
-        const charge = event.data.object as Stripe.Charge;
-        console.log('💸 Charge refunded:', charge.id);
-        
-        // Find purchase by payment intent
-        const { data: purchases } = await supabase
-          .from('purchases')
-          .select('stripe_session_id')
-          .eq('stripe_payment_intent_id', charge.payment_intent)
-          .limit(1);
-          
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            charge.payment_intent as string,
-            null,
-            'refunded'
-          );
-        }
-        break;
-      }
-
-      case 'charge.dispute.created': {
-        const dispute = event.data.object as Stripe.Dispute;
-        console.log('⚠️ Dispute created:', dispute.id);
-        
-        // Find purchase by payment intent
-        const { data: purchases } = await supabase
-          .from('purchases')
-          .select('stripe_session_id')
-          .eq('stripe_payment_intent_id', dispute.payment_intent)
-          .limit(1);
-          
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            dispute.payment_intent as string,
-            null,
-            'disputed'
-          );
-          
-          // Log dispute details for chargeback response
-          console.log('📋 Dispute details for chargeback response:');
-          console.log('  Reason:', dispute.reason);
-          console.log('  Amount:', dispute.amount);
-          console.log('  Evidence due by:', new Date((dispute.evidence_details?.due_by || 0) * 1000).toISOString());
-          
-          // Fetch the purchase evidence
-          const { data: evidence } = await supabase
-            .from('purchase_evidence')
-            .select('*')
-            .eq('stripe_session_id', purchases[0].stripe_session_id)
-            .single();
-            
-          if (evidence) {
-            console.log('📝 Evidence for chargeback:', evidence.evidence_summary);
-          }
-        }
         break;
       }
     }

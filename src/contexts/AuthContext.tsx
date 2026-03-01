@@ -329,11 +329,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           product_type: "hsk_level",
           hsk_level: level,
-          // TOS acceptance is implicit by clicking purchase button
-          // The user already accepted TOS when creating their account
-          tos_accepted: true,
-          privacy_accepted: true,
-          client_timestamp: new Date().toISOString(),
         }),
       });
 
@@ -362,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const token = accessToken || storageGetItem("hanyu_auth_token");
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to upgrade");
       return;
@@ -379,11 +374,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           product_type: "premium",
-          // TOS acceptance is implicit by clicking purchase button
-          // The user already accepted TOS when creating their account
-          tos_accepted: true,
-          privacy_accepted: true,
-          client_timestamp: new Date().toISOString(),
         }),
       });
 

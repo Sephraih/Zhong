@@ -59,7 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('*')
       .eq('user_id', user.id);
 
-    // Gather subscription/payment history (if exists)
+    // Gather purchase audit records (chargeback-proof)
+    const { data: purchases } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('purchased_at', { ascending: false });
+
+    // Gather subscription/payment history (legacy)
     const { data: subscriptions } = await supabase
       .from('subscriptions')
       .select('*')
@@ -87,7 +94,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       purchased_levels: purchasedLevels?.map(p => ({
         hsk_level: p.hsk_level,
         purchased_at: p.purchased_at,
+        stripe_payment_id: p.stripe_payment_id ?? null,
       })) ?? [],
+      purchases: purchases ?? [],
       payment_history: subscriptions?.map(s => ({
         status: s.status,
         stripe_price_id: s.stripe_price_id,
