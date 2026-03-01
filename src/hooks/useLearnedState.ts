@@ -1,12 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { VocabWord } from "../data/vocabulary";
+import { getSupabaseAuthedClient } from "../supabaseClient";
 import { storageGetItem, storageSetItem } from "../utils/storageConsent";
 
 const STORAGE_KEY = "hanyu-learned-words";
 const STORAGE_UPDATED_AT_KEY = "hanyu-learned-words-updated-at";
-
-// API base - same origin in production
-const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 function loadLocalUpdatedAt(): number {
   try {
@@ -144,11 +142,15 @@ function getAccessToken(provided?: string | null): string | null {
 }
 
 /**
- * Cloud-synced learned state via secure API endpoint.
+ * Cloud-synced learned state.
  *
  * - Uses localStorage for instant startup/offline (only if storage consent accepted).
- * - If userId + JWT available: loads/saves via /api/learned-progress endpoint.
- * - Server-side validation prevents spam/invalid data.
+ * - If userId + JWT available: loads/saves to `public.user_learned_words.learned_bits`.
+ *
+ * IMPORTANT:
+ * We authenticate Supabase writes by constructing a client that includes the JWT in
+ * the Authorization header (because this app does auth via /api routes, not via
+ * supabase-js auth sessions).
  */
 export function useLearnedState(userId?: string, words?: VocabWord[], accessToken?: string | null): LearnedState {
   const [learned, setLearned] = useState<Set<number>>(loadLearnedWords);
@@ -165,12 +167,6 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
     learnedRef.current = learned;
   }, [learned]);
 
-  // Keep ref to access token
-  const tokenRef = useRef<string | null>(null);
-  useEffect(() => {
-    tokenRef.current = getAccessToken(accessToken);
-  }, [accessToken]);
-
   const levelIndex = useMemo(() => buildLevelIndex(words), [words]);
   const levelSig = useMemo(() => levelIndexSignature(levelIndex), [levelIndex]);
 
@@ -186,7 +182,7 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
   const dirtyBeforeReadyRef = useRef(false);
   const lastCloudLoadRef = useRef<{ userId: string; sig: string } | null>(null);
 
-  // Load from API on login
+  // Load from Supabase on login and merge with local
   useEffect(() => {
     let cancelled = false;
 
@@ -194,10 +190,12 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
     cloudReadyRef.current = false;
     dirtyBeforeReadyRef.current = false;
 
+    const token = getAccessToken(accessToken);
+    const sb = getSupabaseAuthedClient(token);
+
     async function loadFromCloud() {
       if (!userId) return;
-      const token = getAccessToken(accessToken);
-      if (!token) return;
+      if (!sb) return;
       if (levelIndex.size === 0) return;
 
       const last = lastCloudLoadRef.current;
@@ -208,31 +206,30 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
 
       lastCloudLoadRef.current = { userId, sig: levelSig };
 
-      try {
-        const res = await fetch(`${API_BASE}/api/learned-progress`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+      const { data, error } = await sb
+        .from("user_learned_words")
+        .select("learned_bits, updated_at")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-        if (cancelled) return;
+      if (cancelled) return;
 
-        if (!res.ok) {
-          console.warn("[useLearnedState] cloud load failed:", res.status);
-          cloudReadyRef.current = true;
-          return;
-        }
+      cloudReadyRef.current = true;
 
-        const data = await res.json();
-        cloudReadyRef.current = true;
+      if (error) {
+        console.warn("[useLearnedState] cloud load error:", error.message);
+        return;
+      }
 
-        const cloudUpdatedAtRaw = data?.updated_at as string | null | undefined;
-        const cloudUpdatedAt = cloudUpdatedAtRaw ? new Date(cloudUpdatedAtRaw).getTime() : 0;
+      const cloudUpdatedAtRaw = (data as any)?.updated_at as string | null | undefined;
+      const cloudUpdatedAt = cloudUpdatedAtRaw ? new Date(cloudUpdatedAtRaw).getTime() : 0;
+      const localUpdatedAt = localUpdatedAtRef.current;
 
-        const bits = data?.learned_bits as Record<string, string> | null | undefined;
+      const bits = (data as any)?.learned_bits as Record<string, string> | null | undefined;
 
-        // Decode cloud state
+      // If cloud is newer than local, prefer cloud (this allows unlearn to propagate across devices).
+      // If local is newer, keep local and let the debounced save push it to cloud.
+      if (cloudUpdatedAt > localUpdatedAt) {
         const fromCloud = new Set<number>();
         if (bits && typeof bits === "object") {
           for (const [lvlStr, b64] of Object.entries(bits)) {
@@ -243,27 +240,31 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
             decoded.forEach((id) => fromCloud.add(id));
           }
         }
-
-        // ALWAYS use cloud as source of truth
-        // This ensures unlearned words properly sync across browsers
         suppressNextSaveRef.current = true;
         setLearned(fromCloud);
-        
-        // IMPORTANT: Also update localStorage immediately so next page load shows cloud state
-        saveLearnedWords(fromCloud);
-        
-        // Update local timestamp to match cloud
-        const ts = cloudUpdatedAt || Date.now();
-        localUpdatedAtRef.current = ts;
-        saveLocalUpdatedAt(ts);
-      } catch (err) {
-        console.warn("[useLearnedState] cloud load error:", err);
-        cloudReadyRef.current = true;
+        localUpdatedAtRef.current = cloudUpdatedAt;
+        saveLocalUpdatedAt(cloudUpdatedAt);
+      } else {
+        // Local is newer or equal: keep local, but if the cloud has bits that local doesn't,
+        // we still merge them in (union) to avoid losing progress if timestamps are equal.
+        const merged = new Set<number>(learnedRef.current);
+        if (bits && typeof bits === "object") {
+          for (const [lvlStr, b64] of Object.entries(bits)) {
+            const lvl = Number(lvlStr);
+            const ordered = levelIndex.get(lvl);
+            if (!ordered?.length) continue;
+            const decoded = decodeBitset(ordered, b64);
+            decoded.forEach((id) => merged.add(id));
+          }
+        }
+        setLearned(merged);
       }
     }
 
     loadFromCloud().finally(() => {
+      // if user interacted before cloud load finished, we should save once ready
       if (!cancelled && cloudReadyRef.current && dirtyBeforeReadyRef.current) {
+        // trigger a save by updating state to itself (will run save effect)
         setLearned((prev) => new Set(prev));
         dirtyBeforeReadyRef.current = false;
       }
@@ -272,9 +273,9 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
     return () => {
       cancelled = true;
     };
-  }, [userId, accessToken, levelIndex, levelSig]);
+  }, [userId, levelIndex, levelSig]);
 
-  // Debounced cloud save via API
+  // Debounced + flushable cloud save
   const SAVE_DEBOUNCE_MS = 800;
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveRef = useRef(false);
@@ -282,8 +283,9 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
 
   useEffect(() => {
     const token = getAccessToken(accessToken);
+    const sb = getSupabaseAuthedClient(token);
 
-    if (!userId || !token || levelIndex.size === 0) {
+    if (!userId || !sb || levelIndex.size === 0) {
       saveFnRef.current = null;
       pendingSaveRef.current = false;
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -300,27 +302,18 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
         learnedBits[String(lvl)] = encodeBitset(ordered, setToEncode);
       }
 
-      try {
-        const currentToken = tokenRef.current || token;
-        const res = await fetch(`${API_BASE}/api/learned-progress`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${currentToken}`,
-          },
-          body: JSON.stringify({ learned_bits: learnedBits }),
-        });
+      const { error } = await sb
+        .from("user_learned_words")
+        .upsert({ user_id: userId, learned_bits: learnedBits }, { onConflict: "user_id" });
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          console.warn("[useLearnedState] cloud save failed:", res.status, errData);
-        }
-      } catch (err) {
-        console.warn("[useLearnedState] cloud save error:", err);
+      if (error) {
+        console.warn("[useLearnedState] cloud save error:", error.message);
       }
     };
 
+    // expose a flush function (used on pagehide/visibilitychange)
     saveFnRef.current = () => {
+      // fire-and-forget; best-effort
       void saveNow();
     };
 
@@ -349,7 +342,7 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [learned, userId, accessToken, levelIndex]);
+  }, [learned, userId, levelIndex]);
 
   // Flush pending save when the tab is backgrounded / navigating away.
   useEffect(() => {
