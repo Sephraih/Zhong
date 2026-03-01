@@ -175,11 +175,10 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
   const levelSig = useMemo(() => levelIndexSignature(levelIndex), [levelIndex]);
 
   // Persist locally for instant startup/offline
+  // NOTE: do NOT update localUpdatedAt here, otherwise a page refresh would
+  // make local state appear newer than cloud and prevent deletions from syncing.
   useEffect(() => {
     saveLearnedWords(learned);
-    const now = Date.now();
-    localUpdatedAtRef.current = now;
-    saveLocalUpdatedAt(now);
   }, [learned]);
 
   const cloudReadyRef = useRef(false);
@@ -250,18 +249,10 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
           localUpdatedAtRef.current = cloudUpdatedAt;
           saveLocalUpdatedAt(cloudUpdatedAt);
         } else {
-          // Local is newer or equal: keep local, but merge any cloud bits we don't have
-          const merged = new Set<number>(learnedRef.current);
-          if (bits && typeof bits === "object") {
-            for (const [lvlStr, b64] of Object.entries(bits)) {
-              const lvl = Number(lvlStr);
-              const ordered = levelIndex.get(lvl);
-              if (!ordered?.length) continue;
-              const decoded = decodeBitset(ordered, b64);
-              decoded.forEach((id) => merged.add(id));
-            }
-          }
-          setLearned(merged);
+          // Local is newer or equal: keep local as-is.
+          // IMPORTANT: do NOT union-merge, otherwise deletions on another device
+          // would be re-added from stale localStorage.
+          setLearned(new Set(learnedRef.current));
         }
       } catch (err) {
         console.warn("[useLearnedState] cloud load error:", err);
@@ -382,32 +373,50 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
 
   const isLearned = useCallback((wordId: number) => learned.has(wordId), [learned]);
 
-  const toggleLearned = useCallback((wordId: number) => {
-    setLearned((prev) => {
-      const next = new Set(prev);
-      if (next.has(wordId)) next.delete(wordId);
-      else next.add(wordId);
-      return next;
-    });
+  const touchLocalUpdatedAt = useCallback(() => {
+    const now = Date.now();
+    localUpdatedAtRef.current = now;
+    saveLocalUpdatedAt(now);
   }, []);
 
-  const markAsLearned = useCallback((wordId: number) => {
-    setLearned((prev) => {
-      if (prev.has(wordId)) return prev;
-      const next = new Set(prev);
-      next.add(wordId);
-      return next;
-    });
-  }, []);
+  const toggleLearned = useCallback(
+    (wordId: number) => {
+      touchLocalUpdatedAt();
+      setLearned((prev) => {
+        const next = new Set(prev);
+        if (next.has(wordId)) next.delete(wordId);
+        else next.add(wordId);
+        return next;
+      });
+    },
+    [touchLocalUpdatedAt]
+  );
 
-  const markAsStillLearning = useCallback((wordId: number) => {
-    setLearned((prev) => {
-      if (!prev.has(wordId)) return prev;
-      const next = new Set(prev);
-      next.delete(wordId);
-      return next;
-    });
-  }, []);
+  const markAsLearned = useCallback(
+    (wordId: number) => {
+      touchLocalUpdatedAt();
+      setLearned((prev) => {
+        if (prev.has(wordId)) return prev;
+        const next = new Set(prev);
+        next.add(wordId);
+        return next;
+      });
+    },
+    [touchLocalUpdatedAt]
+  );
+
+  const markAsStillLearning = useCallback(
+    (wordId: number) => {
+      touchLocalUpdatedAt();
+      setLearned((prev) => {
+        if (!prev.has(wordId)) return prev;
+        const next = new Set(prev);
+        next.delete(wordId);
+        return next;
+      });
+    },
+    [touchLocalUpdatedAt]
+  );
 
   return {
     isLearned,
