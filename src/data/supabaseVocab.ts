@@ -19,6 +19,8 @@ export interface CachedVocab {
 
 export function loadCachedSupabaseVocabulary(): CachedVocab | null {
   try {
+    // Use a safe accessor - localStorage may be blocked in some sandboxed environments
+    if (typeof localStorage === "undefined") return null;
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedVocab;
@@ -38,6 +40,7 @@ export function loadCachedSupabaseVocabulary(): CachedVocab | null {
 
 function saveCachedSupabaseVocabulary(payload: CachedVocab) {
   try {
+    if (typeof localStorage === "undefined") return;
     localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
   } catch {
     // ignore

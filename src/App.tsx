@@ -195,10 +195,15 @@ function AppContent() {
   void accessibleLevels;
   // 1) Load from localStorage cache synchronously if present.
   // 2) Otherwise show fallback immediately.
+  // Wrapped in try/catch for sandboxed environments where localStorage may be blocked.
   const initial = useMemo(() => {
-    const cached = loadCachedSupabaseVocabulary();
-    if (cached?.words?.length) {
-      return { words: cached.words, source: "supabase" as const };
+    try {
+      const cached = loadCachedSupabaseVocabulary();
+      if (cached?.words?.length) {
+        return { words: cached.words, source: "supabase" as const };
+      }
+    } catch {
+      // Fall through to fallback
     }
     return { words: FALLBACK_VOCABULARY, source: "fallback" as const };
   }, []);

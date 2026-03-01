@@ -1,41 +1,31 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { getCachedIsSandboxed } from "../utils/environment";
 import type { VocabWord } from "../data/vocabulary";
-import { getSupabaseAuthedClient } from "../supabaseClient";
-import { storageGetItem, storageSetItem } from "../utils/storageConsent";
 
 const STORAGE_KEY = "hanyu-learned-words";
-const STORAGE_UPDATED_AT_KEY = "hanyu-learned-words-updated-at";
 
-function loadLocalUpdatedAt(): number {
+// Simple localStorage helpers with fallbacks
+function loadFromStorage(): Set<number> {
   try {
-    const raw = storageGetItem(STORAGE_UPDATED_AT_KEY);
-    if (!raw) return 0;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function saveLocalUpdatedAt(ts: number) {
-  storageSetItem(STORAGE_UPDATED_AT_KEY, String(ts));
-}
-
-function loadLearnedWords(): Set<number> {
-  try {
-    const stored = storageGetItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return new Set(parsed);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
     }
   } catch {
-    // ignore
+    // Ignore storage errors
   }
   return new Set();
 }
 
-function saveLearnedWords(learned: Set<number>) {
-  storageSetItem(STORAGE_KEY, JSON.stringify(Array.from(learned)));
+function saveToStorage(learned: Set<number>): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(learned)));
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 export interface LearnedState {
@@ -46,336 +36,139 @@ export interface LearnedState {
   learnedCount: number;
 }
 
-// ─── Bitset helpers (base64) ─────────────────────────────────────────────────
+export function useLearnedState(
+  userId?: string,
+  vocabulary: VocabWord[] = [],
+  accessToken?: string | null
+): LearnedState {
+  // Initialize from localStorage synchronously
+  const [learned, setLearned] = useState<Set<number>>(() => loadFromStorage());
+  
+  // Track if we should attempt cloud sync
+  const cloudSyncAttempted = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function encodeBitset(orderedIds: number[], learnedSet: Set<number>): string {
-  const bitCount = orderedIds.length;
-  const byteCount = Math.ceil(bitCount / 8);
-  const bytes = new Uint8Array(byteCount);
-
-  for (let idx = 0; idx < orderedIds.length; idx++) {
-    const id = orderedIds[idx];
-    if (!learnedSet.has(id)) continue;
-    const byteIndex = Math.floor(idx / 8);
-    const bitIndex = idx % 8;
-    bytes[byteIndex] |= 1 << bitIndex;
-  }
-
-  return bytesToBase64(bytes);
-}
-
-function decodeBitset(orderedIds: number[], b64: string): Set<number> {
-  const out = new Set<number>();
-  if (!b64) return out;
-
-  let bytes: Uint8Array;
-  try {
-    bytes = base64ToBytes(b64);
-  } catch {
-    return out;
-  }
-
-  for (let idx = 0; idx < orderedIds.length; idx++) {
-    const byteIndex = Math.floor(idx / 8);
-    const bitIndex = idx % 8;
-    if (byteIndex >= bytes.length) break;
-    if ((bytes[byteIndex] & (1 << bitIndex)) !== 0) out.add(orderedIds[idx]);
-  }
-
-  return out;
-}
-
-function buildLevelIndex(words: VocabWord[] | undefined) {
-  const map = new Map<number, number[]>();
-  if (!words?.length) return map;
-
-  for (const w of words) {
-    const lvl = w.hskLevel;
-    const arr = map.get(lvl) ?? [];
-    arr.push(w.id);
-    map.set(lvl, arr);
-  }
-
-  for (const [lvl, ids] of map.entries()) {
-    ids.sort((a, b) => a - b);
-    map.set(lvl, ids);
-  }
-  return map;
-}
-
-function levelIndexSignature(levelIndex: Map<number, number[]>): string {
-  if (levelIndex.size === 0) return "empty";
-  const parts: string[] = [];
-  for (const [lvl, ids] of Array.from(levelIndex.entries()).sort((a, b) => a[0] - b[0])) {
-    const first = ids[0] ?? 0;
-    const last = ids[ids.length - 1] ?? 0;
-    parts.push(`${lvl}:${ids.length}:${first}:${last}`);
-  }
-  return parts.join("|");
-}
-
-function getAccessToken(provided?: string | null): string | null {
-  if (provided) return provided;
-  // Fallback to persisted token (only present if storage consent accepted)
-  try {
-    return localStorage.getItem("hanyu_auth_token");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Cloud-synced learned state.
- *
- * - Uses localStorage for instant startup/offline (only if storage consent accepted).
- * - If userId + JWT available: loads/saves to `public.user_learned_words.learned_bits`.
- *
- * IMPORTANT:
- * We authenticate Supabase writes by constructing a client that includes the JWT in
- * the Authorization header (because this app does auth via /api routes, not via
- * supabase-js auth sessions).
- */
-export function useLearnedState(userId?: string, words?: VocabWord[], accessToken?: string | null): LearnedState {
-  const [learned, setLearned] = useState<Set<number>>(loadLearnedWords);
-
-  // Track local last-modified time so we can do last-write-wins vs cloud.
-  const localUpdatedAtRef = useRef<number>(loadLocalUpdatedAt());
-
-  // If we apply cloud state, we don't want to immediately save it back.
-  const suppressNextSaveRef = useRef(false);
-
-  // Always keep a ref to the latest set (avoid stale closures in debounce)
-  const learnedRef = useRef(learned);
+  // Sync to localStorage whenever learned changes
   useEffect(() => {
-    learnedRef.current = learned;
+    saveToStorage(learned);
   }, [learned]);
 
-  const levelIndex = useMemo(() => buildLevelIndex(words), [words]);
-  const levelSig = useMemo(() => levelIndexSignature(levelIndex), [levelIndex]);
-
-  // Persist locally for instant startup/offline
+  // Cloud sync - only if not in sandbox and we have credentials
   useEffect(() => {
-    saveLearnedWords(learned);
-    const now = Date.now();
-    localUpdatedAtRef.current = now;
-    saveLocalUpdatedAt(now);
-  }, [learned]);
+    // Skip cloud sync entirely in sandbox mode
+    if (getCachedIsSandboxed()) {
+      return;
+    }
 
-  const cloudReadyRef = useRef(false);
-  const dirtyBeforeReadyRef = useRef(false);
-  const lastCloudLoadRef = useRef<{ userId: string; sig: string } | null>(null);
+    // Skip if no user or already attempted
+    if (!userId || !accessToken || cloudSyncAttempted.current) {
+      return;
+    }
 
-  // Load from Supabase on login and merge with local
-  useEffect(() => {
-    let cancelled = false;
+    // Skip if no vocabulary yet
+    if (vocabulary.length === 0) {
+      return;
+    }
 
-    // Reset readiness when user changes
-    cloudReadyRef.current = false;
-    dirtyBeforeReadyRef.current = false;
+    cloudSyncAttempted.current = true;
 
-    const token = getAccessToken(accessToken);
-    const sb = getSupabaseAuthedClient(token);
+    // Delayed cloud sync - don't block initial render
+    const timer = setTimeout(() => {
+      loadFromCloud();
+    }, 1000);
+
+    return () => clearTimeout(timer);
 
     async function loadFromCloud() {
-      if (!userId) return;
-      if (!sb) return;
-      if (levelIndex.size === 0) return;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
 
-      const last = lastCloudLoadRef.current;
-      if (last && last.userId === userId && last.sig === levelSig) {
-        cloudReadyRef.current = true;
-        return;
-      }
+        const apiBase = import.meta.env?.VITE_API_BASE || "";
+        const res = await fetch(`${apiBase}/api/learned-progress`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
+        });
 
-      lastCloudLoadRef.current = { userId, sig: levelSig };
+        clearTimeout(timeout);
 
-      const { data, error } = await sb
-        .from("user_learned_words")
-        .select("learned_bits, updated_at")
-        .eq("user_id", userId)
-        .maybeSingle();
+        if (!res.ok) return;
 
-      if (cancelled) return;
-
-      cloudReadyRef.current = true;
-
-      if (error) {
-        console.warn("[useLearnedState] cloud load error:", error.message);
-        return;
-      }
-
-      const cloudUpdatedAtRaw = (data as any)?.updated_at as string | null | undefined;
-      const cloudUpdatedAt = cloudUpdatedAtRaw ? new Date(cloudUpdatedAtRaw).getTime() : 0;
-      const localUpdatedAt = localUpdatedAtRef.current;
-
-      const bits = (data as any)?.learned_bits as Record<string, string> | null | undefined;
-
-      // If cloud is newer than local, prefer cloud (this allows unlearn to propagate across devices).
-      // If local is newer, keep local and let the debounced save push it to cloud.
-      if (cloudUpdatedAt > localUpdatedAt) {
-        const fromCloud = new Set<number>();
-        if (bits && typeof bits === "object") {
-          for (const [lvlStr, b64] of Object.entries(bits)) {
-            const lvl = Number(lvlStr);
-            const ordered = levelIndex.get(lvl);
-            if (!ordered?.length) continue;
-            const decoded = decodeBitset(ordered, b64);
-            decoded.forEach((id) => fromCloud.add(id));
+        const data = await res.json();
+        if (data.learned_bits && typeof data.learned_bits === "object") {
+          const cloudSet = decodeLearnedBits(data.learned_bits, vocabulary);
+          if (cloudSet.size > 0) {
+            setLearned(cloudSet);
+            saveToStorage(cloudSet);
           }
         }
-        suppressNextSaveRef.current = true;
-        setLearned(fromCloud);
-        localUpdatedAtRef.current = cloudUpdatedAt;
-        saveLocalUpdatedAt(cloudUpdatedAt);
-      } else {
-        // Local is newer or equal: keep local, but if the cloud has bits that local doesn't,
-        // we still merge them in (union) to avoid losing progress if timestamps are equal.
-        const merged = new Set<number>(learnedRef.current);
-        if (bits && typeof bits === "object") {
-          for (const [lvlStr, b64] of Object.entries(bits)) {
-            const lvl = Number(lvlStr);
-            const ordered = levelIndex.get(lvl);
-            if (!ordered?.length) continue;
-            const decoded = decodeBitset(ordered, b64);
-            decoded.forEach((id) => merged.add(id));
-          }
-        }
-        setLearned(merged);
+      } catch {
+        // Cloud sync failed - continue with local state
       }
     }
+  }, [userId, accessToken, vocabulary]);
 
-    loadFromCloud().finally(() => {
-      // if user interacted before cloud load finished, we should save once ready
-      if (!cancelled && cloudReadyRef.current && dirtyBeforeReadyRef.current) {
-        // trigger a save by updating state to itself (will run save effect)
-        setLearned((prev) => new Set(prev));
-        dirtyBeforeReadyRef.current = false;
+  // Debounced cloud save
+  const saveToCloud = useCallback(() => {
+    if (getCachedIsSandboxed() || !userId || !accessToken || vocabulary.length === 0) {
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const bits = encodeLearnedBits(learned, vocabulary);
+        const apiBase = import.meta.env?.VITE_API_BASE || "";
+        
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        await fetch(`${apiBase}/api/learned-progress`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ learned_bits: bits }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+      } catch {
+        // Cloud save failed - local state is preserved
       }
-    });
+    }, 2000);
+  }, [userId, accessToken, vocabulary, learned]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, levelIndex, levelSig]);
-
-  // Debounced + flushable cloud save
-  const SAVE_DEBOUNCE_MS = 800;
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSaveRef = useRef(false);
-  const saveFnRef = useRef<(() => void) | null>(null);
-
+  // Cleanup
   useEffect(() => {
-    const token = getAccessToken(accessToken);
-    const sb = getSupabaseAuthedClient(token);
-
-    if (!userId || !sb || levelIndex.size === 0) {
-      saveFnRef.current = null;
-      pendingSaveRef.current = false;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      return;
-    }
-
-    const saveNow = async () => {
-      pendingSaveRef.current = false;
-      const learnedBits: Record<string, string> = {};
-      const setToEncode = learnedRef.current;
-
-      for (const [lvl, ordered] of levelIndex.entries()) {
-        learnedBits[String(lvl)] = encodeBitset(ordered, setToEncode);
-      }
-
-      const { error } = await sb
-        .from("user_learned_words")
-        .upsert({ user_id: userId, learned_bits: learnedBits }, { onConflict: "user_id" });
-
-      if (error) {
-        console.warn("[useLearnedState] cloud save error:", error.message);
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
     };
+  }, []);
 
-    // expose a flush function (used on pagehide/visibilitychange)
-    saveFnRef.current = () => {
-      // fire-and-forget; best-effort
-      void saveNow();
-    };
-
-    // Don't save until we've attempted the initial cloud load.
-    if (!cloudReadyRef.current) {
-      dirtyBeforeReadyRef.current = true;
-      return;
-    }
-
-    // If we just applied cloud state, skip one save cycle.
-    if (suppressNextSaveRef.current) {
-      suppressNextSaveRef.current = false;
-      pendingSaveRef.current = false;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      return;
-    }
-
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-
-    pendingSaveRef.current = true;
-    saveTimer.current = setTimeout(() => {
-      void saveNow();
-    }, SAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [learned, userId, levelIndex]);
-
-  // Flush pending save when the tab is backgrounded / navigating away.
-  useEffect(() => {
-    if (!userId) return;
-
-    const flushIfPending = () => {
-      if (!pendingSaveRef.current) return;
-      saveFnRef.current?.();
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") flushIfPending();
-    };
-
-    window.addEventListener("pagehide", flushIfPending);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      window.removeEventListener("pagehide", flushIfPending);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [userId]);
-
-  const isLearned = useCallback((wordId: number) => learned.has(wordId), [learned]);
+  const isLearned = useCallback(
+    (wordId: number) => learned.has(wordId),
+    [learned]
+  );
 
   const toggleLearned = useCallback((wordId: number) => {
     setLearned((prev) => {
       const next = new Set(prev);
-      if (next.has(wordId)) next.delete(wordId);
-      else next.add(wordId);
+      if (next.has(wordId)) {
+        next.delete(wordId);
+      } else {
+        next.add(wordId);
+      }
       return next;
     });
-  }, []);
+    saveToCloud();
+  }, [saveToCloud]);
 
   const markAsLearned = useCallback((wordId: number) => {
     setLearned((prev) => {
@@ -384,7 +177,8 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
       next.add(wordId);
       return next;
     });
-  }, []);
+    saveToCloud();
+  }, [saveToCloud]);
 
   const markAsStillLearning = useCallback((wordId: number) => {
     setLearned((prev) => {
@@ -393,7 +187,8 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
       next.delete(wordId);
       return next;
     });
-  }, []);
+    saveToCloud();
+  }, [saveToCloud]);
 
   return {
     isLearned,
@@ -402,4 +197,100 @@ export function useLearnedState(userId?: string, words?: VocabWord[], accessToke
     markAsStillLearning,
     learnedCount: learned.size,
   };
+}
+
+// Helper functions for encoding/decoding learned bits
+
+function encodeLearnedBits(learned: Set<number>, vocabulary: VocabWord[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  
+  // Group words by HSK level
+  const byLevel: Record<number, number[]> = {};
+  for (const word of vocabulary) {
+    if (!byLevel[word.hskLevel]) {
+      byLevel[word.hskLevel] = [];
+    }
+    byLevel[word.hskLevel].push(word.id);
+  }
+
+  // Sort each level's word IDs
+  for (const level of Object.keys(byLevel)) {
+    byLevel[Number(level)].sort((a, b) => a - b);
+  }
+
+  // Encode each level as a bitset
+  for (const [level, wordIds] of Object.entries(byLevel)) {
+    const numBytes = Math.ceil(wordIds.length / 8);
+    const bytes = new Uint8Array(numBytes);
+    
+    for (let i = 0; i < wordIds.length; i++) {
+      if (learned.has(wordIds[i])) {
+        const byteIndex = Math.floor(i / 8);
+        const bitIndex = i % 8;
+        bytes[byteIndex] |= (1 << bitIndex);
+      }
+    }
+    
+    result[level] = bytesToBase64(bytes);
+  }
+
+  return result;
+}
+
+function decodeLearnedBits(bits: Record<string, string>, vocabulary: VocabWord[]): Set<number> {
+  const result = new Set<number>();
+
+  // Group words by HSK level
+  const byLevel: Record<number, number[]> = {};
+  for (const word of vocabulary) {
+    if (!byLevel[word.hskLevel]) {
+      byLevel[word.hskLevel] = [];
+    }
+    byLevel[word.hskLevel].push(word.id);
+  }
+
+  // Sort each level's word IDs
+  for (const level of Object.keys(byLevel)) {
+    byLevel[Number(level)].sort((a, b) => a - b);
+  }
+
+  // Decode each level
+  for (const [level, base64] of Object.entries(bits)) {
+    const wordIds = byLevel[Number(level)];
+    if (!wordIds || typeof base64 !== "string") continue;
+
+    try {
+      const bytes = base64ToBytes(base64);
+      
+      for (let i = 0; i < wordIds.length; i++) {
+        const byteIndex = Math.floor(i / 8);
+        const bitIndex = i % 8;
+        
+        if (byteIndex < bytes.length && (bytes[byteIndex] & (1 << bitIndex))) {
+          result.add(wordIds[i]);
+        }
+      }
+    } catch {
+      // Skip invalid base64
+    }
+  }
+
+  return result;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }

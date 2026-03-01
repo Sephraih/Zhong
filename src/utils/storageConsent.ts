@@ -44,6 +44,7 @@ export function isStorageAllowed(): boolean {
 
 export function storageGetItem(key: string): string | null {
   try {
+    if (typeof localStorage === "undefined") return null;
     return localStorage.getItem(key);
   } catch {
     return null;
@@ -52,6 +53,7 @@ export function storageGetItem(key: string): string | null {
 
 export function storageSetItem(key: string, value: string) {
   try {
+    if (typeof localStorage === "undefined") return;
     localStorage.setItem(key, value);
   } catch {
     // ignore
@@ -60,6 +62,7 @@ export function storageSetItem(key: string, value: string) {
 
 export function storageRemoveItem(key: string) {
   try {
+    if (typeof localStorage === "undefined") return;
     localStorage.removeItem(key);
   } catch {
     // ignore

@@ -1,5 +1,18 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { storageGetItem, storageRemoveItem, storageSetItem } from "../utils/storageConsent";
+import { getCachedIsSandboxed } from "../utils/environment";
+
+// Safe localStorage access for sandboxed environments
+function safeLocalStorageGet(key: string): string | null {
+  try {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem(key);
+    }
+  } catch {
+    // Sandboxed environment
+  }
+  return null;
+}
 
 interface User {
   id: string;
@@ -38,9 +51,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Prefer same-origin API calls (works on Vercel + avoids CORS). If VITE_API_BASE is set,
 // we try it first, but automatically fall back to same-origin if it fails.
-const API_URL = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
+let API_URL = "";
+try {
+  API_URL = (import.meta.env?.VITE_API_BASE || "").replace(/\/$/, "");
+} catch {
+  // Env vars not available
+}
 
 async function apiFetch(path: string, init?: RequestInit) {
+  // Skip all network calls in sandbox mode
+  if (getCachedIsSandboxed()) {
+    throw new Error("Network unavailable in sandbox mode");
+  }
+
   // 1) Try VITE_API_BASE (if provided)
   if (API_URL) {
     try {
@@ -58,15 +81,22 @@ async function apiFetch(path: string, init?: RequestInit) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(() => storageGetItem("hanyu_auth_token"));
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    // Don't try to load token in sandbox mode
+    if (getCachedIsSandboxed()) return null;
+    return storageGetItem("hanyu_auth_token");
+  });
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
   const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !getCachedIsSandboxed());
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
 
   const fetchUser = useCallback(async (token: string) => {
+    // Skip in sandbox mode
+    if (getCachedIsSandboxed()) return null;
+
     try {
       const response = await apiFetch(`/api/auth/me`, {
         headers: {
@@ -100,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshAuth = useCallback(async () => {
+    if (getCachedIsSandboxed()) return;
     const token = accessToken || storageGetItem("hanyu_auth_token");
     if (token) {
       await fetchUser(token);
@@ -108,6 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initial auth check + handle payment redirect
   useEffect(() => {
+    // Skip all auth initialization in sandbox mode
+    if (getCachedIsSandboxed()) {
+      setIsLoading(false);
+      return;
+    }
+
     const initAuth = async () => {
       const token = accessToken || storageGetItem("hanyu_auth_token");
       if (token) {
@@ -152,6 +189,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Re-fetch when tab becomes visible
   useEffect(() => {
+    // Skip in sandbox mode
+    if (getCachedIsSandboxed()) return;
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         const token = accessToken || storageGetItem("hanyu_auth_token");
@@ -173,6 +213,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser]);
 
   const login = async (email: string, password: string) => {
+    if (getCachedIsSandboxed()) {
+      setError("Login unavailable in preview mode");
+      throw new Error("Login unavailable in preview mode");
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -210,6 +255,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     consent?: { acceptTos: boolean; acceptPrivacy: boolean; captchaToken?: string | null }
   ) => {
+    if (getCachedIsSandboxed()) {
+      setError("Signup unavailable in preview mode");
+      throw new Error("Signup unavailable in preview mode");
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -256,6 +306,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const purchaseLevel = async (level: number) => {
+    if (getCachedIsSandboxed()) {
+      setError("Purchases unavailable in preview mode");
+      return;
+    }
+
     const token = accessToken || storageGetItem("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to purchase");
@@ -297,7 +352,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const purchasePremium = async () => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    if (getCachedIsSandboxed()) {
+      setError("Purchases unavailable in preview mode");
+      return;
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to upgrade");
       return;
@@ -337,9 +397,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    const token = safeLocalStorageGet("hanyu_auth_token");
 
-    if (token) {
+    if (token && !getCachedIsSandboxed()) {
       try {
         await apiFetch(`/api/auth/account`, {
           method: "POST",
@@ -362,7 +422,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteAccount = async (password: string) => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    if (getCachedIsSandboxed()) {
+      setError("Account deletion unavailable in preview mode");
+      return;
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in again to delete your account");
       return;
@@ -402,7 +467,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const exportMyData = async () => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    if (getCachedIsSandboxed()) {
+      setError("Data export unavailable in preview mode");
+      return;
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to export your data");
       return;
@@ -443,7 +513,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const changeEmail = async (currentPassword: string, newEmail: string) => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    if (getCachedIsSandboxed()) {
+      setError("Email change unavailable in preview mode");
+      return;
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to change your email");
       return;
@@ -479,7 +554,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
-    const token = localStorage.getItem("hanyu_auth_token");
+    if (getCachedIsSandboxed()) {
+      setError("Password change unavailable in preview mode");
+      return;
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
     if (!token) {
       setError("Please sign in to change your password");
       return;
