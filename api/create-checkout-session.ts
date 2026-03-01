@@ -9,6 +9,10 @@ const supabase = createClient(
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
+// Current versions of legal documents - update these when you change TOS/Privacy
+const TOS_VERSION = '2025-01-15';
+const PRIVACY_VERSION = '2025-01-15';
+
 // Price IDs for each product
 const PRICE_IDS: Record<string, string | undefined> = {
   hsk_2: process.env.STRIPE_PRICE_HSK2,
@@ -57,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-Forwarded-For, X-Real-IP');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -74,8 +78,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { product_type, hsk_level } = req.body;
+    const { 
+      product_type, 
+      hsk_level,
+      tos_accepted,
+      privacy_accepted,
+      client_timestamp
+    } = req.body;
     
+    // Require TOS and Privacy acceptance for all purchases
+    if (!tos_accepted || !privacy_accepted) {
+      return res.status(400).json({ 
+        error: 'You must accept the Terms of Service and Privacy Policy to make a purchase' 
+      });
+    }
+
     // Determine which price to use
     let priceId: string | undefined;
     let productDescription: string;
@@ -106,6 +123,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (req.headers.origin as string) || 
       (req.headers.referer ? new URL(req.headers.referer as string).origin : 'http://localhost:5173');
 
+    // Get client metadata for fraud prevention and chargeback evidence
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
+                     (req.headers['x-real-ip'] as string) || 
+                     'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+
+    // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
@@ -118,12 +142,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       mode: 'payment', // One-time payment, not subscription
       success_url: `${frontendUrl}/?payment=success`,
       cancel_url: `${frontendUrl}/?payment=cancelled`,
+      consent_collection: {
+        terms_of_service: 'required', // Also require consent in Stripe
+      },
+      custom_text: {
+        terms_of_service_acceptance: {
+          message: 'I agree to the [Terms of Service](https://hamhao.com/tos) and [Privacy Policy](https://hamhao.com/privacy)',
+        },
+      },
       metadata: {
         user_id: user.id,
         product_type: product_type || 'premium',
         hsk_level: hsk_level?.toString() || '',
+        tos_version: TOS_VERSION,
+        privacy_version: PRIVACY_VERSION,
       },
     });
+
+    // Record the purchase attempt with TOS acceptance in the database
+    const now = new Date().toISOString();
+    const { error: purchaseError } = await supabase
+      .from('purchases')
+      .insert({
+        user_id: user.id,
+        user_email: user.email || '',
+        product_type: product_type || 'premium',
+        hsk_level: product_type === 'hsk_level' ? parseInt(hsk_level) : null,
+        stripe_customer_id: customerId,
+        stripe_session_id: session.id,
+        tos_accepted: true,
+        tos_accepted_at: now,
+        tos_version: TOS_VERSION,
+        privacy_accepted: true,
+        privacy_accepted_at: now,
+        privacy_version: PRIVACY_VERSION,
+        client_ip: clientIp,
+        user_agent: userAgent,
+        client_timestamp: client_timestamp || now,
+        status: 'pending',
+      });
+
+    if (purchaseError) {
+      console.error('❌ Error recording purchase:', purchaseError);
+      // Don't block the checkout, just log the error
+    } else {
+      console.log(`📝 Recorded purchase attempt for ${productDescription} with TOS acceptance`);
+    }
 
     console.log(`✅ Created checkout session for ${productDescription}:`, session.id);
     res.json({ url: session.url });
