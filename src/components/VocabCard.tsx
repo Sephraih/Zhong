@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
+import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 
 interface VocabCardProps {
@@ -32,15 +33,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                word.hskLevel === 1
-                  ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/50"
-                  : word.hskLevel === 2
-                  ? "bg-blue-950/80 text-blue-400 border border-blue-800/50"
-                  : word.hskLevel === 3
-                  ? "bg-purple-950/80 text-purple-400 border border-purple-800/50"
-                  : "bg-orange-950/80 text-orange-400 border border-orange-800/50"
-              }`}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(word.hskLevel)}`}
             >
               HSK {word.hskLevel}
             </span>

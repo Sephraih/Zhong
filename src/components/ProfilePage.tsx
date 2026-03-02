@@ -4,7 +4,6 @@ import {
   getAccessibleLevels,
   getHskBadgeClasses,
   AVAILABLE_LEVELS,
-  COMING_SOON_LEVELS,
 } from "../utils/hskAccess";
 
 interface ProfilePageProps {
@@ -194,20 +193,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
             })}
           </div>
           
-          {/* Coming Soon Levels */}
-          <div className="pt-3 border-t border-neutral-800">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Coming Soon</p>
-            <div className="flex flex-wrap gap-2">
-              {COMING_SOON_LEVELS.map((level) => (
-                <span
-                  key={level}
-                  className="px-2 py-1 rounded text-xs font-medium bg-neutral-800/50 text-gray-500 border border-neutral-700/50"
-                >
-                  HSK {level}
-                </span>
-              ))}
-            </div>
-          </div>
+          {/* Coming soon levels removed */}
         </div>
 
         {/* Learning Progress */}
@@ -269,10 +255,10 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                   ⭐ Premium Bundle
                 </h4>
                 <p className="text-gray-300 mt-1">
-                  Unlock all current and future HSK levels (1-9)
+                  Unlock all available HSK levels.
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {[...AVAILABLE_LEVELS, ...COMING_SOON_LEVELS].map((level) => (
+                  {AVAILABLE_LEVELS.map((level) => (
                     <span key={level} className={`px-2 py-0.5 rounded text-xs font-medium ${getHskBadgeClasses(level)}`}>
                       HSK {level}
                     </span>

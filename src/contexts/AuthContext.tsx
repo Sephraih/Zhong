@@ -103,9 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiFetch(`/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-store",
           Pragma: "no-cache",
         },
+        cache: "no-store",
       });
 
       if (response.ok) {
@@ -226,8 +227,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await apiFetch(`/api/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         body: JSON.stringify({ email, password }),
+        cache: "no-store",
       });
 
       const data = await response.json();
@@ -268,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await apiFetch(`/api/auth/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         body: JSON.stringify({
           email,
           password,
@@ -276,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           accept_privacy: consent?.acceptPrivacy === true,
           captchaToken: consent?.captchaToken ?? null,
         }),
+        cache: "no-store",
       });
 
       const data = await response.json();
@@ -411,28 +414,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    const token = safeLocalStorageGet("hanyu_auth_token");
-
-    if (token && !getCachedIsSandboxed()) {
-      try {
-        await apiFetch(`/api/auth/account`, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}` 
-          },
-          body: JSON.stringify({ action: "logout" }),
-        });
-      } catch {
-        // Ignore logout errors
-      }
-    }
+    // Immediately clear local auth state to avoid any stale-token reuse.
+    const token = safeLocalStorageGet("hanyu_auth_token") || accessToken;
 
     setAccessToken(null);
     storageRemoveItem("hanyu_auth_token");
     setUser(null);
     setAccountTier('free');
     setPurchasedLevels([]);
+
+    // Best-effort server-side signout (non-blocking)
+    if (token && !getCachedIsSandboxed()) {
+      try {
+        await apiFetch(`/api/auth/account`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "Cache-Control": "no-store",
+          },
+          body: JSON.stringify({ action: "logout" }),
+          cache: "no-store",
+        });
+      } catch {
+        // Ignore logout errors
+      }
+    }
   };
 
   const deleteAccount = async (password: string) => {
