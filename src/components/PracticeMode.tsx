@@ -109,10 +109,6 @@ function getLockedHskButtonClasses(level: number): string {
       return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
     case 4:
       return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5:
-      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6:
-      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
     default:
       return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
@@ -512,8 +508,8 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
   // NOTE: allWords is already access-filtered by App.tsx.
   // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
   // not currently accessible (because they were filtered out).
-  const accessibleLevels = [1, 2, 3, 4, 5, 6].filter((l) => allWords.some((w) => w.hskLevel === l));
-  const shownLevels = [1, 2, 3, 4, 5, 6];
+  const accessibleLevels = [1, 2, 3, 4].filter((l) => allWords.some((w) => w.hskLevel === l));
+  const shownLevels = [1, 2, 3, 4];
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -569,11 +565,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                                 ? "bg-blue-600 text-white"
                                 : level === 3
                                 ? "bg-purple-600 text-white"
-                                : level === 4
-                                ? "bg-orange-600 text-white"
-                                : level === 5
-                                ? "bg-pink-600 text-white"
-                                : "bg-cyan-600 text-white"
+                                : "bg-orange-600 text-white"
                               : "text-gray-400 hover:text-white hover:bg-neutral-900"
                           }`}
                         >

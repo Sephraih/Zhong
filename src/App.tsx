@@ -152,7 +152,7 @@ function getInitialViewMode(): ViewMode {
   }
   return "home";
 }
-type HSKFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6;
+type HSKFilter = "all" | 1 | 2 | 3 | 4;
 type StatusFilter = "all" | "learned" | "still-learning";
 
 const FALLBACK_VOCABULARY = buildFallbackVocabulary();
@@ -231,11 +231,9 @@ function AppContent() {
 
   const hasAccessToLevel = useCallback(
     (level: number) => {
-      // Anonymous: only HSK 1 preview
+      if (level >= 5) return false;
       if (!accessInfo.isLoggedIn) return level === 1;
-      // Premium: all currently available levels
-      if (accessInfo.accountTier === "premium") return level >= 1 && level <= 9;
-      // Logged-in free: HSK 1 + purchased levels
+      if (accessInfo.accountTier === "premium") return true;
       if (level === 1) return true;
       return accessInfo.purchasedLevels.includes(level);
     },
@@ -244,6 +242,7 @@ function AppContent() {
 
   const lockReasonForLevel = useCallback(
     (level: number) => {
+      if (level >= 5) return `HSK ${level} not available yet`;
       if (!accessInfo.isLoggedIn) return `Sign in to access HSK ${level}`;
       if (accessInfo.accountTier === "premium") return null;
       if (level === 1) return null;
@@ -380,16 +379,12 @@ function AppContent() {
   // Total words in dataset (regardless of access)
   const totalHsk3 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
   const totalHsk4 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
-  const totalHsk5 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 5).length, [vocabulary]);
-  const totalHsk6 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 6).length, [vocabulary]);
 
   // Available words per level
   const hsk1Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 1).length, [visibleVocabulary]);
   const hsk2Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 2).length, [visibleVocabulary]);
   const hsk3Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 3).length, [visibleVocabulary]);
   const hsk4Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 4).length, [visibleVocabulary]);
-  const hsk5Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 5).length, [visibleVocabulary]);
-  const hsk6Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 6).length, [visibleVocabulary]);
 
   // Learned counts should be computed from *available* words, not the entire dataset.
   const learnedAvailableCount = useMemo(
@@ -412,14 +407,6 @@ function AppContent() {
   );
   const learnedHsk4Count = useMemo(
     () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 4 && isLearned(w.id) ? 1 : 0), 0),
-    [visibleVocabulary, isLearned]
-  );
-  const learnedHsk5Count = useMemo(
-    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 5 && isLearned(w.id) ? 1 : 0), 0),
-    [visibleVocabulary, isLearned]
-  );
-  const learnedHsk6Count = useMemo(
-    () => visibleVocabulary.reduce((acc, w) => acc + (w.hskLevel === 6 && isLearned(w.id) ? 1 : 0), 0),
     [visibleVocabulary, isLearned]
   );
   const stillLearningCount = Math.max(0, availableTotal - learnedAvailableCount);
@@ -788,42 +775,6 @@ function AppContent() {
                   </div>
                 )}
 
-                {totalHsk5 > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-pink-500 shadow-sm shadow-pink-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 5{" "}
-                      {hasAccessToLevel(5) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk5Count}/{hsk5Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(5) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {totalHsk6 > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 6{" "}
-                      {hasAccessToLevel(6) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk6Count}/{hsk6Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(6) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
                   <span className="text-sm text-gray-500">
@@ -935,8 +886,6 @@ function AppContent() {
                   { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
                   { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
                   { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
-                  { value: 5 as HSKFilter, label: `HSK 5 (${hsk5Count})` },
-                  { value: 6 as HSKFilter, label: `HSK 6 (${hsk6Count})` },
                 ].map((filter) => {
                   const val = filter.value;
                   const isLocked = val !== "all" && !hasAccessToLevel(val);
