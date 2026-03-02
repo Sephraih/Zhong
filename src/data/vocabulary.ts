@@ -5,7 +5,7 @@ export interface VocabWord {
   hanzi: string;
   pinyin: string;
   english: string;
-  hskLevel: 1 | 2 | 3 | 4;
+  hskLevel: 1 | 2 | 3 | 4 | 5 | 6;
   category: string;
   examples: {
     chinese: string;

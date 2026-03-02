@@ -12,6 +12,10 @@ export function getHskBadgeClasses(level: number): string {
       return "bg-purple-950/80 text-purple-400 border border-purple-800/50";
     case 4:
       return "bg-orange-950/80 text-orange-400 border border-orange-800/50";
+    case 5:
+      return "bg-pink-950/80 text-pink-400 border border-pink-800/50";
+    case 6:
+      return "bg-cyan-950/80 text-cyan-400 border border-cyan-800/50";
     default:
       return "bg-neutral-800 text-gray-400 border border-neutral-700";
   }
