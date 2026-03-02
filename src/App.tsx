@@ -998,15 +998,35 @@ function AppContent() {
               {/* Status filter (moved below Category) */}
               <div className="flex flex-wrap gap-2">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
-                {[
-                  {
-                    value: "all" as StatusFilter,
-                    label: `All Words (${availableTotal}/${vocabulary.length})`,
-                    icon: "📋",
-                  },
-                  { value: "still-learning" as StatusFilter, label: `Still Learning (${stillLearningCount})`, icon: "📖" },
-                  { value: "learned" as StatusFilter, label: `Learned (${learnedCount})`, icon: "✅" },
-                ].map((filter) => (
+                {(() => {
+                  // Compute counts based on current HSK and category filters (but not status filter)
+                  const baseFiltered = visibleVocabulary.filter((word) => {
+                    if (hskFilter !== "all" && word.hskLevel !== hskFilter) return false;
+                    if (categoryFilter !== "all" && word.category !== categoryFilter) return false;
+                    if (searchQuery) {
+                      const q = searchQuery.toLowerCase();
+                      return (
+                        word.hanzi.includes(searchQuery) ||
+                        word.pinyin.toLowerCase().includes(q) ||
+                        word.english.toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  });
+                  const baseTotal = baseFiltered.length;
+                  const baseLearned = baseFiltered.filter((w) => isLearned(w.id)).length;
+                  const baseStillLearning = baseTotal - baseLearned;
+
+                  return [
+                    {
+                      value: "all" as StatusFilter,
+                      label: `All Words (${baseTotal})`,
+                      icon: "📋",
+                    },
+                    { value: "still-learning" as StatusFilter, label: `Still Learning (${baseStillLearning})`, icon: "📖" },
+                    { value: "learned" as StatusFilter, label: `Learned (${baseLearned})`, icon: "✅" },
+                  ];
+                })().map((filter) => (
                   <button
                     key={filter.value}
                     onClick={() => setStatusFilter(filter.value)}
