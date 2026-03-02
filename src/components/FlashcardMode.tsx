@@ -15,10 +15,8 @@ interface FlashcardModeProps {
   onLockedLevelClick?: () => void;
 }
 
-const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+const HSK_LEVELS = [1, 2, 3, 4] as const;
 type HskLevel = (typeof HSK_LEVELS)[number];
-
-const SHOWN_LEVELS: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
 function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
   if (!isSelected) {
@@ -33,10 +31,6 @@ function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
       return "bg-purple-600 text-white";
     case 4:
       return "bg-orange-600 text-white";
-    case 5:
-      return "bg-pink-600 text-white";
-    case 6:
-      return "bg-cyan-600 text-white";
     default:
       return "bg-red-600 text-white";
   }
@@ -52,10 +46,6 @@ function getLockedHskButtonClasses(level: HskLevel): string {
       return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
     case 4:
       return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5:
-      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6:
-      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
     default:
       return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
@@ -120,15 +110,12 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     return Array.from(levels).sort((a, b) => a - b);
   }, [allWords]);
 
-  const shownLevels: HskLevel[] = SHOWN_LEVELS;
+  const shownLevels: HskLevel[] = [1, 2, 3, 4];
 
-  // default: select all levels that are currently accessible (present in allWords)
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => {
-    const initial: HskLevel[] = (accessibleLevels.length > 0 ? accessibleLevels : [1]) as HskLevel[];
-    return new Set<HskLevel>(initial);
-  });
+  // default: select all levels that are currently present
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(shownLevels));
 
-  const allLevelsSelected = accessibleLevels.length > 0 && accessibleLevels.every((l) => selectedLevels.has(l));
+  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
 
   // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
@@ -147,8 +134,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   };
 
   const selectAllLevels = () => {
-    // Select all levels the user can currently access (present in allWords)
-    setSelectedLevels(new Set(accessibleLevels));
+    setSelectedLevels(new Set(shownLevels));
     setCurrentIndex(0);
     setIsFlipped(false);
   };
@@ -248,6 +234,8 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
                 title={
                   enabled
                     ? undefined
+                    : level >= 5
+                    ? `HSK ${level} not available yet`
                     : "Sign in / purchase to unlock this level"
                 }
                 className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${

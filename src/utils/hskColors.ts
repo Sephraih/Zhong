@@ -32,6 +32,10 @@ export function getHskFilterActiveClasses(level: number): string {
       return "bg-purple-600 text-white shadow-sm shadow-purple-900/20";
     case 4:
       return "bg-orange-600 text-white shadow-sm shadow-orange-900/20";
+    case 5:
+      return "bg-pink-600 text-white shadow-sm shadow-pink-900/20";
+    case 6:
+      return "bg-cyan-600 text-white shadow-sm shadow-cyan-900/20";
     default:
       return "bg-red-600 text-white shadow-sm shadow-red-900/20";
   }
