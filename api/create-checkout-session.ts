@@ -18,8 +18,6 @@ const PRICE_IDS: Record<string, string | undefined> = {
   hsk_2: process.env.STRIPE_PRICE_HSK2,
   hsk_3: process.env.STRIPE_PRICE_HSK3,
   hsk_4: process.env.STRIPE_PRICE_HSK4,
-  hsk_5: process.env.STRIPE_PRICE_HSK5,
-  hsk_6: process.env.STRIPE_PRICE_HSK6,
   premium: process.env.STRIPE_PRICE_PREMIUM,
 };
 

@@ -7,7 +7,7 @@ export interface AccessInfoLite {
 }
 
 export function hasAccessToLevel(level: number, access: AccessInfoLite): boolean {
-  if (level >= 7) return false; // Levels 7-9 not available yet
+  if (level >= 5) return false;
   if (access.accountTier === "premium") return true;
   if (!access.isLoggedIn) return level === 1;
   if (level === 1) return true;
@@ -15,7 +15,7 @@ export function hasAccessToLevel(level: number, access: AccessInfoLite): boolean
 }
 
 export function lockReasonForLevel(level: number, access: AccessInfoLite): string {
-  if (level >= 7) return `HSK ${level} not available yet`;
+  if (level >= 5) return `HSK ${level} not available yet`;
   if (!access.isLoggedIn) return `Sign in to access HSK ${level}`;
   if (access.accountTier === "premium") return "";
   if (level === 1) return "";
@@ -24,8 +24,9 @@ export function lockReasonForLevel(level: number, access: AccessInfoLite): strin
 }
 
 export function getShownLevels(_words: VocabWord[]): number[] {
-  // Always show 1-6 (even if some are locked / filtered out), and 7-9 as coming soon.
-  return [1, 2, 3, 4, 5, 6];
+  // Always show 1-4 (even if some are locked / filtered out), and 5-9 as coming soon.
+  // Keep it simple for now.
+  return [1, 2, 3, 4];
 }
 
 export function getAvailableLevelsFromData(words: VocabWord[]): number[] {

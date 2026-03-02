@@ -16,8 +16,10 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
-const HSK_LEVELS = [1, 2, 3, 4] as const;
+const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 type HskLevel = (typeof HSK_LEVELS)[number];
+
+const SHOWN_LEVELS: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
 function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
   if (!isSelected) {
@@ -96,19 +98,9 @@ function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars:
 
 export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   const isMobile = useIsMobile();
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(new Set([1, 2, 3, 4]));
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [score, setScore] = useState(0);
-  const [answered, setAnswered] = useState(0);
-  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
 
-  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
-  // Still: show disabled level selectors for locked / not-yet-available levels.
-
-  // NOTE: allWords is already access-filtered by App.tsx.
-  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
-  // not currently accessible (because they were filtered out).
+  // NOTE: allWords is access-filtered by App.tsx.
+  // Determine which levels are currently accessible (present in allWords).
   const accessibleLevels = useMemo(() => {
     const levels = new Set<HskLevel>();
     allWords.forEach((w) => {
@@ -117,9 +109,23 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     return Array.from(levels).sort((a, b) => a - b);
   }, [allWords]);
 
-  const shownLevels: HskLevel[] = [1, 2, 3, 4];
+  const shownLevels: HskLevel[] = SHOWN_LEVELS;
 
-  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
+  // Default-select all accessible levels
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => {
+    const initial: HskLevel[] = (accessibleLevels.length > 0 ? accessibleLevels : [1]) as HskLevel[];
+    return new Set<HskLevel>(initial);
+  });
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+  const [answered, setAnswered] = useState(0);
+  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
+
+  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
+  // Still: show disabled level selectors for locked levels.
+
+  const allLevelsSelected = accessibleLevels.length > 0 && accessibleLevels.every((l) => selectedLevels.has(l));
 
   // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
@@ -142,7 +148,7 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   };
 
   const selectAllLevels = () => {
-    setSelectedLevels(new Set(shownLevels));
+    setSelectedLevels(new Set(accessibleLevels));
     // Reset quiz when filter changes
     setCurrentIndex(0);
     setSelectedAnswer(null);

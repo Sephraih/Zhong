@@ -26,16 +26,12 @@ async function getPrices(): Promise<{
   hsk2: number | null;
   hsk3: number | null;
   hsk4: number | null;
-  hsk5: number | null;
-  hsk6: number | null;
   premium: number | null;
 }> {
   const result = {
     hsk2: null as number | null,
     hsk3: null as number | null,
     hsk4: null as number | null,
-    hsk5: null as number | null,
-    hsk6: null as number | null,
     premium: null as number | null,
   };
 
@@ -47,8 +43,6 @@ async function getPrices(): Promise<{
     hsk2: process.env.STRIPE_PRICE_HSK2,
     hsk3: process.env.STRIPE_PRICE_HSK3,
     hsk4: process.env.STRIPE_PRICE_HSK4,
-    hsk5: process.env.STRIPE_PRICE_HSK5,
-    hsk6: process.env.STRIPE_PRICE_HSK6,
     premium: process.env.STRIPE_PRICE_PREMIUM,
   };
 

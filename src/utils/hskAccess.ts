@@ -9,6 +9,7 @@ export interface AccessInfo {
 }
 
 // Levels currently available in the database
+// (Updated: HSK 1–6 are now available)
 export const AVAILABLE_LEVELS = [1, 2, 3, 4, 5, 6];
 
 // Levels coming soon
