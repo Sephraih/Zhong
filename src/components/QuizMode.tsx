@@ -104,19 +104,8 @@ function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars:
 
 export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   const isMobile = useIsMobile();
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(new Set([1, 2, 3, 4]));
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [score, setScore] = useState(0);
-  const [answered, setAnswered] = useState(0);
-  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
 
-  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
-  // Still: show disabled level selectors for locked / not-yet-available levels.
-
-  // NOTE: allWords is already access-filtered by App.tsx.
-  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
-  // not currently accessible (because they were filtered out).
+  // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const accessibleLevels = useMemo(() => {
     const levels = new Set<HskLevel>();
     allWords.forEach((w) => {
@@ -126,17 +115,27 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   }, [allWords]);
 
   const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
-
-  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
-
-  // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
+  const enabledLevels = useMemo(() => shownLevels.filter(isLevelEnabled), [accessibleLevels]);
+
+  // default: select all enabled levels
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(enabledLevels));
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+  const [answered, setAnswered] = useState(0);
+  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
+
+  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
+  // Still: show disabled selectors for locked levels.
+
+  const allEnabledSelected = enabledLevels.length > 0 && enabledLevels.every((l) => selectedLevels.has(l)) && selectedLevels.size === enabledLevels.length;
 
   const toggleLevel = (level: HskLevel) => {
     if (!isLevelEnabled(level)) return;
     const next = new Set(selectedLevels);
     if (next.has(level)) {
-      if (next.size > 1) next.delete(level);
+      next.delete(level);
     } else {
       next.add(level);
     }
@@ -149,8 +148,8 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     setQuizKey((k) => k + 1);
   };
 
-  const selectAllLevels = () => {
-    setSelectedLevels(new Set(shownLevels));
+  const toggleAllLevels = () => {
+    setSelectedLevels(allEnabledSelected ? new Set() : new Set(enabledLevels));
     // Reset quiz when filter changes
     setCurrentIndex(0);
     setSelectedAnswer(null);
@@ -216,15 +215,15 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   const HskFilterButtons = () => (
     <div className="mb-5 flex justify-center">
       <div className="max-w-full">
-        <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
+        <div className="flex items-center gap-0.5 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap scrollbar-hide">
           <button
-            onClick={selectAllLevels}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-              allLevelsSelected
+            onClick={toggleAllLevels}
+            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+              allEnabledSelected
                 ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
                 : "text-gray-400 hover:text-white hover:bg-neutral-900"
             }`}
-            title="Select all available levels"
+            title={allEnabledSelected ? "Clear all levels" : "Select all available levels"}
           >
             All
           </button>
