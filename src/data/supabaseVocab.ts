@@ -4,7 +4,7 @@ import { FALLBACK_DATA } from "./fallbackData";
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "hanyu_supabase_vocab_cache_mv_v2"; // bumped version for HSK 3+4
+const CACHE_KEY = "hanyu_supabase_vocab_cache_mv_v3"; // bumped version for HSK 5+6
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export interface CachedVocab {
@@ -13,6 +13,8 @@ export interface CachedVocab {
   hsk2Count: number;
   hsk3Count: number;
   hsk4Count: number;
+  hsk5Count: number;
+  hsk6Count: number;
   totalCount: number;
   cachedAt: number;
 }
@@ -27,12 +29,14 @@ export function loadCachedSupabaseVocabulary(): CachedVocab | null {
     if (!parsed?.words?.length) return null;
     if (!parsed.cachedAt) return null;
     if (Date.now() - parsed.cachedAt > CACHE_TTL_MS) return null;
-    // Ensure new fields exist (handle old cache format)
+          // Ensure new fields exist (handle old cache format)
     return {
       ...parsed,
       hsk3Count: parsed.hsk3Count ?? 0,
       hsk4Count: parsed.hsk4Count ?? 0,
-    };
+      hsk5Count: (parsed as any).hsk5Count ?? 0,
+      hsk6Count: (parsed as any).hsk6Count ?? 0,
+    } as CachedVocab;
   } catch {
     return null;
   }
@@ -188,6 +192,8 @@ export interface FetchResult {
   hsk2Count: number;
   hsk3Count: number;
   hsk4Count: number;
+  hsk5Count: number;
+  hsk6Count: number;
   totalCount: number;
   source: "supabase" | "fallback";
 }
@@ -198,6 +204,8 @@ const EMPTY_RESULT: FetchResult = {
   hsk2Count: 0,
   hsk3Count: 0,
   hsk4Count: 0,
+  hsk5Count: 0,
+  hsk6Count: 0,
   totalCount: 0,
   source: "fallback",
 };
@@ -238,6 +246,8 @@ export async function fetchVocabularyFromSupabase(
         hsk2Count: cached.hsk2Count,
         hsk3Count: cached.hsk3Count,
         hsk4Count: cached.hsk4Count,
+        hsk5Count: cached.hsk5Count,
+        hsk6Count: cached.hsk6Count,
         totalCount: cached.totalCount,
         source: "supabase",
       };
@@ -254,7 +264,7 @@ export async function fetchVocabularyFromSupabase(
       const { data, error } = await supabase
         .from("hsk_words_with_examples")
         .select("word_id, hanzi, pinyin, english, hsk_level, word_type, examples")
-        .in("hsk_level", [1, 2, 3, 4])
+        .in("hsk_level", [1, 2, 3, 4, 5, 6])
         .order("hsk_level", { ascending: true })
         .order("word_id", { ascending: true })
         .range(from, to);
@@ -275,7 +285,7 @@ export async function fetchVocabularyFromSupabase(
     }
 
     const words: VocabWord[] = rows.map((row) => {
-      const hskLevel = (row.hsk_level >= 1 && row.hsk_level <= 4 ? row.hsk_level : 1) as 1 | 2 | 3 | 4;
+      const hskLevel = (row.hsk_level >= 1 && row.hsk_level <= 6 ? row.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6;
       const rawExamples = Array.isArray(row.examples) ? row.examples : [];
       const examples = rawExamples.slice(0, 3).map((ex) => ({
         chinese: ex.hanzi,
@@ -298,6 +308,8 @@ export async function fetchVocabularyFromSupabase(
     const hsk2Count = rows.filter((r) => r.hsk_level === 2).length;
     const hsk3Count = rows.filter((r) => r.hsk_level === 3).length;
     const hsk4Count = rows.filter((r) => r.hsk_level === 4).length;
+    const hsk5Count = rows.filter((r) => r.hsk_level === 5).length;
+    const hsk6Count = rows.filter((r) => r.hsk_level === 6).length;
 
     saveCachedSupabaseVocabulary({
       words,
@@ -305,6 +317,8 @@ export async function fetchVocabularyFromSupabase(
       hsk2Count,
       hsk3Count,
       hsk4Count,
+      hsk5Count,
+      hsk6Count,
       totalCount: words.length,
       cachedAt: Date.now(),
     });
@@ -315,6 +329,8 @@ export async function fetchVocabularyFromSupabase(
       hsk2Count,
       hsk3Count,
       hsk4Count,
+      hsk5Count,
+      hsk6Count,
       totalCount: words.length,
       source: "supabase",
     };
