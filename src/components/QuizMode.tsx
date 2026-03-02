@@ -16,7 +16,7 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
-const HSK_LEVELS = [1, 2, 3, 4] as const;
+const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
 type HskLevel = (typeof HSK_LEVELS)[number];
 
 function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
@@ -32,6 +32,10 @@ function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
       return "bg-purple-600 text-white";
     case 4:
       return "bg-orange-600 text-white";
+    case 5:
+      return "bg-pink-600 text-white";
+    case 6:
+      return "bg-cyan-600 text-white";
     default:
       return "bg-red-600 text-white";
   }
@@ -47,6 +51,10 @@ function getLockedHskButtonClasses(level: HskLevel): string {
       return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
     case 4:
       return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    case 5:
+      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
+    case 6:
+      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
     default:
       return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
@@ -117,7 +125,7 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     return Array.from(levels).sort((a, b) => a - b);
   }, [allWords]);
 
-  const shownLevels: HskLevel[] = [1, 2, 3, 4];
+  const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
   const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
 
