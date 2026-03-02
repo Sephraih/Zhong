@@ -19,15 +19,19 @@ type StripePrices = {
   hsk2: string | null;
   hsk3: string | null;
   hsk4: string | null;
+  hsk5: string | null;
+  hsk6: string | null;
 };
 
 const FALLBACK_LEVEL_PRICES: Record<number, string> = {
   2: "$4.99",
   3: "$6.99",
   4: "$9.99",
+  5: "$12.99",
+  6: "$14.99",
 };
 
-const FALLBACK_PREMIUM_PRICE = "$19.99";
+const FALLBACK_PREMIUM_PRICE = "$29.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
   const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
@@ -37,6 +41,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     hsk2: null,
     hsk3: null,
     hsk4: null,
+    hsk5: null,
+    hsk6: null,
   });
 
   // Account deletion UI
@@ -80,6 +86,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           hsk2: formatPrice(data.hsk2),
           hsk3: formatPrice(data.hsk3),
           hsk4: formatPrice(data.hsk4),
+          hsk5: formatPrice(data.hsk5),
+          hsk6: formatPrice(data.hsk6),
         });
       } catch {
         // ignore; keep fallback
@@ -113,6 +121,8 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     2: stripePrices.hsk2 ?? FALLBACK_LEVEL_PRICES[2],
     3: stripePrices.hsk3 ?? FALLBACK_LEVEL_PRICES[3],
     4: stripePrices.hsk4 ?? FALLBACK_LEVEL_PRICES[4],
+    5: stripePrices.hsk5 ?? FALLBACK_LEVEL_PRICES[5],
+    6: stripePrices.hsk6 ?? FALLBACK_LEVEL_PRICES[6],
   };
 
   const learnedPercent = totalWords > 0 ? Math.round((learnedCount / totalWords) * 100) : 0;
@@ -320,7 +330,11 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                             ? "bg-blue-600 hover:bg-blue-500 text-white"
                             : level === 3
                             ? "bg-purple-600 hover:bg-purple-500 text-white"
-                            : "bg-orange-600 hover:bg-orange-500 text-white"
+                            : level === 4
+                            ? "bg-orange-600 hover:bg-orange-500 text-white"
+                            : level === 5
+                            ? "bg-pink-600 hover:bg-pink-500 text-white"
+                            : "bg-cyan-600 hover:bg-cyan-500 text-white"
                         }`}
                       >
                         {isCheckingOut ? "Redirecting..." : `Purchase HSK ${level}`}

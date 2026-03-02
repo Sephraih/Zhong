@@ -152,7 +152,7 @@ function getInitialViewMode(): ViewMode {
   }
   return "home";
 }
-type HSKFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6;
+type HSKFilter = "all" | 1 | 2 | 3 | 4;
 type StatusFilter = "all" | "learned" | "still-learning";
 
 const FALLBACK_VOCABULARY = buildFallbackVocabulary();
@@ -184,7 +184,6 @@ function AppContent() {
   );
 
   const accessibleLevels = useMemo(() => {
-    // Premium gets everything that exists (and future levels)
     if (accessInfo.accountTier === "premium") return [1, 2, 3, 4, 5, 6, 7, 8, 9];
     if (!accessInfo.isLoggedIn) return [1];
     const set = new Set<number>([1, ...accessInfo.purchasedLevels]);
@@ -232,7 +231,7 @@ function AppContent() {
 
   const hasAccessToLevel = useCallback(
     (level: number) => {
-      // Levels 1–6 are potentially available now; access depends on auth/purchase.
+      if (level >= 5) return false;
       if (!accessInfo.isLoggedIn) return level === 1;
       if (accessInfo.accountTier === "premium") return true;
       if (level === 1) return true;
@@ -243,16 +242,14 @@ function AppContent() {
 
   const lockReasonForLevel = useCallback(
     (level: number) => {
-      // For levels that are not present in the current dataset, show Coming Soon.
-      const existsInDataset = vocabulary.some((w) => w.hskLevel === level);
-      if (!existsInDataset) return `HSK ${level} not available yet`;
+      if (level >= 5) return `HSK ${level} not available yet`;
       if (!accessInfo.isLoggedIn) return `Sign in to access HSK ${level}`;
       if (accessInfo.accountTier === "premium") return null;
       if (level === 1) return null;
       if (accessInfo.purchasedLevels.includes(level)) return null;
       return `Purchase HSK ${level} (or Premium) to unlock`;
     },
-    [accessInfo, vocabulary]
+    [accessInfo]
   );
 
   const handleLockedLevelClick = useCallback(() => {
@@ -382,16 +379,12 @@ function AppContent() {
   // Total words in dataset (regardless of access)
   const totalHsk3 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
   const totalHsk4 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
-  const totalHsk5 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 5).length, [vocabulary]);
-  const totalHsk6 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 6).length, [vocabulary]);
 
   // Available words per level
   const hsk1Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 1).length, [visibleVocabulary]);
   const hsk2Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 2).length, [visibleVocabulary]);
   const hsk3Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 3).length, [visibleVocabulary]);
   const hsk4Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 4).length, [visibleVocabulary]);
-  const hsk5Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 5).length, [visibleVocabulary]);
-  const hsk6Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 6).length, [visibleVocabulary]);
 
   // Learned counts should be computed from *available* words, not the entire dataset.
   const learnedAvailableCount = useMemo(
