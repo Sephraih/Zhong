@@ -232,6 +232,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cache: "no-store",
       });
 
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("API not available. Please try again later.");
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -280,6 +286,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
         cache: "no-store",
       });
+
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("API not available. Please try again later.");
+      }
 
       const data = await response.json();
 
@@ -343,6 +355,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
+      // Check if response is JSON before parsing
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("API not available. Please try again later.");
+      }
+
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
@@ -393,6 +411,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           client_timestamp: new Date().toISOString(),
         }),
       });
+
+      // Check if response is JSON before parsing
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("API not available. Please try again later.");
+      }
 
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed to create checkout session");

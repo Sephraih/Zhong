@@ -73,8 +73,22 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     const load = async () => {
       try {
         const res = await fetch("/api/billing", { headers: { "Cache-Control": "no-cache" } });
+        
+        // Check if response is OK and is JSON
+        if (!res.ok) {
+          console.warn("[ProfilePage] Billing API returned", res.status);
+          return;
+        }
+        
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.warn("[ProfilePage] Billing API did not return JSON");
+          return;
+        }
+        
         const data = await res.json();
         if (cancelled) return;
+        
         // Convert cents to dollar strings
         const formatPrice = (cents: number | null) => {
           if (cents === null || cents === undefined) return null;
@@ -88,8 +102,9 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           hsk5: formatPrice(data.hsk5),
           hsk6: formatPrice(data.hsk6),
         });
-      } catch {
-        // ignore; keep fallback
+      } catch (err) {
+        // API not available (preview mode) - keep fallback prices
+        console.warn("[ProfilePage] Could not fetch billing prices:", err);
       }
     };
     load();
