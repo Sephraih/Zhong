@@ -74,19 +74,22 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
       try {
         const res = await fetch("/api/billing", { headers: { "Cache-Control": "no-cache" } });
         
-        // Check if response is OK and is JSON
+        // Try to parse as JSON regardless of content-type
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          // Not JSON - API might not be available or returned HTML error page
+          console.warn("[ProfilePage] Billing API did not return JSON:", res.status, text.slice(0, 200));
+          return;
+        }
+        
         if (!res.ok) {
-          console.warn("[ProfilePage] Billing API returned", res.status);
+          console.warn("[ProfilePage] Billing API returned error:", res.status, data);
           return;
         }
         
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          console.warn("[ProfilePage] Billing API did not return JSON");
-          return;
-        }
-        
-        const data = await res.json();
         if (cancelled) return;
         
         // Convert cents to dollar strings

@@ -232,13 +232,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cache: "no-store",
       });
 
-      // Check if response is JSON before parsing
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("API not available. Please try again later.");
+      // Try to parse response as JSON
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("Login API response not JSON:", response.status, text.slice(0, 500));
+        throw new Error(`Server error (${response.status}). Please try again later.`);
       }
-
-      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Login failed");
@@ -287,13 +289,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cache: "no-store",
       });
 
-      // Check if response is JSON before parsing
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("API not available. Please try again later.");
+      // Try to parse response as JSON
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("Signup API response not JSON:", response.status, text.slice(0, 500));
+        throw new Error(`Server error (${response.status}). Please try again later.`);
       }
-
-      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Signup failed");
@@ -347,21 +351,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           product_type: "hsk_level",
           hsk_level: level,
-          // TOS acceptance is implicit by clicking purchase button
-          // The user already accepted TOS when creating their account
           tos_accepted: true,
           privacy_accepted: true,
           client_timestamp: new Date().toISOString(),
         }),
       });
 
-      // Check if response is JSON before parsing
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("API not available. Please try again later.");
+      // Try to parse response as JSON
+      const text = await res.text();
+      let body;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        console.error("Checkout API response not JSON:", res.status, text.slice(0, 500));
+        throw new Error(`Server error (${res.status}). Please try again later.`);
       }
 
-      const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
       if (body.url) {
@@ -404,21 +409,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           product_type: "premium",
-          // TOS acceptance is implicit by clicking purchase button
-          // The user already accepted TOS when creating their account
           tos_accepted: true,
           privacy_accepted: true,
           client_timestamp: new Date().toISOString(),
         }),
       });
 
-      // Check if response is JSON before parsing
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("API not available. Please try again later.");
+      // Try to parse response as JSON
+      const text = await res.text();
+      let body;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        console.error("Premium checkout API response not JSON:", res.status, text.slice(0, 500));
+        throw new Error(`Server error (${res.status}). Please try again later.`);
       }
 
-      const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
 
       if (body.url) {
