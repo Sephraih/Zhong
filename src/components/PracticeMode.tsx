@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -13,7 +13,7 @@ interface PracticeModeProps {
   onLockedLevelClick?: () => void;
 }
 
-// Multi-select: empty array = all levels, otherwise contains selected level numbers
+// Multi-select: empty array = no selection
 type HskLevelFilter = number[];
 type PracticeDirection = "zh-en" | "en-zh";
 
@@ -78,48 +78,37 @@ function getCardGlowClass(
 
 // Helper to toggle a level in the filter
 function toggleLevel(levels: HskLevelFilter, level: number): HskLevelFilter {
-  if (levels.length === 0) {
-    // Currently "all" - select only this level
-    return [level];
-  }
   if (levels.includes(level)) {
-    // Remove this level
-    const newLevels = levels.filter(l => l !== level);
-    // If removing makes it empty, that means "all"
-    return newLevels;
+    return levels.filter(l => l !== level).sort((a, b) => a - b);
   }
-  // Add this level
   return [...levels, level].sort((a, b) => a - b);
 }
 
 // Helper to get filter label
 function getFilterLabel(levels: HskLevelFilter): string {
-  if (levels.length === 0) return "All";
+  if (levels.length === 0) return "No levels";
   return levels.map(l => `HSK ${l}`).join(", ");
 }
 
 function getLockedHskButtonClasses(level: number): string {
   // Disabled, but with a subtle hint of the level color
   switch (level) {
-    case 1:
-      return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2:
-      return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3:
-      return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4:
-      return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5:
-      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6:
-      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default:
-      return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
+    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
+    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
+    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
+    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
+    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
+    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
 }
 
 export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: PracticeModeProps) {
   const isMobile = useIsMobile();
+
+  const accessibleLevels = useMemo(() => {
+    return [1, 2, 3, 4, 5, 6].filter((l) => allWords.some((w) => w.hskLevel === l));
+  }, [allWords]);
 
   const [sessionWords, setSessionWords] = useState<SessionWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -215,12 +204,17 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
   };
 
   const filterWordsByLevels = (words: VocabWord[], levels: HskLevelFilter): VocabWord[] => {
-    if (levels.length === 0) return words;
+    if (levels.length === 0) return [];
     return words.filter((w) => levels.includes(w.hskLevel));
   };
 
   const startNewSession = (levels: HskLevelFilter = hskLevels) => {
     const pool = filterWordsByLevels(allWords, levels);
+    if (pool.length === 0) {
+      setSessionWords([]);
+      return;
+    }
+
     const unlearned = shuffleArray(pool.filter((w) => !isLearned(w.id)));
     const learned = shuffleArray(pool.filter((w) => isLearned(w.id)));
 
@@ -279,8 +273,11 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
       }
     }
 
+    // Default initialization: if no session, select all accessible levels and start
     if (sessionWords.length === 0 && !isFinished) {
-      startNewSession(hskLevels);
+      const defaultLevels = accessibleLevels;
+      setHskLevels(defaultLevels);
+      startNewSession(defaultLevels);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords]);
@@ -419,11 +416,21 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
     startNewSession(newLevels);
   };
 
-  const handleSelectAll = () => {
-    setHskLevels([]);
-    clearSession();
-    startNewSession([]);
+  const handleToggleAll = () => {
+    const allAccessibleSelected = accessibleLevels.length > 0 && accessibleLevels.every(l => hskLevels.includes(l));
+    if (allAccessibleSelected) {
+      setHskLevels([]);
+      clearSession();
+      setSessionWords([]);
+    } else {
+      const all = [...accessibleLevels].sort((a, b) => a - b);
+      setHskLevels(all);
+      clearSession();
+      startNewSession(all);
+    }
   };
+
+  const shownLevels = [1, 2, 3, 4, 5, 6];
 
   if (isFinished) {
     return (
@@ -445,15 +452,13 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
     );
   }
 
-  if (sessionWords.length === 0) {
-    return <div className="text-center py-16 text-gray-400">Loading practice session...</div>;
-  }
-
-  const currentWord = sessionWords[currentIndex];
-  const isCurrentlyLearned = isLearned(currentWord.id);
+  // Safe access to current word using type checking
+  const currentWord = sessionWords[currentIndex] as SessionWord | undefined;
+  const isCurrentlyLearned = currentWord ? isLearned(currentWord.id) : false;
   const isChinese = direction === "zh-en";
 
   const ProgressBarInsideCard = () => {
+    if (!currentWord) return null;
     const isGold = currentWord.sessionProgress === 5;
     const showDelta = deltaPulse?.wordId === currentWord.id;
 
@@ -509,12 +514,6 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
     );
   };
 
-  // NOTE: allWords is already access-filtered by App.tsx.
-  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
-  // not currently accessible (because they were filtered out).
-  const accessibleLevels = [1, 2, 3, 4, 5, 6].filter((l) => allWords.some((w) => w.hskLevel === l));
-  const shownLevels = [1, 2, 3, 4, 5, 6];
-
   return (
     <div className="mx-auto max-w-6xl">
       <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.3fr_0.85fr] gap-4 items-start">
@@ -522,20 +521,20 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
 
         <div className="w-full flex justify-center">
           <div className="max-w-lg w-full">
-            {/* Controls: HSK level selector (single-line) + Direction/help on separate row */}
+            {/* Controls */}
             <div className="mb-6 space-y-3">
-              {/* HSK Level multi-select (never wraps; scroll horizontally if needed) */}
+              {/* HSK Level multi-select */}
               <div className="flex justify-center">
                 <div className="max-w-full">
-                  <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
+                  <div className="flex flex-wrap justify-center gap-2">
                     <button
-                      onClick={handleSelectAll}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                        hskLevels.length === 0
-                          ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-                          : "text-gray-400 hover:text-white hover:bg-neutral-900"
+                      onClick={handleToggleAll}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
+                        accessibleLevels.length > 0 && accessibleLevels.every(l => hskLevels.includes(l))
+                          ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
+                          : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
                       }`}
-                      title="Select all available levels"
+                      title="Toggle all available levels"
                     >
                       All
                     </button>
@@ -559,22 +558,22 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                               ? `HSK ${level} not available yet`
                               : "Sign in / purchase to unlock this level"
                           }
-                          className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                          className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
                             !enabled
                               ? `${getLockedHskButtonClasses(level)}`
                               : selected
                               ? level === 1
-                                ? "bg-emerald-600 text-white"
+                                ? "bg-emerald-600 text-white border-emerald-600"
                                 : level === 2
-                                ? "bg-blue-600 text-white"
+                                ? "bg-blue-600 text-white border-blue-600"
                                 : level === 3
-                                ? "bg-purple-600 text-white"
+                                ? "bg-purple-600 text-white border-purple-600"
                                 : level === 4
-                                ? "bg-orange-600 text-white"
+                                ? "bg-orange-600 text-white border-orange-600"
                                 : level === 5
-                                ? "bg-pink-600 text-white"
-                                : "bg-cyan-600 text-white"
-                              : "text-gray-400 hover:text-white hover:bg-neutral-900"
+                                ? "bg-pink-600 text-white border-pink-600"
+                                : "bg-cyan-600 text-white border-cyan-600"
+                              : "bg-neutral-900 text-gray-400 border-neutral-800 hover:text-white hover:bg-neutral-800"
                           }`}
                         >
                           {!enabled ? "🔒 " : ""}HSK {level}
@@ -585,7 +584,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                 </div>
               </div>
 
-              {/* Direction toggle + help toggle (moved to its own row so HSK buttons stay single-line) */}
+              {/* Direction & Help */}
               <div className="flex justify-center">
                 <div className="inline-flex items-center gap-2">
                   <button
@@ -612,7 +611,6 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                     )}
                   </button>
 
-                  {/* Help toggle */}
                   <button
                     onClick={() => {
                       const next = !infoMinimized;
@@ -632,7 +630,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
               </div>
             </div>
 
-            {/* Help panel (shown when not minimized) */}
+            {/* Help panel */}
             {!infoMinimized && (
               <div className="mb-5 bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 shadow-lg">
                 <div className="text-[11px] leading-relaxed text-gray-400">
@@ -651,169 +649,181 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
               </div>
             )}
 
-            {/* Progress header */}
-            <div className="mb-6">
-              <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
-                <span>Card {currentIndex + 1} of {sessionWords.length}</span>
-                <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
-                  {getFilterLabel(hskLevels)}{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
-                </span>
+            {/* Main Content States */}
+            {hskLevels.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-5xl mb-4">👆</div>
+                <p className="text-gray-400 text-lg">Please select at least one HSK level to start practicing.</p>
               </div>
-              <div className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex transition-all duration-300 ${
-                feedback === "got" || feedback === "gold" ? "ring-2 ring-emerald-500/40" : feedback === "forgot" ? "ring-2 ring-red-500/40" : ""
-              }`}>
-                {sessionWords.map((word, i) => {
-                  const isCurrent = i === currentIndex;
-                  const color = getProgressColor(word.sessionProgress);
-                  return (
-                    <div
-                      key={word.id}
-                      className={`h-full flex-1 transition-all duration-300 ${color} ${isCurrent ? "z-10 relative brightness-150 scale-y-150" : ""} ${i > 0 ? "border-l border-black/30" : ""}`}
-                      style={isCurrent ? { boxShadow: "0 0 8px 2px rgba(255,255,255,0.4)" } : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </div>
+            ) : sessionWords.length === 0 ? (
+              <div className="text-center py-16 text-gray-400">Loading practice session...</div>
+            ) : currentWord ? (
+              <>
+                {/* Progress header */}
+                <div className="mb-6">
+                  <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
+                    <span>Card {currentIndex + 1} of {sessionWords.length}</span>
+                    <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
+                      {getFilterLabel(hskLevels)}{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
+                    </span>
+                  </div>
+                  <div className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex transition-all duration-300 ${
+                    feedback === "got" || feedback === "gold" ? "ring-2 ring-emerald-500/40" : feedback === "forgot" ? "ring-2 ring-red-500/40" : ""
+                  }`}>
+                    {sessionWords.map((word, i) => {
+                      const isCurrent = i === currentIndex;
+                      const color = getProgressColor(word.sessionProgress);
+                      return (
+                        <div
+                          key={word.id}
+                          className={`h-full flex-1 transition-all duration-300 ${color} ${isCurrent ? "z-10 relative brightness-150 scale-y-150" : ""} ${i > 0 ? "border-l border-black/30" : ""}`}
+                          style={isCurrent ? { boxShadow: "0 0 8px 2px rgba(255,255,255,0.4)" } : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {/* Flashcard */}
-            <div
-              className={`bg-neutral-900 rounded-3xl shadow-2xl border flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(feedback, currentWord.sessionProgress >= 5)}`}
-              style={{
-                height: isMobile ? "calc(var(--app-inner-h, 100svh) - 200px)" : "min(580px, calc(var(--app-inner-h, 100svh) - 300px))",
-                minHeight: isMobile ? "420px" : "480px",
-                maxHeight: isMobile ? "calc(var(--app-inner-h, 100svh) - 180px)" : "620px",
-              }}
-              onClick={(e) => {
-                if (isHoverCharacterEvent(e)) return;
-                setIsFlipped(!isFlipped);
-              }}
-            >
-              {/* Top badges */}
-              <div className="absolute top-5 left-6 flex items-center gap-2">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentWord.hskLevel)}`}>
-                  HSK {currentWord.hskLevel}
-                </span>
-                {isCurrentlyLearned && (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
-                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                )}
-              </div>
-              <div className="absolute top-5 right-6">
-                <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
-              </div>
+                {/* Flashcard */}
+                <div
+                  className={`bg-neutral-900 rounded-3xl shadow-2xl border flex flex-col items-center justify-center cursor-pointer select-none transition-all duration-300 relative overflow-hidden ${getCardGlowClass(feedback, currentWord.sessionProgress >= 5)}`}
+                  style={{
+                    height: isMobile ? "calc(var(--app-inner-h, 100svh) - 200px)" : "min(580px, calc(var(--app-inner-h, 100svh) - 300px))",
+                    minHeight: isMobile ? "420px" : "480px",
+                    maxHeight: isMobile ? "calc(var(--app-inner-h, 100svh) - 180px)" : "620px",
+                  }}
+                  onClick={(e) => {
+                    if (isHoverCharacterEvent(e)) return;
+                    setIsFlipped(!isFlipped);
+                  }}
+                >
+                  {/* Top badges */}
+                  <div className="absolute top-5 left-6 flex items-center gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentWord.hskLevel)}`}>
+                      HSK {currentWord.hskLevel}
+                    </span>
+                    {isCurrentlyLearned && (
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-950/80 border border-emerald-800/50">
+                        <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+                  <div className="absolute top-5 right-6">
+                    <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
+                  </div>
 
-              {/* Front content */}
-              <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
-                {isChinese ? (
-                  <>
-                    <div className="flex items-end gap-2 justify-center">
-                      {currentWord.hanzi.split("").map((char, i) => (
-                        <HoverCharacter key={`${currentWord.id}-front-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="2xl" />
-                      ))}
-                    </div>
-                    <div className="mt-4"><SpeakerButton text={currentWord.hanzi} size="md" /></div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-4xl font-bold text-white text-center px-6">{currentWord.english}</p>
-                    <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
-                  </>
-                )}
-                {!isFlipped && <div className="mt-8"><ProgressBarInsideCard /></div>}
-                {!isFlipped && <p className="text-gray-600 text-sm mt-4">{isChinese ? "Tap to reveal · Hover for pinyin" : "Tap to reveal Chinese"}</p>}
-              </div>
-
-              {/* Back overlay */}
-              <div className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"}`}>
-                {isChinese ? (
-                  <>
-                    <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
-                    <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-end gap-2 justify-center mb-2">
-                      {currentWord.hanzi.split("").map((char, i) => (
-                        <HoverCharacter key={`${currentWord.id}-back-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="xl" />
-                      ))}
-                    </div>
-                    <p className="text-red-400 text-lg font-medium mb-2">{currentWord.pinyin}</p>
-                    <SpeakerButton text={currentWord.hanzi} size="md" />
-                  </>
-                )}
-                <div className="my-4"><ProgressBarInsideCard /></div>
-                <div className="space-y-3 mt-2 text-left w-full">
-                  {currentWord.examples.slice(0, 3).map((ex, idx) => (
-                    <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
-                          {ex.pinyinWords.map((pw, i) => (
-                            <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                  {/* Front content */}
+                  <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
+                    {isChinese ? (
+                      <>
+                        <div className="flex items-end gap-2 justify-center">
+                          {currentWord.hanzi.split("").map((char, i) => (
+                            <HoverCharacter key={`${currentWord.id}-front-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="2xl" />
                           ))}
                         </div>
-                        <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
-                      </div>
-                      <SpeakerButton text={ex.chinese} size="sm" />
+                        <div className="mt-4"><SpeakerButton text={currentWord.hanzi} size="md" /></div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-4xl font-bold text-white text-center px-6">{currentWord.english}</p>
+                        <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
+                      </>
+                    )}
+                    {!isFlipped && <div className="mt-8"><ProgressBarInsideCard /></div>}
+                    {!isFlipped && <p className="text-gray-600 text-sm mt-4">{isChinese ? "Tap to reveal · Hover for pinyin" : "Tap to reveal Chinese"}</p>}
+                  </div>
+
+                  {/* Back overlay */}
+                  <div className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"}`}>
+                    {isChinese ? (
+                      <>
+                        <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
+                        <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-end gap-2 justify-center mb-2">
+                          {currentWord.hanzi.split("").map((char, i) => (
+                            <HoverCharacter key={`${currentWord.id}-back-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="xl" />
+                          ))}
+                        </div>
+                        <p className="text-red-400 text-lg font-medium mb-2">{currentWord.pinyin}</p>
+                        <SpeakerButton text={currentWord.hanzi} size="md" />
+                      </>
+                    )}
+                    <div className="my-4"><ProgressBarInsideCard /></div>
+                    <div className="space-y-3 mt-2 text-left w-full">
+                      {currentWord.examples.slice(0, 3).map((ex, idx) => (
+                        <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
+                              {ex.pinyinWords.map((pw, i) => (
+                                <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                              ))}
+                            </div>
+                            <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
+                          </div>
+                          <SpeakerButton text={ex.chinese} size="sm" />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Action buttons */}
-            <div className="flex gap-3 mt-4">
-              <button onClick={handleForgotIt} disabled={isAdvancing}
-                className={`flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
-                  isAdvancing && feedback === "forgot" ? "border-red-500 bg-red-950/30 scale-[0.98]" : isAdvancing ? "opacity-60 cursor-not-allowed border-red-900/40" : "border-red-900/40 hover:bg-red-950/40 hover:border-red-700/60"
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                Forgot it
-              </button>
-              <button onClick={handleGotIt} disabled={isAdvancing}
-                className={`flex-1 py-4 bg-neutral-900 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
-                  isAdvancing && (feedback === "got" || feedback === "gold") ? "border-emerald-500 bg-emerald-950/30 scale-[0.98] text-emerald-400" :
-                  isAdvancing ? "opacity-60 cursor-not-allowed border-emerald-900/40 text-emerald-400" :
-                  currentWord.sessionProgress === 4 ? "text-emerald-400 border-emerald-900/40 hover:text-yellow-300 hover:border-yellow-500/70 hover:bg-yellow-950/20 hover:shadow-[0_0_14px_3px_rgba(250,204,21,0.3)]" :
-                  "text-emerald-400 border-emerald-900/40 hover:bg-emerald-950/40 hover:border-emerald-700/60"
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                Got it
-              </button>
-            </div>
+                {/* Action buttons */}
+                <div className="flex gap-3 mt-4">
+                  <button onClick={handleForgotIt} disabled={isAdvancing}
+                    className={`flex-1 py-4 bg-neutral-900 text-red-400 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
+                      isAdvancing && feedback === "forgot" ? "border-red-500 bg-red-950/30 scale-[0.98]" : isAdvancing ? "opacity-60 cursor-not-allowed border-red-900/40" : "border-red-900/40 hover:bg-red-950/40 hover:border-red-700/60"
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    Forgot it
+                  </button>
+                  <button onClick={handleGotIt} disabled={isAdvancing}
+                    className={`flex-1 py-4 bg-neutral-900 rounded-xl font-bold transition-all duration-200 border flex items-center justify-center gap-2 ${
+                      isAdvancing && (feedback === "got" || feedback === "gold") ? "border-emerald-500 bg-emerald-950/30 scale-[0.98] text-emerald-400" :
+                      isAdvancing ? "opacity-60 cursor-not-allowed border-emerald-900/40 text-emerald-400" :
+                      currentWord.sessionProgress === 4 ? "text-emerald-400 border-emerald-900/40 hover:text-yellow-300 hover:border-yellow-500/70 hover:bg-yellow-950/20 hover:shadow-[0_0_14px_3px_rgba(250,204,21,0.3)]" :
+                      "text-emerald-400 border-emerald-900/40 hover:bg-emerald-950/40 hover:border-emerald-700/60"
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Got it
+                  </button>
+                </div>
 
-            {/* Learned it button */}
-            <button onClick={handleRemove} disabled={isAdvancing}
-              className={`w-full mt-3 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                isAdvancing ? "opacity-60 cursor-not-allowed text-yellow-500/60 bg-neutral-950 border border-yellow-900/30" :
-                currentWord.sessionProgress >= 5 ? "text-yellow-400 bg-yellow-950/30 border border-yellow-600/60 shadow-[0_0_16px_3px_rgba(250,204,21,0.35)] hover:shadow-[0_0_22px_5px_rgba(250,204,21,0.45)] hover:text-yellow-300 hover:border-yellow-500/80 hover:bg-yellow-950/40" :
-                "text-yellow-500/80 bg-neutral-950 border border-yellow-900/30 hover:text-yellow-400 hover:border-yellow-600/60 hover:bg-yellow-950/20 hover:shadow-[0_0_12px_2px_rgba(250,204,21,0.25)]"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-              Learned it{currentWord.sessionProgress >= 5 ? " ⭐" : ""}
-            </button>
+                {/* Learned it button */}
+                <button onClick={handleRemove} disabled={isAdvancing}
+                  className={`w-full mt-3 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                    isAdvancing ? "opacity-60 cursor-not-allowed text-yellow-500/60 bg-neutral-950 border border-yellow-900/30" :
+                    currentWord.sessionProgress >= 5 ? "text-yellow-400 bg-yellow-950/30 border border-yellow-600/60 shadow-[0_0_16px_3px_rgba(250,204,21,0.35)] hover:shadow-[0_0_22px_5px_rgba(250,204,21,0.45)] hover:text-yellow-300 hover:border-yellow-500/80 hover:bg-yellow-950/40" :
+                    "text-yellow-500/80 bg-neutral-950 border border-yellow-900/30 hover:text-yellow-400 hover:border-yellow-600/60 hover:bg-yellow-950/20 hover:shadow-[0_0_12px_2px_rgba(250,204,21,0.25)]"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  Learned it{currentWord.sessionProgress >= 5 ? " ⭐" : ""}
+                </button>
 
-            {/* Dot indicators */}
-            <div className="flex justify-center gap-2 mt-6">
-              {sessionWords.map((w, i) => {
-                const isCurrent = i === currentIndex;
-                const color = getProgressColor(w.sessionProgress);
-                const glow = isCurrent ? getProgressGlow(w.sessionProgress) : "";
-                return <div key={w.id} className={`rounded-full transition-all duration-300 ${color} ${glow} ${isCurrent ? "w-3 h-3" : "w-2 h-2"}`} />;
-              })}
-            </div>
+                {/* Dot indicators */}
+                <div className="flex justify-center gap-2 mt-6">
+                  {sessionWords.map((w, i) => {
+                    const isCurrent = i === currentIndex;
+                    const color = getProgressColor(w.sessionProgress);
+                    const glow = isCurrent ? getProgressGlow(w.sessionProgress) : "";
+                    return <div key={w.id} className={`rounded-full transition-all duration-300 ${color} ${glow} ${isCurrent ? "w-3 h-3" : "w-2 h-2"}`} />;
+                  })}
+                </div>
 
-            <div className="mt-10 text-center">
-              <button onClick={() => { clearSession(); startNewSession(hskLevels); }} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
-                Start New Session
-              </button>
-            </div>
+                <div className="mt-10 text-center">
+                  <button onClick={() => { clearSession(); startNewSession(hskLevels); }} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
+                    Start New Session
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
 

@@ -24,39 +24,25 @@ function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
     return "text-gray-400 hover:text-white hover:bg-neutral-900";
   }
   switch (level) {
-    case 1:
-      return "bg-emerald-600 text-white";
-    case 2:
-      return "bg-blue-600 text-white";
-    case 3:
-      return "bg-purple-600 text-white";
-    case 4:
-      return "bg-orange-600 text-white";
-    case 5:
-      return "bg-pink-600 text-white";
-    case 6:
-      return "bg-cyan-600 text-white";
-    default:
-      return "bg-red-600 text-white";
+    case 1: return "bg-emerald-600 text-white";
+    case 2: return "bg-blue-600 text-white";
+    case 3: return "bg-purple-600 text-white";
+    case 4: return "bg-orange-600 text-white";
+    case 5: return "bg-pink-600 text-white";
+    case 6: return "bg-cyan-600 text-white";
+    default: return "bg-red-600 text-white";
   }
 }
 
 function getLockedHskButtonClasses(level: HskLevel): string {
   switch (level) {
-    case 1:
-      return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2:
-      return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3:
-      return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4:
-      return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5:
-      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6:
-      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default:
-      return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
+    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
+    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
+    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
+    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
+    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
+    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
 }
 
@@ -109,14 +95,8 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
-  const [quizKey, setQuizKey] = useState(0); // to regenerate questions when filters change
+  const [quizKey, setQuizKey] = useState(0);
 
-  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
-  // Still: show disabled level selectors for locked / not-yet-available levels.
-
-  // NOTE: allWords is already access-filtered by App.tsx.
-  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
-  // not currently accessible (because they were filtered out).
   const accessibleLevels = useMemo(() => {
     const levels = new Set<HskLevel>();
     allWords.forEach((w) => {
@@ -127,21 +107,17 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
 
   const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
-  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
-
-  // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
 
   const toggleLevel = (level: HskLevel) => {
     if (!isLevelEnabled(level)) return;
     const next = new Set(selectedLevels);
     if (next.has(level)) {
-      if (next.size > 1) next.delete(level);
+      next.delete(level);
     } else {
       next.add(level);
     }
     setSelectedLevels(next);
-    // Reset quiz when filter changes
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setScore(0);
@@ -149,9 +125,13 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     setQuizKey((k) => k + 1);
   };
 
-  const selectAllLevels = () => {
-    setSelectedLevels(new Set(shownLevels));
-    // Reset quiz when filter changes
+  const toggleAllLevels = () => {
+    const allAccessibleSelected = accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l));
+    if (allAccessibleSelected) {
+      setSelectedLevels(new Set());
+    } else {
+      setSelectedLevels(new Set(accessibleLevels));
+    }
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setScore(0);
@@ -159,7 +139,6 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     setQuizKey((k) => k + 1);
   };
 
-  // Filter words by selected HSK levels
   const filteredWords = useMemo(() => {
     return allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
   }, [allWords, selectedLevels]);
@@ -179,7 +158,6 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
 
       return { word, options, correctIndex };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredWords, quizKey]);
 
   const currentQuestion = questions[currentIndex];
@@ -212,19 +190,18 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
 
-  // HSK Filter component - always rendered
   const HskFilterButtons = () => (
-    <div className="mb-5 flex justify-center">
+    <div className="mb-6 flex justify-center">
       <div className="max-w-full">
-        <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
+        <div className="flex flex-wrap justify-center gap-2">
           <button
-            onClick={selectAllLevels}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-              allLevelsSelected
-                ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-                : "text-gray-400 hover:text-white hover:bg-neutral-900"
+            onClick={toggleAllLevels}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
+              accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l))
+                ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
+                : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
             }`}
-            title="Select all available levels"
+            title="Toggle all available levels"
           >
             All
           </button>
@@ -243,12 +220,12 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
                   toggleLevel(level);
                 }}
                 title={enabled ? undefined : "Sign in / purchase to unlock this level"}
-                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
                   !enabled
                     ? `${getLockedHskButtonClasses(level)}`
                     : selected
-                    ? getHskButtonClasses(level, true)
-                    : getHskButtonClasses(level, false)
+                    ? `${getHskButtonClasses(level, true)} border-transparent`
+                    : `${getHskButtonClasses(level, false)} border-neutral-800`
                 }`}
               >
                 {!enabled ? "🔒 " : ""}HSK {level}
@@ -260,19 +237,29 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     </div>
   );
 
-  // Not enough words state
-  if (filteredWords.length < 4) {
+  if (selectedLevels.size === 0) {
     return (
       <div className="max-w-lg mx-auto">
         <HskFilterButtons />
-        <div className="text-center py-16 text-gray-400">
-          Need at least 4 words to create a quiz. Try enabling more HSK levels above.
+        <div className="text-center py-16">
+          <div className="text-5xl mb-4">👆</div>
+          <p className="text-gray-400 text-lg">Please select at least one HSK level.</p>
         </div>
       </div>
     );
   }
 
-  // Quiz complete state
+  if (filteredWords.length < 4) {
+    return (
+      <div className="max-w-lg mx-auto">
+        <HskFilterButtons />
+        <div className="text-center py-16 text-gray-400">
+          Need at least 4 words to create a quiz. Try enabling more HSK levels.
+        </div>
+      </div>
+    );
+  }
+
   if (isComplete) {
     const percentage = Math.round((score / answered) * 100);
     return (
@@ -303,7 +290,6 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
     <div className="max-w-lg mx-auto">
       <HskFilterButtons />
 
-      {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between text-sm text-gray-400 mb-2">
           <span>
@@ -319,9 +305,7 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
         </div>
       </div>
 
-      {/* Question */}
       <div className="bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-800 p-8 text-center mb-6">
-        {/* HSK badge */}
         <div className="flex justify-center mb-4">
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentQuestion.word.hskLevel)}`}>
             HSK {currentQuestion.word.hskLevel}
@@ -330,7 +314,6 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
         
         <p className="text-sm text-gray-500 mb-4">What does this mean?</p>
         
-        {/* Hanzi with hover/tap pinyin */}
         <div className="flex items-end gap-1 justify-center mb-2">
           {currentQuestion.word.hanzi.split("").map((char, i) => (
             <HoverCharacter
@@ -348,7 +331,6 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
         </p>
       </div>
 
-      {/* Options */}
       <div className="space-y-3">
         {currentQuestion.options.map((option, idx) => {
           let btnClass =
