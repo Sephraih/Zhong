@@ -29,13 +29,13 @@ export function loadCachedSupabaseVocabulary(): CachedVocab | null {
     if (!parsed?.words?.length) return null;
     if (!parsed.cachedAt) return null;
     if (Date.now() - parsed.cachedAt > CACHE_TTL_MS) return null;
-          // Ensure new fields exist (handle old cache format)
+    // Ensure new fields exist (handle old cache format)
     return {
       ...parsed,
       hsk3Count: parsed.hsk3Count ?? 0,
       hsk4Count: parsed.hsk4Count ?? 0,
-      hsk5Count: (parsed as any).hsk5Count ?? 0,
-      hsk6Count: (parsed as any).hsk6Count ?? 0,
+      hsk5Count: (parsed as CachedVocab).hsk5Count ?? 0,
+      hsk6Count: (parsed as CachedVocab).hsk6Count ?? 0,
     } as CachedVocab;
   } catch {
     return null;
@@ -165,7 +165,7 @@ function getCategory(wordType: string | null, english: string, hskLevel: number)
 
 export function buildFallbackVocabulary(): VocabWord[] {
   return FALLBACK_DATA.map((item, index) => {
-    const hskLevel = (item.hsk_level >= 1 && item.hsk_level <= 4 ? item.hsk_level : 1) as 1 | 2 | 3 | 4;
+    const hskLevel = (item.hsk_level >= 1 && item.hsk_level <= 6 ? item.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6;
     const examples = item.examples.slice(0, 3).map((ex) => ({
       chinese: ex.chinese,
       pinyinWords: buildPinyinWords(ex.chinese, ex.pinyin),

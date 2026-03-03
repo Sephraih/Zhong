@@ -192,8 +192,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
               );
             })}
           </div>
-          
-          {/* Coming soon levels removed */}
         </div>
 
         {/* Learning Progress */}
@@ -628,7 +626,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 <ul className="mt-3 space-y-1.5 text-sm text-gray-400">
                   <li>• Your profile and purchases will be removed.</li>
                   <li>• Your learned progress will be deleted.</li>
-                  <li>• You’ll need to sign up again to use cloud sync.</li>
+                  <li>• You'll need to sign up again to use cloud sync.</li>
                 </ul>
               </div>
 

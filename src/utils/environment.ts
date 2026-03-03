@@ -1,54 +1,47 @@
-// Environment detection utilities
+/**
+ * Detects if we're running in a sandboxed environment (e.g., iframe preview)
+ * where certain features like localStorage, fetch, etc. may be restricted.
+ */
 
-// Detect if we're running in a sandboxed iframe (like arena.ai)
-export function isSandboxed(): boolean {
+let cachedIsSandboxed: boolean | null = null;
+
+export function detectSandboxed(): boolean {
+  // Check if localStorage is accessible
   try {
-    // Check if we're in an iframe
-    if (typeof window === "undefined") return true;
-    if (window.self !== window.top) return true;
-    
-    // Check if fetch is available and working
-    if (typeof fetch !== "function") return true;
-    
-    // Check for common sandbox restrictions
-    try {
-      // Try to access localStorage - some sandboxes block this
-      localStorage.setItem("__sandbox_test__", "1");
-      localStorage.removeItem("__sandbox_test__");
-    } catch {
-      // localStorage blocked - likely a sandbox
-      return true;
-    }
-    
-    return false;
+    const testKey = "__sandbox_test__";
+    localStorage.setItem(testKey, "1");
+    localStorage.removeItem(testKey);
   } catch {
     return true;
   }
-}
 
-// Check if network features should be enabled
-export function isNetworkAvailable(): boolean {
+  // Check if we're in a cross-origin iframe
   try {
-    // In sandbox mode, disable all network features
-    if (isSandboxed()) return false;
-    
-    // Check if we have Supabase config
-    const hasSupabase = Boolean(
-      import.meta.env?.VITE_SUPABASE_URL && 
-      import.meta.env?.VITE_SUPABASE_ANON_KEY
-    );
-    
-    return hasSupabase;
+    if (window.self !== window.top) {
+      // We're in an iframe - check if we can access parent
+      try {
+        // This will throw if cross-origin
+        const _ = window.parent.location.href;
+        void _;
+      } catch {
+        // Cross-origin iframe = likely sandboxed preview
+        return true;
+      }
+    }
   } catch {
-    return false;
+    return true;
   }
+
+  return false;
 }
 
-// Cache the sandbox check result
-let _isSandboxed: boolean | null = null;
 export function getCachedIsSandboxed(): boolean {
-  if (_isSandboxed === null) {
-    _isSandboxed = isSandboxed();
+  if (cachedIsSandboxed === null) {
+    cachedIsSandboxed = detectSandboxed();
   }
-  return _isSandboxed;
+  return cachedIsSandboxed;
+}
+
+export function resetSandboxCache(): void {
+  cachedIsSandboxed = null;
 }

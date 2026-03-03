@@ -253,6 +253,38 @@ function AppContent() {
     [accessInfo]
   );
 
+  // Auth modal state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
+
+  const openAuthModal = (mode: "login" | "signup") => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  };
+
+  // UI state
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewMode());
+
+  const navigate = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+
+    // Persist mode for refresh (fallback) and push a clean URL path (SEO-friendly)
+    try {
+      storageSetItem("hanyu_view_mode", mode);
+      const nextPath = mode === "home" ? "/" : `/${mode}`;
+      window.history.pushState({}, "", nextPath);
+    } catch {
+      // ignore
+    }
+
+    // Mobile UX: when switching modes, reset scroll position.
+    if (isMobile) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
+    }
+  }, [isMobile]);
+
   const handleLockedLevelClick = useCallback(() => {
     // If level isn't accessible, guide the user appropriately.
     if (!accessInfo.isLoggedIn) {
@@ -261,13 +293,10 @@ function AppContent() {
     }
     // Logged in but locked => show unlock options
     navigate("profile");
-  }, [accessInfo.isLoggedIn]);
+  }, [accessInfo.isLoggedIn, navigate]);
+
   const sigRef = useRef(signature(initial.words));
   const hadSupabaseCacheRef = useRef(initial.source === "supabase");
-
-  // Auth modal state
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
 
   // Mobile: auto-hide header on scroll down, show on scroll up
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -354,8 +383,6 @@ function AppContent() {
     };
   }, [startTransition]);
 
-  // UI state
-  const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewMode());
   const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -447,7 +474,7 @@ function AppContent() {
       }
       return true;
     });
-  }, [vocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
+  }, [visibleVocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
 
   // Reset pagination when the user changes filters/search.
   useEffect(() => {
@@ -461,11 +488,6 @@ function AppContent() {
   const canLoadMore = visibleWords.length < filteredWords.length;
 
   // activeWords is no longer used - FlashcardMode and QuizMode handle their own HSK filtering
-
-  const openAuthModal = (mode: "login" | "signup") => {
-    setAuthModalMode(mode);
-    setAuthModalOpen(true);
-  };
 
   // Sync view mode with browser navigation (back/forward)
   useEffect(() => {
@@ -520,12 +542,12 @@ function AppContent() {
       },
       privacy: {
         title: "Privacy Policy — HamHao",
-        description: "Read HamHao’s Privacy Policy.",
+        description: "Read HamHao's Privacy Policy.",
         path: "/privacy",
       },
       tos: {
         title: "Terms of Service — HamHao",
-        description: "Read HamHao’s Terms of Service.",
+        description: "Read HamHao's Terms of Service.",
         path: "/tos",
       },
       "auth-callback": {
@@ -545,30 +567,13 @@ function AppContent() {
     if (canonical) canonical.setAttribute("href", `${base}${next.path}`);
   }, [viewMode]);
 
-  const navigate = (mode: ViewMode) => {
+  const navigateWithLegalReturn = useCallback((mode: ViewMode) => {
     // If navigating to legal pages, remember the current mode for the Back button.
     if (mode === "privacy" || mode === "tos") {
       setLegalReturnMode(viewMode);
     }
-
-    setViewMode(mode);
-
-    // Persist mode for refresh (fallback) and push a clean URL path (SEO-friendly)
-    try {
-      storageSetItem("hanyu_view_mode", mode);
-      const nextPath = mode === "home" ? "/" : `/${mode}`;
-      window.history.pushState({}, "", nextPath);
-    } catch {
-      // ignore
-    }
-
-    // Mobile UX: when switching modes, reset scroll position.
-    if (isMobile) {
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      });
-    }
-  };
+    navigate(mode);
+  }, [viewMode, navigate]);
 
   // Show background on all modes except home (landing page has its own background)
   const showAppBackground = viewMode !== "home";
@@ -592,7 +597,7 @@ function AppContent() {
             {/* Logo */}
             <button
               onClick={() => {
-                navigate("home");
+                navigateWithLegalReturn("home");
               }}
               className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
@@ -624,7 +629,7 @@ function AppContent() {
               ].map((mode) => (
                 <button
                   key={mode.id}
-                  onClick={() => navigate(mode.id)}
+                  onClick={() => navigateWithLegalReturn(mode.id)}
                   className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
@@ -643,11 +648,11 @@ function AppContent() {
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Desktop: full auth header */}
               <div className="hidden sm:block">
-                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
+                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigateWithLegalReturn("profile")} />
               </div>
               
               {/* Mobile: small user icon */}
-              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
+              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigateWithLegalReturn("profile")} />
             </div>
           </div>
         </div>
@@ -688,7 +693,7 @@ function AppContent() {
               {/* Right: CTA */}
               <div className="flex items-center gap-2 ml-auto">
                 <button
-                  onClick={() => navigate("browse")}
+                  onClick={() => navigateWithLegalReturn("browse")}
                   className="px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
                   title="Browse your available words"
                 >
@@ -705,7 +710,7 @@ function AppContent() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => navigate("profile")}
+                    onClick={() => navigateWithLegalReturn("profile")}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
                     title="View unlock options and your progress"
                   >
@@ -883,19 +888,19 @@ function AppContent() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
+        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigateWithLegalReturn(mode)} />}
 
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
-            onBack={() => navigate("browse")}
+            onBack={() => navigateWithLegalReturn("browse")}
           />
         )}
 
-        {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
-        {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "privacy" && <PrivacyPage onBack={() => navigateWithLegalReturn(legalReturnMode)} />}
+        {viewMode === "tos" && <TosPage onBack={() => navigateWithLegalReturn(legalReturnMode)} />}
         {viewMode === "auth-callback" && <AuthCallbackPage />}
 
         {viewMode === "browse" && (
@@ -1173,7 +1178,7 @@ function AppContent() {
       <footer className={`border-t border-neutral-800 mt-16 relative z-10 ${showAppBackground ? "bg-neutral-950/80 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <p className="text-sm text-gray-500">🇨🇳 HamHao — Chinese Language Learning — HSK 1-4 Vocabulary</p>
+            <p className="text-sm text-gray-500">🇨🇳 HamHao — Chinese Language Learning — HSK 1-6 Vocabulary</p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedAvailableCount}/{availableTotal} learned
               {dataSource === "fallback" && " • ⚡ Preview mode"}
@@ -1181,14 +1186,14 @@ function AppContent() {
 
             <div className="mt-3 flex items-center justify-center gap-4 text-xs">
               <button
-                onClick={() => navigate("tos")}
+                onClick={() => navigateWithLegalReturn("tos")}
                 className="text-gray-500 hover:text-gray-200 transition-colors"
               >
                 Terms
               </button>
               <span className="text-gray-700">•</span>
               <button
-                onClick={() => navigate("privacy")}
+                onClick={() => navigateWithLegalReturn("privacy")}
                 className="text-gray-500 hover:text-gray-200 transition-colors"
               >
                 Privacy
@@ -1206,7 +1211,7 @@ function AppContent() {
       />
 
       {/* Storage consent gate (shown on first visit until user makes a choice) */}
-      <StorageNotice onOpenPrivacy={() => navigate("privacy")} onOpenTos={() => navigate("tos")} />
+      <StorageNotice onOpenPrivacy={() => navigateWithLegalReturn("privacy")} onOpenTos={() => navigateWithLegalReturn("tos")} />
     </div>
   );
 }

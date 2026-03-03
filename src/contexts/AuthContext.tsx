@@ -512,7 +512,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as any).error || "Failed to export data");
+        throw new Error((body as Record<string, string>).error || "Failed to export data");
       }
 
       const blob = await res.blob();

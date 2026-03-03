@@ -63,7 +63,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
         });
         // Supabase email confirmation is enabled: user must confirm via email.
         setSuccessMessage(
-          "Check your email to confirm your account. After you click the confirmation link, you’ll be redirected to your profile."
+          "Check your email to confirm your account. After you click the confirmation link, you'll be redirected to your profile."
         );
         // Do NOT auto-redirect here. User will be redirected by /auth/callback after confirming.
       }
