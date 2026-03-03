@@ -120,32 +120,19 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
   const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
+  // default: select all levels that are currently present
+  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(shownLevels));
+
+  const allLevelsSelected = shownLevels.every((l) => selectedLevels.has(l));
+
   // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
-  const enabledLevels = useMemo(() => shownLevels.filter(isLevelEnabled), [shownLevels, accessibleLevels]);
-
-  // default: select all enabled levels
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(enabledLevels));
-
-  // If enabledLevels changes (e.g. after vocab loads), ensure selection isn't stuck empty
-  // and doesn't contain only locked levels.
-  useEffect(() => {
-    setSelectedLevels((prev) => {
-      const next = new Set(Array.from(prev).filter((l) => enabledLevels.includes(l)));
-      if (next.size === 0) {
-        return new Set(enabledLevels);
-      }
-      return next;
-    });
-  }, [enabledLevels]);
-
-  const allEnabledSelected = enabledLevels.length > 0 && enabledLevels.every((l) => selectedLevels.has(l)) && selectedLevels.size === enabledLevels.length;
 
   const toggleLevel = (level: HskLevel) => {
     if (!isLevelEnabled(level)) return;
     const next = new Set(selectedLevels);
     if (next.has(level)) {
-      next.delete(level);
+      if (next.size > 1) next.delete(level);
     } else {
       next.add(level);
     }
@@ -154,8 +141,8 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     setIsFlipped(false);
   };
 
-  const toggleAllLevels = () => {
-    setSelectedLevels(allEnabledSelected ? new Set() : new Set(enabledLevels));
+  const selectAllLevels = () => {
+    setSelectedLevels(new Set(shownLevels));
     setCurrentIndex(0);
     setIsFlipped(false);
   };
@@ -226,15 +213,15 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   const HskFilterButtons = () => (
     <div className="mb-5 flex justify-center">
       <div className="max-w-full">
-        <div className="flex items-center gap-0.5 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap scrollbar-hide">
+        <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-xl p-1 overflow-x-auto whitespace-nowrap flex-nowrap">
           <button
-            onClick={toggleAllLevels}
-            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-              allEnabledSelected
+            onClick={selectAllLevels}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              allLevelsSelected
                 ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
                 : "text-gray-400 hover:text-white hover:bg-neutral-900"
             }`}
-            title={allEnabledSelected ? "Clear all levels" : "Select all available levels"}
+            title="Select all available levels"
           >
             All
           </button>
@@ -253,7 +240,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
                   toggleLevel(level);
                 }}
                 title={enabled ? undefined : "Sign in / purchase to unlock this level"}
-                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                   !enabled
                     ? `${getLockedHskButtonClasses(level)}`
                     : selected

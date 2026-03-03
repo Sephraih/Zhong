@@ -13,7 +13,7 @@ interface PracticeModeProps {
   onLockedLevelClick?: () => void;
 }
 
-// Multi-select selected levels (when not using "All")
+// Multi-select: empty array = all levels, otherwise contains selected level numbers
 type HskLevelFilter = number[];
 type PracticeDirection = "zh-en" | "en-zh";
 
