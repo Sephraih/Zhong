@@ -110,24 +110,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Try to parse response as JSON
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.warn("Auth /me response not JSON, keeping current state");
+          return null;
+        }
+        
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
         setPurchasedLevels(data.purchased_levels || []);
         console.log("Auth refreshed. Tier:", data.account_tier, "Levels:", data.purchased_levels);
         return data;
-      } else {
+      } else if (response.status === 401) {
+        // Only clear auth on explicit 401 Unauthorized
+        // This means the token is invalid/expired
+        console.log("Auth token invalid (401), clearing auth state");
         setAccessToken(null);
         storageRemoveItem("hanyu_auth_token");
         setUser(null);
         setAccountTier('free');
         setPurchasedLevels([]);
+      } else {
+        // For other errors (500, 503, etc.), keep current state
+        // The user might still be logged in, just a temporary server issue
+        console.warn(`Auth check failed with status ${response.status}, keeping current state`);
       }
-    } catch {
-      console.error("Failed to fetch user");
-      setUser(null);
-      setAccountTier('free');
-      setPurchasedLevels([]);
+    } catch (err) {
+      // Network error - keep current state, don't log out the user
+      console.warn("Failed to fetch user (network error), keeping current state:", err);
     }
     return null;
   }, []);
