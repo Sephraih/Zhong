@@ -23,14 +23,14 @@ type StripePrices = {
 };
 
 const FALLBACK_LEVEL_PRICES: Record<number, string> = {
-  2: "$4.99",
-  3: "$6.99",
-  4: "$9.99",
-  5: "$12.99",
-  6: "$14.99",
+  2: "$3.99",
+  3: "$3.99",
+  4: "$3.99",
+  5: "$3.99",
+  6: "$3.99",
 };
 
-const FALLBACK_PREMIUM_PRICE = "$29.99";
+const FALLBACK_PREMIUM_PRICE = "$9.99";
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
   const { user, accountTier, purchasedLevels, purchaseLevel, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
