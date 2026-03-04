@@ -1,45 +1,138 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Admin client for operations that need service role (delete account, etc.)
+// Rate limiting in-memory store (resets on cold start, but provides basic protection)
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 10; // max requests per window
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const record = rateLimitStore.get(key);
+  
+  if (!record || now > record.resetTime) {
+    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return false;
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+  
+  record.count++;
+  return false;
+}
+
+function getClientIp(req: VercelRequest): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string') {
+    return realIp;
+  }
+  return 'unknown';
+}
+
+// Validate environment variables
+function validateEnv(): { valid: boolean; error?: string } {
+  if (!process.env.SUPABASE_URL) return { valid: false, error: 'Server misconfigured' };
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return { valid: false, error: 'Server misconfigured' };
+  return { valid: true };
+}
+
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Create a client with the user's token for user-scoped operations
-// This is required for email change to trigger the confirmation flow
-function createUserClient(token: string) {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    }
-  );
-}
-
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
-  const token = authHeader.replace('Bearer ', '');
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  return { user, token };
+  
+  // Validate bearer token format
+  if (!authHeader.startsWith('Bearer ')) return null;
+  
+  const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+  
+  // Basic token format validation (JWT has 3 parts)
+  if (!token || token.split('.').length !== 3) return null;
+  
+  try {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) return null;
+    return { user, token };
+  } catch {
+    return null;
+  }
+}
+
+// Validate email format
+function isValidEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  if (email.length > 254) return false; // RFC 5321
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Validate password
+function isValidPassword(password: string): boolean {
+  if (!password || typeof password !== 'string') return false;
+  if (password.length < 6 || password.length > 128) return false;
+  return true;
+}
+
+// Sanitize error messages to avoid leaking sensitive info
+function sanitizeErrorMessage(error: any): string {
+  const message = error?.message || 'An error occurred';
+  
+  // Map known error messages to safe alternatives
+  if (message.includes('Invalid login credentials')) {
+    return 'Invalid email or password';
+  }
+  if (message.includes('User not found')) {
+    return 'Invalid email or password';
+  }
+  if (message.includes('Email rate limit exceeded')) {
+    return 'Too many requests. Please try again later.';
+  }
+  
+  // Generic fallback for unknown errors
+  if (message.includes('database') || message.includes('query') || message.includes('SQL')) {
+    return 'An error occurred. Please try again.';
+  }
+  
+  return message;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
+  // Validate environment
+  const envCheck = validateEnv();
+  if (!envCheck.valid) {
+    console.error('Environment validation failed');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
+  // CORS headers - restrict to known origins
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'https://hamhao.com',
+    'https://www.hamhao.com',
+  ].filter(Boolean);
+  
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (process.env.NODE_ENV !== 'production') {
+    // Allow localhost in development
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+  
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -49,25 +142,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { action, currentPassword, newEmail, newPassword } = req.body || {};
+  // Rate limiting
+  const clientIp = getClientIp(req);
+  if (isRateLimited(`account:${clientIp}`)) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
 
-  if (!action) {
+  // Validate request body exists
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+
+  const { action, currentPassword, newEmail, newPassword } = req.body;
+
+  // Validate action
+  if (!action || typeof action !== 'string') {
     return res.status(400).json({ error: 'Action is required' });
   }
 
-  // Handle logout (no auth required)
+  const validActions = ['logout', 'change-email', 'change-password', 'delete-account'];
+  if (!validActions.includes(action)) {
+    return res.status(400).json({ error: 'Invalid action' });
+  }
+
+  // Handle logout (no auth required, but harmless)
   if (action === 'logout') {
-    try {
-      await supabaseAdmin.auth.signOut();
-      return res.json({ success: true, message: 'Logged out successfully' });
-    } catch (error) {
-      console.error('Logout error:', error);
-      return res.status(500).json({ error: 'Logout failed' });
-    }
+    // We don't actually need to do anything server-side for JWT logout
+    // The client just needs to delete their token
+    return res.json({ success: true, message: 'Logged out successfully' });
   }
 
   // All other actions require authentication
-  const authResult = await getUserFromToken(req.headers.authorization);
+  const authResult = await getUserFromToken(req.headers.authorization as string);
   if (!authResult) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -76,99 +182,110 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Verify current password for sensitive actions
   if (['change-email', 'change-password', 'delete-account'].includes(action)) {
-    if (!currentPassword) {
+    if (!currentPassword || typeof currentPassword !== 'string') {
       return res.status(400).json({ error: 'Current password is required' });
     }
 
-    // Verify password by attempting to sign in
-    const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-      email: user.email!,
-      password: currentPassword,
-    });
+    if (!isValidPassword(currentPassword)) {
+      return res.status(400).json({ error: 'Invalid password format' });
+    }
 
-    if (signInError) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+    // Verify password by attempting to sign in
+    // Rate limit password verification separately
+    if (isRateLimited(`password:${user.id}`)) {
+      return res.status(429).json({ error: 'Too many password attempts. Please try again later.' });
+    }
+
+    try {
+      const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+        email: user.email!,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        // Don't reveal whether email exists
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return res.status(401).json({ error: 'Password verification failed' });
     }
   }
 
   try {
     switch (action) {
       case 'change-email': {
-        if (!newEmail) {
+        if (!newEmail || typeof newEmail !== 'string') {
           return res.status(400).json({ error: 'New email is required' });
         }
 
-        // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(newEmail)) {
+        const trimmedEmail = newEmail.trim().toLowerCase();
+
+        if (!isValidEmail(trimmedEmail)) {
           return res.status(400).json({ error: 'Invalid email format' });
         }
 
-        // Check if new email is same as current
-        if (newEmail.toLowerCase() === user.email?.toLowerCase()) {
+        if (trimmedEmail === user.email?.toLowerCase()) {
           return res.status(400).json({ error: 'New email must be different from current email' });
         }
 
-        // Check if new email is already in use
+        // Check if email is already in use
         const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
         const emailInUse = existingUsers?.users?.some(
-          (u) => u.email?.toLowerCase() === newEmail.toLowerCase() && u.id !== user.id
+          u => u.email?.toLowerCase() === trimmedEmail && u.id !== user.id
         );
+        
         if (emailInUse) {
-          return res.status(400).json({ error: 'This email is already in use' });
+          // Don't reveal that email is in use - just say "unable to change"
+          return res.status(400).json({ error: 'Unable to change to this email address' });
         }
 
-        // Get the redirect URL for the confirmation email
-        const proto = (req.headers["x-forwarded-proto"] as string) || "https";
-        const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
-        const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
-        const redirectTo = baseUrl ? `${baseUrl}/auth/callback` : undefined;
+        // Determine redirect URL
+        const frontendUrl = process.env.FRONTEND_URL || 'https://hamhao.com';
 
-        // IMPORTANT: Use the user's own client (not admin) to call updateUser
-        // This triggers Supabase's proper email change confirmation flow:
-        // 1. Sends a confirmation link to the NEW email address
-        // 2. If "Secure email change" is enabled in Supabase, also sends a notification to the OLD email
-        // 3. The email is NOT changed until the user clicks the confirmation link
-        const userClient = createUserClient(token);
-        
-        const { error: updateError } = await userClient.auth.updateUser(
-          { email: newEmail },
-          { emailRedirectTo: redirectTo }
-        );
+        // Use the direct Supabase Auth API to trigger email change
+        // This properly sends confirmation emails
+        const response = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          },
+          body: JSON.stringify({ 
+            email: trimmedEmail,
+            data: {
+              email_change_redirect_to: `${frontendUrl}/auth/callback`
+            }
+          }),
+        });
 
-        if (updateError) {
-          console.error('Email update error:', updateError);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Email change API error:', errorData);
           
-          // Handle specific error cases
-          if (updateError.message.includes('already registered') || 
-              updateError.message.includes('already been registered')) {
-            return res.status(400).json({ error: 'This email is already in use' });
+          if (errorData.msg?.includes('rate limit') || errorData.error?.includes('rate limit')) {
+            return res.status(429).json({ error: 'Too many email change requests. Please try again later.' });
           }
           
-          return res.status(400).json({ error: updateError.message });
+          return res.status(400).json({ error: sanitizeErrorMessage(errorData) });
         }
 
-        // Log the email change request (for security audit)
-        console.log(`📧 Email change confirmation sent for user ${user.id}: ${user.email} → ${newEmail}`);
-
-        // Note: We do NOT update the profiles table here!
-        // The email in profiles should only be updated AFTER the user confirms
-        // via the email link. The confirmation is handled in AuthCallbackPage
-        // and the email sync happens in api/auth/me.ts
+        console.log(`📧 Email change initiated for user ${user.id}: ${user.email} -> ${trimmedEmail}`);
 
         return res.json({ 
           success: true, 
-          message: 'A confirmation link has been sent to your new email address. Please click the link to complete the change. Your current email will remain active until you confirm.'
+          message: 'A confirmation link has been sent to your new email address. Please click it to complete the change. Your current email will remain active until you confirm.'
         });
       }
 
       case 'change-password': {
-        if (!newPassword) {
+        if (!newPassword || typeof newPassword !== 'string') {
           return res.status(400).json({ error: 'New password is required' });
         }
 
-        if (newPassword.length < 6) {
-          return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        if (!isValidPassword(newPassword)) {
+          return res.status(400).json({ error: 'Password must be between 6 and 128 characters' });
         }
 
         if (newPassword === currentPassword) {
@@ -182,8 +299,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (updateError) {
           console.error('Password update error:', updateError);
-          return res.status(400).json({ error: updateError.message });
+          return res.status(400).json({ error: sanitizeErrorMessage(updateError) });
         }
+
+        console.log(`🔑 Password changed for user ${user.id}`);
 
         return res.json({ 
           success: true, 
@@ -195,16 +314,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`🗑️ Deleting account for user: ${user.id}`);
 
         // Delete user data from tables (cascade should handle most)
-        await supabaseAdmin.from('user_learned_words').delete().eq('user_id', user.id);
-        await supabaseAdmin.from('purchased_levels').delete().eq('user_id', user.id);
-        await supabaseAdmin.from('profiles').delete().eq('id', user.id);
+        const deletePromises = [
+          supabaseAdmin.from('user_learned_words').delete().eq('user_id', user.id),
+          supabaseAdmin.from('purchased_levels').delete().eq('user_id', user.id),
+          supabaseAdmin.from('profiles').delete().eq('id', user.id),
+        ];
+
+        await Promise.allSettled(deletePromises);
 
         // Delete the auth user
         const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
         if (deleteError) {
           console.error('Delete user error:', deleteError);
-          return res.status(500).json({ error: 'Failed to delete account' });
+          return res.status(500).json({ error: 'Failed to delete account. Please contact support.' });
         }
 
         console.log(`✅ Account deleted: ${user.id}`);
@@ -215,10 +338,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       default:
-        return res.status(400).json({ error: `Unknown action: ${action}` });
+        return res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
     console.error('Account action error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
   }
 }

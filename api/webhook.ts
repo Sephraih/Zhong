@@ -17,6 +17,25 @@ export const config = {
   },
 };
 
+// Idempotency check - prevent duplicate processing
+const processedEvents = new Set<string>();
+const MAX_PROCESSED_EVENTS = 1000;
+
+function markEventProcessed(eventId: string): boolean {
+  if (processedEvents.has(eventId)) {
+    return false; // Already processed
+  }
+  
+  // Prevent memory leak
+  if (processedEvents.size >= MAX_PROCESSED_EVENTS) {
+    const firstItem = processedEvents.values().next().value;
+    processedEvents.delete(firstItem);
+  }
+  
+  processedEvents.add(eventId);
+  return true;
+}
+
 async function setUserPremium(userId: string) {
   console.log(`🔧 Upgrading user ${userId} to premium`);
   
@@ -47,7 +66,6 @@ async function setUserPremium(userId: string) {
 async function addPurchasedLevel(userId: string, level: number, paymentId: string) {
   console.log(`🔧 Adding HSK ${level} to user ${userId}`);
   
-  // Insert into purchased_levels
   const { error } = await supabase
     .from('purchased_levels')
     .upsert({
@@ -95,13 +113,16 @@ async function updatePurchaseRecord(
   if (error) {
     console.error('❌ Error updating purchase record:', error);
   } else {
-    console.log(`📝 Updated purchase record for session ${sessionId} to status: ${status}`);
+    console.log(`📝 Updated purchase record: ${sessionId} -> ${status}`);
   }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  
+  // Only allow POST from Stripe
+  res.setHeader('Access-Control-Allow-Origin', 'https://stripe.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
 
@@ -114,10 +135,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Validate webhook secret is configured
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
+    return res.status(500).json({ error: 'Webhook not configured' });
+  }
+
   const sig = (req.headers['stripe-signature'] || req.headers['Stripe-Signature']) as string | string[] | undefined;
   if (!sig) {
     console.error('❌ Missing Stripe signature');
-    return res.status(400).send('Missing signature');
+    return res.status(400).json({ error: 'Missing signature' });
   }
 
   let event: Stripe.Event;
@@ -133,10 +160,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('❌ Webhook signature verification failed:', message);
-    return res.status(400).send(`Webhook Error: ${message}`);
+    return res.status(400).json({ error: 'Invalid signature' });
   }
 
-  console.log(`📩 Webhook received: ${event.type}`);
+  // Idempotency check
+  if (!markEventProcessed(event.id)) {
+    console.log(`⏭️ Skipping already processed event: ${event.id}`);
+    return res.json({ received: true, skipped: true });
+  }
+
+  console.log(`📩 Webhook received: ${event.type} (${event.id})`);
 
   try {
     switch (event.type) {
@@ -146,18 +179,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const productType = session.metadata?.product_type;
         const hskLevel = session.metadata?.hsk_level;
 
-        console.log('💳 Checkout completed for session:', session.id);
-        console.log('👤 User ID:', userId);
-        console.log('📦 Product type:', productType);
-        console.log('📊 HSK Level:', hskLevel);
-        console.log('💰 Amount:', session.amount_total, session.currency);
+        console.log('💳 Checkout completed:', {
+          sessionId: session.id,
+          userId,
+          productType,
+          hskLevel,
+          amount: session.amount_total,
+          currency: session.currency,
+        });
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
           break;
         }
 
-        // Update the purchase record with completed status
+        // Update purchase record
         await updatePurchaseRecord(
           session.id,
           session.payment_intent as string | null,
@@ -173,7 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
 
         if (!existingProfile) {
-          console.log('⚠️ Profile not found, creating one...');
+          console.log('⚠️ Profile not found, creating...');
           const { data: userData } = await supabase.auth.admin.getUserById(userId);
           if (userData?.user) {
             await supabase.from('profiles').insert({
@@ -182,20 +218,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               account_tier: 'free',
               is_premium: false,
             });
-            console.log('✅ Profile created');
           }
         }
 
-        // Handle based on product type
+        // Apply the purchase
         if (productType === 'premium') {
-          console.log('🔄 Processing Premium purchase...');
           await setUserPremium(userId);
         } else if (productType === 'hsk_level' && hskLevel) {
-          console.log(`🔄 Processing HSK ${hskLevel} purchase...`);
-          await addPurchasedLevel(userId, parseInt(hskLevel, 10), session.payment_intent as string);
+          const level = parseInt(hskLevel, 10);
+          if (level >= 2 && level <= 9) {
+            await addPurchasedLevel(userId, level, session.payment_intent as string);
+          } else {
+            console.error('❌ Invalid HSK level:', hskLevel);
+          }
         } else {
-          // Fallback: treat as premium purchase for backwards compatibility
-          console.log('🔄 Processing legacy premium purchase...');
+          // Fallback: treat as premium
+          console.log('🔄 Processing as legacy premium purchase');
           await setUserPremium(userId);
         }
 
@@ -206,30 +244,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log('💰 Payment succeeded:', paymentIntent.id);
-        // The checkout.session.completed event handles the actual logic
+        // checkout.session.completed handles the logic
         break;
       }
 
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log('❌ Payment failed:', paymentIntent.id);
-        console.log('Failure message:', paymentIntent.last_payment_error?.message);
+        console.log('Failure:', paymentIntent.last_payment_error?.message);
         
-        // Try to find and update the purchase record
-        // Note: We may not have the session ID directly, so we use payment_intent_id
+        // Update purchase record if we can find it
         const { data: purchases } = await supabase
           .from('purchases')
           .select('stripe_session_id')
           .eq('stripe_payment_intent_id', paymentIntent.id)
           .limit(1);
           
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            paymentIntent.id,
-            null,
-            'failed'
-          );
+        if (purchases?.[0]) {
+          await updatePurchaseRecord(purchases[0].stripe_session_id, paymentIntent.id, null, 'failed');
         }
         break;
       }
@@ -238,65 +270,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const charge = event.data.object as Stripe.Charge;
         console.log('💸 Charge refunded:', charge.id);
         
-        // Find purchase by payment intent
         const { data: purchases } = await supabase
           .from('purchases')
           .select('stripe_session_id')
           .eq('stripe_payment_intent_id', charge.payment_intent)
           .limit(1);
           
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            charge.payment_intent as string,
-            null,
-            'refunded'
-          );
+        if (purchases?.[0]) {
+          await updatePurchaseRecord(purchases[0].stripe_session_id, charge.payment_intent as string, null, 'refunded');
         }
+        
+        // Note: We don't automatically revoke access on refund
+        // This should be handled manually or via a separate process
         break;
       }
 
       case 'charge.dispute.created': {
         const dispute = event.data.object as Stripe.Dispute;
-        console.log('⚠️ Dispute created:', dispute.id);
+        console.log('⚠️ Dispute created:', dispute.id, 'Reason:', dispute.reason);
         
-        // Find purchase by payment intent
         const { data: purchases } = await supabase
           .from('purchases')
-          .select('stripe_session_id')
+          .select('stripe_session_id, user_id, product_type')
           .eq('stripe_payment_intent_id', dispute.payment_intent)
           .limit(1);
           
-        if (purchases && purchases.length > 0) {
-          await updatePurchaseRecord(
-            purchases[0].stripe_session_id,
-            dispute.payment_intent as string,
-            null,
-            'disputed'
-          );
+        if (purchases?.[0]) {
+          await updatePurchaseRecord(purchases[0].stripe_session_id, dispute.payment_intent as string, null, 'disputed');
           
-          // Log dispute details for chargeback response
-          console.log('📋 Dispute details for chargeback response:');
-          console.log('  Reason:', dispute.reason);
-          console.log('  Amount:', dispute.amount);
-          console.log('  Evidence due by:', new Date((dispute.evidence_details?.due_by || 0) * 1000).toISOString());
-          
-          // Fetch the purchase evidence
-          const { data: evidence } = await supabase
-            .from('purchase_evidence')
-            .select('*')
-            .eq('stripe_session_id', purchases[0].stripe_session_id)
-            .single();
-            
-          if (evidence) {
-            console.log('📝 Evidence for chargeback:', evidence.evidence_summary);
-          }
+          // Log for manual review
+          console.log('📋 Dispute details:', {
+            userId: purchases[0].user_id,
+            productType: purchases[0].product_type,
+            amount: dispute.amount,
+            reason: dispute.reason,
+            evidenceDueBy: dispute.evidence_details?.due_by 
+              ? new Date(dispute.evidence_details.due_by * 1000).toISOString() 
+              : null,
+          });
         }
         break;
       }
+
+      default:
+        console.log(`ℹ️ Unhandled event type: ${event.type}`);
     }
   } catch (error) {
     console.error('Webhook handler error:', error);
+    // Still return 200 to prevent Stripe retries for handler errors
   }
 
   res.json({ received: true });
