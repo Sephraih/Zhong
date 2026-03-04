@@ -1,10 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
+// Admin client for operations that need service role (delete account, etc.)
+const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Create a client with the user's token for user-scoped operations
+// This is required for email change to trigger the confirmation flow
+function createUserClient(token: string) {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    }
+  );
+}
 
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
@@ -12,9 +29,9 @@ async function getUserFromToken(authHeader: string | undefined) {
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser(token);
+  } = await supabaseAdmin.auth.getUser(token);
   if (error || !user) return null;
-  return user;
+  return { user, token };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -41,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Handle logout (no auth required)
   if (action === 'logout') {
     try {
-      await supabase.auth.signOut();
+      await supabaseAdmin.auth.signOut();
       return res.json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
       console.error('Logout error:', error);
@@ -50,10 +67,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // All other actions require authentication
-  const user = await getUserFromToken(req.headers.authorization);
-  if (!user) {
+  const authResult = await getUserFromToken(req.headers.authorization);
+  if (!authResult) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  
+  const { user, token } = authResult;
 
   // Verify current password for sensitive actions
   if (['change-email', 'change-password', 'delete-account'].includes(action)) {
@@ -62,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Verify password by attempting to sign in
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email: user.email!,
       password: currentPassword,
     });
@@ -91,8 +110,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Check if new email is already in use
-        const { data: existingUser } = await supabase.auth.admin.listUsers();
-        const emailInUse = existingUser?.users?.some(
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const emailInUse = existingUsers?.users?.some(
           (u) => u.email?.toLowerCase() === newEmail.toLowerCase() && u.id !== user.id
         );
         if (emailInUse) {
@@ -103,23 +122,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const proto = (req.headers["x-forwarded-proto"] as string) || "https";
         const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
         const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
+        const redirectTo = baseUrl ? `${baseUrl}/auth/callback` : undefined;
 
-        // Use Supabase's built-in email change flow with confirmation
-        // This sends a confirmation link to the NEW email address
-        // Note: Supabase can also send a notification to the old email (configured in dashboard)
-        const { error: updateError } = await supabase.auth.admin.updateUserById(
-          user.id,
-          { 
-            email: newEmail,
-            email_confirm: false, // This triggers confirmation email to new address
-          }
+        // IMPORTANT: Use the user's own client (not admin) to call updateUser
+        // This triggers Supabase's proper email change confirmation flow:
+        // 1. Sends a confirmation link to the NEW email address
+        // 2. If "Secure email change" is enabled in Supabase, also sends a notification to the OLD email
+        // 3. The email is NOT changed until the user clicks the confirmation link
+        const userClient = createUserClient(token);
+        
+        const { error: updateError } = await userClient.auth.updateUser(
+          { email: newEmail },
+          { emailRedirectTo: redirectTo }
         );
 
         if (updateError) {
           console.error('Email update error:', updateError);
           
           // Handle specific error cases
-          if (updateError.message.includes('already registered')) {
+          if (updateError.message.includes('already registered') || 
+              updateError.message.includes('already been registered')) {
             return res.status(400).json({ error: 'This email is already in use' });
           }
           
@@ -127,12 +149,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Log the email change request (for security audit)
-        console.log(`📧 Email change requested for user ${user.id}: ${user.email} → ${newEmail}`);
+        console.log(`📧 Email change confirmation sent for user ${user.id}: ${user.email} → ${newEmail}`);
 
         // Note: We do NOT update the profiles table here!
         // The email in profiles should only be updated AFTER the user confirms
-        // via the email link. This is handled by Supabase's auth hooks or
-        // can be done in the auth-callback page.
+        // via the email link. The confirmation is handled in AuthCallbackPage
+        // and the email sync happens in api/auth/me.ts
 
         return res.json({ 
           success: true, 
@@ -153,7 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'New password must be different from current password' });
         }
 
-        const { error: updateError } = await supabase.auth.admin.updateUserById(
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
           user.id,
           { password: newPassword }
         );
@@ -173,12 +195,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`🗑️ Deleting account for user: ${user.id}`);
 
         // Delete user data from tables (cascade should handle most)
-        await supabase.from('user_learned_words').delete().eq('user_id', user.id);
-        await supabase.from('purchased_levels').delete().eq('user_id', user.id);
-        await supabase.from('profiles').delete().eq('id', user.id);
+        await supabaseAdmin.from('user_learned_words').delete().eq('user_id', user.id);
+        await supabaseAdmin.from('purchased_levels').delete().eq('user_id', user.id);
+        await supabaseAdmin.from('profiles').delete().eq('id', user.id);
 
         // Delete the auth user
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
+        const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
         if (deleteError) {
           console.error('Delete user error:', deleteError);
