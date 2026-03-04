@@ -2,16 +2,37 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
-  : null;
+// Initialize clients lazily to ensure correct env vars are used per-request
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Missing Supabase configuration');
+  }
+  
+  return createClient(url, key);
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getStripeClient(): Stripe | null {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!secretKey) {
+    console.warn('STRIPE_SECRET_KEY not configured');
+    return null;
+  }
+  
+  // Log which environment we're using (test vs live)
+  const isTestMode = secretKey.startsWith('sk_test_');
+  const isLiveMode = secretKey.startsWith('sk_live_');
+  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+  
+  console.log(`🔑 Stripe mode: ${isTestMode ? 'TEST' : isLiveMode ? 'LIVE' : 'UNKNOWN'}, Vercel env: ${vercelEnv}`);
+  
+  return new Stripe(secretKey);
+}
 
-async function getUserFromToken(authHeader: string | undefined) {
+async function getUserFromToken(supabase: ReturnType<typeof createClient>, authHeader: string | undefined) {
   if (!authHeader) return null;
   const token = authHeader.replace('Bearer ', '');
   const {
@@ -22,7 +43,7 @@ async function getUserFromToken(authHeader: string | undefined) {
   return user;
 }
 
-async function getPrices(): Promise<{
+async function getPrices(stripe: Stripe | null): Promise<{
   hsk2: number | null;
   hsk3: number | null;
   hsk4: number | null;
@@ -51,6 +72,8 @@ async function getPrices(): Promise<{
     hsk6: process.env.STRIPE_PRICE_HSK6,
     premium: process.env.STRIPE_PRICE_PREMIUM,
   };
+  
+  console.log(`💰 Fetching prices for: ${Object.entries(priceIds).filter(([, v]) => v).map(([k]) => k).join(', ')}`);
 
   for (const [key, priceId] of Object.entries(priceIds)) {
     if (priceId) {
@@ -58,7 +81,7 @@ async function getPrices(): Promise<{
         const price = await stripe.prices.retrieve(priceId);
         result[key as keyof typeof result] = price.unit_amount;
       } catch (e) {
-        console.error(`Failed to fetch price for ${key}:`, e);
+        console.error(`Failed to fetch price for ${key} (${priceId}):`, e);
       }
     }
   }
@@ -66,7 +89,7 @@ async function getPrices(): Promise<{
   return result;
 }
 
-async function getSubscription(userId: string) {
+async function getSubscription(supabase: ReturnType<typeof createClient>, userId: string) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('account_tier, stripe_customer_id')
@@ -88,7 +111,7 @@ async function getSubscription(userId: string) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers - be permissive
+  // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -104,21 +127,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const action = req.query.action as string | undefined;
+  
+  // Log environment info for debugging
+  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+  console.log(`📍 Billing API - Environment: ${vercelEnv}, Action: ${action || 'prices'}`);
 
   try {
+    // Initialize clients per-request
+    const supabase = getSupabaseClient();
+    const stripe = getStripeClient();
+
     // GET /api/billing?action=subscription - requires auth
     if (action === 'subscription') {
-      const user = await getUserFromToken(req.headers.authorization);
+      const user = await getUserFromToken(supabase, req.headers.authorization);
       if (!user) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const subscription = await getSubscription(user.id);
+      const subscription = await getSubscription(supabase, user.id);
       return res.json(subscription);
     }
 
     // GET /api/billing - returns prices (no auth required)
-    const prices = await getPrices();
+    const prices = await getPrices(stripe);
     return res.json(prices);
   } catch (error) {
     console.error('Billing error:', error);

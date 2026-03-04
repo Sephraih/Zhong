@@ -3,13 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { buffer } from 'micro';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
 // Disable body parsing, need raw body for Stripe signature verification
 export const config = {
   api: {
@@ -17,28 +10,36 @@ export const config = {
   },
 };
 
-// Idempotency check - prevent duplicate processing
-const processedEvents = new Set<string>();
-const MAX_PROCESSED_EVENTS = 1000;
-
-function markEventProcessed(eventId: string): boolean {
-  if (processedEvents.has(eventId)) {
-    return false; // Already processed
+// Initialize clients lazily to ensure correct env vars are used per-request
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Missing Supabase configuration');
   }
   
-  // Prevent memory leak
-  if (processedEvents.size >= MAX_PROCESSED_EVENTS) {
-    const firstItem = processedEvents.values().next().value;
-    if (firstItem) processedEvents.delete(firstItem);
-  }
-  
-  processedEvents.add(eventId);
-  return true;
+  return createClient(url, key);
 }
 
-// ─── Grant Access Functions ───────────────────────────────────────────────────
+function getStripeClient(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!secretKey) {
+    throw new Error('Missing STRIPE_SECRET_KEY');
+  }
+  
+  // Log which environment we're using (test vs live)
+  const isTestMode = secretKey.startsWith('sk_test_');
+  const isLiveMode = secretKey.startsWith('sk_live_');
+  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+  
+  console.log(`🔑 Webhook - Stripe mode: ${isTestMode ? 'TEST' : isLiveMode ? 'LIVE' : 'UNKNOWN'}, Vercel env: ${vercelEnv}`);
+  
+  return new Stripe(secretKey);
+}
 
-async function setUserPremium(userId: string) {
+async function setUserPremium(supabase: ReturnType<typeof createClient>, userId: string) {
   console.log(`🔧 Upgrading user ${userId} to premium`);
   
   // Update auth metadata
@@ -65,9 +66,10 @@ async function setUserPremium(userId: string) {
   }
 }
 
-async function addPurchasedLevel(userId: string, level: number, paymentId: string) {
+async function addPurchasedLevel(supabase: ReturnType<typeof createClient>, userId: string, level: number, paymentId: string) {
   console.log(`🔧 Adding HSK ${level} to user ${userId}`);
   
+  // Insert into purchased_levels
   const { error } = await supabase
     .from('purchased_levels')
     .upsert({
@@ -86,63 +88,8 @@ async function addPurchasedLevel(userId: string, level: number, paymentId: strin
   }
 }
 
-// ─── Revoke Access Functions ──────────────────────────────────────────────────
-
-async function revokeUserPremium(userId: string) {
-  console.log(`🔒 Revoking premium access for user ${userId}`);
-  
-  // Update auth metadata
-  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { account_tier: 'free' },
-  });
-  
-  if (authError) {
-    console.error('❌ Auth metadata revoke error:', authError);
-  } else {
-    console.log('✅ Auth metadata updated to free');
-  }
-
-  // Update profiles table
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ account_tier: 'free', is_premium: false })
-    .eq('id', userId);
-    
-  if (profileError) {
-    console.error('❌ Profile revoke error:', profileError);
-  } else {
-    console.log('✅ Profile updated to free');
-  }
-}
-
-async function removePurchasedLevel(userId: string, level: number) {
-  console.log(`🔒 Removing HSK ${level} from user ${userId}`);
-  
-  const { error } = await supabase
-    .from('purchased_levels')
-    .delete()
-    .eq('user_id', userId)
-    .eq('hsk_level', level);
-    
-  if (error) {
-    console.error('❌ Purchased level delete error:', error);
-  } else {
-    console.log(`✅ HSK ${level} removed from user's purchased levels`);
-  }
-}
-
-// NOTE: removeAllPurchasedLevels has been intentionally removed.
-// 
-// When revoking premium, we should NOT delete individually purchased levels.
-// Users who bought HSK 2, then HSK 3, then Premium should keep HSK 2 and 3
-// if they later refund the Premium purchase.
-//
-// The only time a purchased level should be removed is when that specific
-// level purchase is refunded (handled by removePurchasedLevel).
-
-// ─── Purchase Record Functions ────────────────────────────────────────────────
-
 async function updatePurchaseRecord(
+  supabase: ReturnType<typeof createClient>,
   sessionId: string, 
   paymentIntentId: string | null, 
   amountCents: number | null,
@@ -175,177 +122,101 @@ async function updatePurchaseRecord(
   if (error) {
     console.error('❌ Error updating purchase record:', error);
   } else {
-    console.log(`📝 Updated purchase record: ${sessionId} -> ${status}`);
+    console.log(`📝 Updated purchase record for session ${sessionId} to status: ${status}`);
   }
 }
 
-async function getPurchaseByPaymentIntent(paymentIntentId: string) {
+/**
+ * Revoke access for a user when they get a refund or chargeback.
+ * 
+ * IMPORTANT: This function is careful to only revoke what was purchased:
+ * - Premium refund: Only removes premium status, keeps individually purchased levels
+ * - HSK level refund: Only removes that specific level, keeps premium status and other levels
+ */
+async function revokeAccessForUser(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  productType: string,
+  hskLevel: number | null
+) {
+  console.log(`🔒 Revoking access for user ${userId}: product_type=${productType}, hsk_level=${hskLevel}`);
+
+  if (productType === 'premium') {
+    // Revoke premium status only - do NOT touch purchased_levels
+    // The user may have purchased individual levels before upgrading to premium,
+    // and those should remain valid after a premium refund.
+    
+    // Update auth metadata
+    const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+      app_metadata: { account_tier: 'free' },
+    });
+    
+    if (authError) {
+      console.error('❌ Failed to update auth metadata:', authError);
+    } else {
+      console.log('✅ Revoked premium from auth metadata');
+    }
+    
+    // Update profiles table
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ account_tier: 'free', is_premium: false })
+      .eq('id', userId);
+      
+    if (profileError) {
+      console.error('❌ Failed to update profile:', profileError);
+    } else {
+      console.log('✅ Revoked premium from profile');
+    }
+    
+    // NOTE: We intentionally do NOT delete from purchased_levels here.
+    // Those are separate purchases that remain valid.
+    
+  } else if (productType === 'hsk_level' && hskLevel) {
+    // Revoke specific HSK level only
+    const { error } = await supabase
+      .from('purchased_levels')
+      .delete()
+      .eq('user_id', userId)
+      .eq('hsk_level', hskLevel);
+      
+    if (error) {
+      console.error(`❌ Failed to revoke HSK ${hskLevel}:`, error);
+    } else {
+      console.log(`✅ Revoked HSK ${hskLevel} from user`);
+    }
+  }
+}
+
+/**
+ * Find purchase info by payment intent ID
+ */
+async function findPurchaseByPaymentIntent(
+  supabase: ReturnType<typeof createClient>,
+  paymentIntentId: string
+): Promise<{ session_id: string; user_id: string; product_type: string; hsk_level: number | null } | null> {
   const { data, error } = await supabase
     .from('purchases')
-    .select('*')
+    .select('stripe_session_id, user_id, product_type, hsk_level')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .limit(1)
     .single();
     
-  if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-    console.error('❌ Error fetching purchase:', error);
+  if (error || !data) {
     return null;
   }
   
-  return data;
+  return {
+    session_id: data.stripe_session_id,
+    user_id: data.user_id,
+    product_type: data.product_type,
+    hsk_level: data.hsk_level,
+  };
 }
-
-// ─── Refund Processing ────────────────────────────────────────────────────────
-
-async function processRefund(
-  paymentIntentId: string,
-  refundedAmount: number,
-  totalAmount: number
-) {
-  console.log(`💸 Processing refund for payment ${paymentIntentId}`);
-  console.log(`   Refunded: ${refundedAmount} / Total: ${totalAmount}`);
-  
-  // Find the purchase record
-  const purchase = await getPurchaseByPaymentIntent(paymentIntentId);
-  
-  if (!purchase) {
-    console.error('❌ No purchase found for payment intent:', paymentIntentId);
-    
-    // Try to find via checkout session metadata from Stripe
-    try {
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-      const sessions = await stripe.checkout.sessions.list({
-        payment_intent: paymentIntentId,
-        limit: 1,
-      });
-      
-      if (sessions.data.length > 0) {
-        const session = sessions.data[0];
-        const userId = session.metadata?.user_id;
-        const productType = session.metadata?.product_type;
-        const hskLevel = session.metadata?.hsk_level;
-        
-        console.log('📋 Found session metadata:', { userId, productType, hskLevel });
-        
-        if (userId) {
-          await revokeAccessForUser(userId, productType || 'premium', hskLevel);
-        }
-      }
-    } catch (err) {
-      console.error('❌ Failed to fetch payment intent details:', err);
-    }
-    return;
-  }
-  
-  const { user_id, product_type, hsk_level, stripe_session_id } = purchase;
-  
-  // Check if this is a full refund
-  const isFullRefund = refundedAmount >= totalAmount;
-  
-  console.log(`📋 Purchase details:`, {
-    userId: user_id,
-    productType: product_type,
-    hskLevel: hsk_level,
-    isFullRefund,
-  });
-  
-  // Update purchase record
-  await updatePurchaseRecord(stripe_session_id, paymentIntentId, null, 'refunded');
-  
-  // Revoke access for full refunds
-  if (isFullRefund) {
-    await revokeAccessForUser(user_id, product_type, hsk_level?.toString());
-    console.log('✅ Access revoked due to full refund');
-  } else {
-    // For partial refunds, log but don't revoke (manual review needed)
-    console.log('⚠️ Partial refund - manual review may be needed');
-    console.log(`   Refunded ${refundedAmount} of ${totalAmount} (${Math.round(refundedAmount/totalAmount*100)}%)`);
-  }
-}
-
-async function revokeAccessForUser(
-  userId: string, 
-  productType: string | null, 
-  hskLevel: string | null | undefined
-) {
-  if (productType === 'premium') {
-    // Only revoke premium status, DO NOT remove individually purchased levels!
-    // 
-    // IMPORTANT: The purchased_levels table contains levels purchased INDIVIDUALLY,
-    // not levels unlocked via premium. Premium access is tracked separately via
-    // the account_tier/is_premium fields in the profiles table.
-    //
-    // Scenario:
-    // 1. User buys HSK 2 → purchased_levels has HSK 2
-    // 2. User buys HSK 3 → purchased_levels has HSK 2, 3
-    // 3. User buys Premium → account_tier = 'premium' (purchased_levels unchanged)
-    // 4. User refunds Premium → account_tier = 'free' (user KEEPS HSK 2, 3)
-    //
-    // This ensures users who bought individual levels before upgrading to premium
-    // retain those individual purchases if they later refund premium.
-    
-    await revokeUserPremium(userId);
-    console.log('✅ Premium revoked. User retains any individually purchased HSK levels.');
-  } else if (productType === 'hsk_level' && hskLevel) {
-    // Only remove the specific level that was refunded
-    const level = parseInt(hskLevel, 10);
-    if (level >= 2 && level <= 9) {
-      await removePurchasedLevel(userId, level);
-    }
-  } else {
-    // Fallback: assume it was a premium purchase (legacy)
-    console.log('⚠️ Unknown product type, treating as premium');
-    await revokeUserPremium(userId);
-    // Note: Still NOT removing purchased_levels for safety
-  }
-}
-
-// ─── Dispute Processing ───────────────────────────────────────────────────────
-
-async function processDispute(dispute: Stripe.Dispute) {
-  console.log(`⚠️ Processing dispute ${dispute.id}`);
-  console.log(`   Reason: ${dispute.reason}`);
-  console.log(`   Amount: ${dispute.amount} ${dispute.currency}`);
-  
-  const paymentIntentId = dispute.payment_intent as string;
-  
-  // Find the purchase
-  const purchase = await getPurchaseByPaymentIntent(paymentIntentId);
-  
-  if (!purchase) {
-    console.error('❌ No purchase found for disputed payment:', paymentIntentId);
-    return;
-  }
-  
-  const { user_id, product_type, hsk_level, stripe_session_id } = purchase;
-  
-  // Update purchase record
-  await updatePurchaseRecord(stripe_session_id, paymentIntentId, null, 'disputed');
-  
-  // IMPORTANT: For disputes, we should immediately revoke access
-  // The customer has initiated a chargeback, meaning they're claiming fraud/unauthorized
-  await revokeAccessForUser(user_id, product_type, hsk_level?.toString());
-  
-  console.log('🔒 Access revoked due to dispute/chargeback');
-  
-  // Log evidence details for responding to the dispute
-  console.log('📋 Evidence for dispute response:');
-  console.log(`   User ID: ${user_id}`);
-  console.log(`   Purchase date: ${purchase.completed_at || purchase.created_at}`);
-  console.log(`   Product: ${product_type}${hsk_level ? ` (HSK ${hsk_level})` : ''}`);
-  console.log(`   Evidence due by: ${dispute.evidence_details?.due_by 
-    ? new Date(dispute.evidence_details.due_by * 1000).toISOString() 
-    : 'Unknown'}`);
-}
-
-// ─── Webhook Handler ──────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Security headers
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  
-  // Only allow POST from Stripe
-  res.setHeader('Access-Control-Allow-Origin', 'https://stripe.com');
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
 
@@ -358,67 +229,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Validate webhook secret is configured
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
-    return res.status(500).json({ error: 'Webhook not configured' });
-  }
-
   const sig = (req.headers['stripe-signature'] || req.headers['Stripe-Signature']) as string | string[] | undefined;
   if (!sig) {
     console.error('❌ Missing Stripe signature');
-    return res.status(400).json({ error: 'Missing signature' });
+    return res.status(400).send('Missing signature');
   }
+
+  // Initialize clients
+  const supabase = getSupabaseClient();
+  const stripe = getStripeClient();
 
   let event: Stripe.Event;
 
   try {
     const rawBody = await buffer(req);
     const signature = Array.isArray(sig) ? sig[0] : sig;
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature!,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      throw new Error('Missing STRIPE_WEBHOOK_SECRET');
+    }
+    
+    event = stripe.webhooks.constructEvent(rawBody, signature!, webhookSecret);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('❌ Webhook signature verification failed:', message);
-    return res.status(400).json({ error: 'Invalid signature' });
+    return res.status(400).send(`Webhook Error: ${message}`);
   }
 
-  // Idempotency check
-  if (!markEventProcessed(event.id)) {
-    console.log(`⏭️ Skipping already processed event: ${event.id}`);
-    return res.json({ received: true, skipped: true });
-  }
-
-  console.log(`📩 Webhook received: ${event.type} (${event.id})`);
+  console.log(`📩 Webhook received: ${event.type}`);
 
   try {
     switch (event.type) {
-      // ─── Payment Success ────────────────────────────────────────────────
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
         const productType = session.metadata?.product_type;
         const hskLevel = session.metadata?.hsk_level;
 
-        console.log('💳 Checkout completed:', {
-          sessionId: session.id,
-          userId,
-          productType,
-          hskLevel,
-          amount: session.amount_total,
-          currency: session.currency,
-        });
+        console.log('💳 Checkout completed for session:', session.id);
+        console.log('👤 User ID:', userId);
+        console.log('📦 Product type:', productType);
+        console.log('📊 HSK Level:', hskLevel);
+        console.log('💰 Amount:', session.amount_total, session.currency);
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
           break;
         }
 
-        // Update purchase record
+        // Update the purchase record with completed status
         await updatePurchaseRecord(
+          supabase,
           session.id,
           session.payment_intent as string | null,
           session.amount_total,
@@ -433,7 +295,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single();
 
         if (!existingProfile) {
-          console.log('⚠️ Profile not found, creating...');
+          console.log('⚠️ Profile not found, creating one...');
           const { data: userData } = await supabase.auth.admin.getUserById(userId);
           if (userData?.user) {
             await supabase.from('profiles').insert({
@@ -442,23 +304,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               account_tier: 'free',
               is_premium: false,
             });
+            console.log('✅ Profile created');
           }
         }
 
-        // Grant access based on product type
+        // Handle based on product type
         if (productType === 'premium') {
-          await setUserPremium(userId);
+          console.log('🔄 Processing Premium purchase...');
+          await setUserPremium(supabase, userId);
         } else if (productType === 'hsk_level' && hskLevel) {
-          const level = parseInt(hskLevel, 10);
-          if (level >= 2 && level <= 9) {
-            await addPurchasedLevel(userId, level, session.payment_intent as string);
-          } else {
-            console.error('❌ Invalid HSK level:', hskLevel);
-          }
+          console.log(`🔄 Processing HSK ${hskLevel} purchase...`);
+          await addPurchasedLevel(supabase, userId, parseInt(hskLevel, 10), session.payment_intent as string);
         } else {
-          // Fallback: treat as premium
-          console.log('🔄 Processing as legacy premium purchase');
-          await setUserPremium(userId);
+          // Fallback: treat as premium purchase for backwards compatibility
+          console.log('🔄 Processing legacy premium purchase...');
+          await setUserPremium(supabase, userId);
         }
 
         console.log('✅ Purchase processing complete!');
@@ -468,99 +328,141 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log('💰 Payment succeeded:', paymentIntent.id);
-        // checkout.session.completed handles the main logic
+        // The checkout.session.completed event handles the actual logic
         break;
       }
 
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log('❌ Payment failed:', paymentIntent.id);
-        console.log('   Failure:', paymentIntent.last_payment_error?.message);
+        console.log('Failure message:', paymentIntent.last_payment_error?.message);
         
-        const purchase = await getPurchaseByPaymentIntent(paymentIntent.id);
+        // Try to find and update the purchase record
+        const purchase = await findPurchaseByPaymentIntent(supabase, paymentIntent.id);
         if (purchase) {
-          await updatePurchaseRecord(purchase.stripe_session_id, paymentIntent.id, null, 'failed');
+          await updatePurchaseRecord(
+            supabase,
+            purchase.session_id,
+            paymentIntent.id,
+            null,
+            'failed'
+          );
         }
         break;
       }
 
-      // ─── Refunds ────────────────────────────────────────────────────────
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
-        console.log('💸 Charge refunded event:', charge.id);
+        console.log('💸 Charge refunded:', charge.id);
+        console.log('   Amount refunded:', charge.amount_refunded, 'of', charge.amount);
         
-        // Get the refunded amount and total
-        const refundedAmount = charge.amount_refunded;
-        const totalAmount = charge.amount;
+        const paymentIntentId = charge.payment_intent as string;
+        const purchase = await findPurchaseByPaymentIntent(supabase, paymentIntentId);
         
-        await processRefund(
-          charge.payment_intent as string,
-          refundedAmount,
-          totalAmount
-        );
-        break;
-      }
-
-      case 'refund.created': {
-        const refund = event.data.object as Stripe.Refund;
-        console.log('💸 Refund created:', refund.id);
-        console.log(`   Amount: ${refund.amount} ${refund.currency}`);
-        console.log(`   Reason: ${refund.reason || 'Not specified'}`);
-        // charge.refunded will handle the actual access revocation
-        break;
-      }
-
-      case 'refund.updated': {
-        const refund = event.data.object as Stripe.Refund;
-        console.log('💸 Refund updated:', refund.id);
-        console.log(`   Status: ${refund.status}`);
-        
-        // If refund failed, we might need to restore access
-        if (refund.status === 'failed') {
-          console.log('⚠️ Refund failed - access should NOT have been revoked');
-          // Note: We only revoke access on charge.refunded, so this shouldn't happen
+        if (purchase) {
+          // Check if this is a full or partial refund
+          const isFullRefund = charge.amount_refunded >= charge.amount;
+          
+          if (isFullRefund) {
+            console.log('🔒 Full refund detected - revoking access');
+            
+            // Update purchase record
+            await updatePurchaseRecord(
+              supabase,
+              purchase.session_id,
+              paymentIntentId,
+              null,
+              'refunded'
+            );
+            
+            // Revoke access
+            await revokeAccessForUser(
+              supabase,
+              purchase.user_id,
+              purchase.product_type,
+              purchase.hsk_level
+            );
+          } else {
+            console.log('⚠️ Partial refund detected - logging for manual review');
+            console.log(`   Refunded: ${charge.amount_refunded} of ${charge.amount} (${Math.round(charge.amount_refunded / charge.amount * 100)}%)`);
+            // For partial refunds, we don't automatically revoke access
+            // This should be handled manually based on your refund policy
+          }
+        } else {
+          console.warn('⚠️ Could not find purchase for refunded charge:', charge.id);
         }
         break;
       }
 
-      // ─── Disputes/Chargebacks ───────────────────────────────────────────
       case 'charge.dispute.created': {
         const dispute = event.data.object as Stripe.Dispute;
-        await processDispute(dispute);
+        console.log('⚠️ Dispute/chargeback created:', dispute.id);
+        console.log('   Reason:', dispute.reason);
+        console.log('   Amount:', dispute.amount);
+        
+        const paymentIntentId = dispute.payment_intent as string;
+        const purchase = await findPurchaseByPaymentIntent(supabase, paymentIntentId);
+        
+        if (purchase) {
+          // For disputes/chargebacks, immediately revoke access
+          // This is important for fraud prevention
+          console.log('🔒 Revoking access due to dispute');
+          
+          await updatePurchaseRecord(
+            supabase,
+            purchase.session_id,
+            paymentIntentId,
+            null,
+            'disputed'
+          );
+          
+          await revokeAccessForUser(
+            supabase,
+            purchase.user_id,
+            purchase.product_type,
+            purchase.hsk_level
+          );
+          
+          // Log evidence details for dispute response
+          console.log('📋 Dispute evidence due by:', 
+            new Date((dispute.evidence_details?.due_by || 0) * 1000).toISOString()
+          );
+        }
         break;
       }
 
       case 'charge.dispute.closed': {
         const dispute = event.data.object as Stripe.Dispute;
-        console.log(`📋 Dispute closed: ${dispute.id}`);
-        console.log(`   Status: ${dispute.status}`);
+        console.log('📋 Dispute closed:', dispute.id);
+        console.log('   Status:', dispute.status);
         
-        // If we won the dispute, we could restore access
-        // But this requires careful consideration - the user might still be malicious
+        // If you won the dispute, you might want to restore access
+        // This should be handled manually based on the dispute outcome
         if (dispute.status === 'won') {
-          console.log('✅ Dispute won! Consider restoring access manually if appropriate.');
-          // We don't automatically restore access - manual review recommended
+          console.log('🎉 Dispute won! Consider restoring access manually.');
         } else if (dispute.status === 'lost') {
-          console.log('❌ Dispute lost. Access remains revoked.');
+          console.log('😞 Dispute lost. Access should remain revoked.');
         }
         break;
       }
 
-      // ─── Subscription Events (if you add subscriptions later) ──────────
-      case 'customer.subscription.deleted': {
-        // Handle subscription cancellation if you implement subscriptions
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('📋 Subscription deleted:', subscription.id);
+      case 'refund.created': {
+        const refund = event.data.object as Stripe.Refund;
+        console.log('📝 Refund created:', refund.id);
+        console.log('   Amount:', refund.amount);
+        console.log('   Reason:', refund.reason);
         break;
       }
 
-      default:
-        console.log(`ℹ️ Unhandled event type: ${event.type}`);
+      case 'refund.updated': {
+        const refund = event.data.object as Stripe.Refund;
+        console.log('📝 Refund updated:', refund.id);
+        console.log('   Status:', refund.status);
+        break;
+      }
     }
   } catch (error) {
-    console.error('❌ Webhook handler error:', error);
-    // Still return 200 to prevent Stripe retries for handler errors
-    // Stripe will show the error in the webhook logs
+    console.error('Webhook handler error:', error);
   }
 
   res.json({ received: true });

@@ -2,28 +2,61 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
 // Current versions of legal documents
 const TOS_VERSION = '2025-01-15';
 const PRIVACY_VERSION = '2025-01-15';
 
-// Price IDs for each product
-const PRICE_IDS: Record<string, string | undefined> = {
-  hsk_2: process.env.STRIPE_PRICE_HSK2,
-  hsk_3: process.env.STRIPE_PRICE_HSK3,
-  hsk_4: process.env.STRIPE_PRICE_HSK4,
-  hsk_5: process.env.STRIPE_PRICE_HSK5,
-  hsk_6: process.env.STRIPE_PRICE_HSK6,
-  premium: process.env.STRIPE_PRICE_PREMIUM,
-};
+// Initialize clients lazily to ensure correct env vars are used per-request
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Missing Supabase configuration');
+  }
+  
+  return createClient(url, key);
+}
 
-async function getUserFromToken(authHeader: string | undefined) {
+function getStripeClient(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!secretKey) {
+    throw new Error('Missing STRIPE_SECRET_KEY');
+  }
+  
+  // Log which environment we're using (test vs live)
+  const isTestMode = secretKey.startsWith('sk_test_');
+  const isLiveMode = secretKey.startsWith('sk_live_');
+  const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+  
+  console.log(`🔑 Stripe mode: ${isTestMode ? 'TEST' : isLiveMode ? 'LIVE' : 'UNKNOWN'}, Vercel env: ${vercelEnv}`);
+  
+  // Safety check: warn if using live keys in preview
+  if (isLiveMode && vercelEnv === 'preview') {
+    console.warn('⚠️ WARNING: Using LIVE Stripe keys in PREVIEW environment!');
+  }
+  
+  // Safety check: warn if using test keys in production
+  if (isTestMode && vercelEnv === 'production') {
+    console.warn('⚠️ WARNING: Using TEST Stripe keys in PRODUCTION environment!');
+  }
+  
+  return new Stripe(secretKey);
+}
+
+function getPriceIds(): Record<string, string | undefined> {
+  return {
+    hsk_2: process.env.STRIPE_PRICE_HSK2,
+    hsk_3: process.env.STRIPE_PRICE_HSK3,
+    hsk_4: process.env.STRIPE_PRICE_HSK4,
+    hsk_5: process.env.STRIPE_PRICE_HSK5,
+    hsk_6: process.env.STRIPE_PRICE_HSK6,
+    premium: process.env.STRIPE_PRICE_PREMIUM,
+  };
+}
+
+async function getUserFromToken(supabase: ReturnType<typeof createClient>, authHeader: string | undefined) {
   if (!authHeader) return null;
   const token = authHeader.replace('Bearer ', '');
   const {
@@ -34,7 +67,12 @@ async function getUserFromToken(authHeader: string | undefined) {
   return user;
 }
 
-async function getOrCreateStripeCustomer(userId: string, email: string) {
+async function getOrCreateStripeCustomer(
+  supabase: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  userId: string,
+  email: string
+) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('stripe_customer_id')
@@ -99,7 +137,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const user = await getUserFromToken(req.headers.authorization as string);
+    // Initialize clients per-request to ensure correct env vars
+    const supabase = getSupabaseClient();
+    const stripe = getStripeClient();
+    const PRICE_IDS = getPriceIds();
+    
+    // Log environment info for debugging
+    const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+    console.log(`📍 Environment: ${vercelEnv}`);
+    console.log(`💰 Price IDs configured: ${Object.entries(PRICE_IDS).filter(([, v]) => v).map(([k]) => k).join(', ')}`);
+
+    const user = await getUserFromToken(supabase, req.headers.authorization as string);
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -137,12 +185,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!priceId) {
       console.error('Missing price ID for product:', product_type, hsk_level);
+      console.error('Available PRICE_IDS:', PRICE_IDS);
       return res.status(400).json({ 
         error: `Price not configured for ${product_type || 'premium'}${hsk_level ? ` level ${hsk_level}` : ''}` 
       });
     }
+    
+    console.log(`🛒 Using price ID: ${priceId} for ${productDescription}`);
 
-    const customerId = await getOrCreateStripeCustomer(user.id, user.email || '');
+    const customerId = await getOrCreateStripeCustomer(supabase, stripe, user.id, user.email || '');
 
     // Determine success/cancel URLs
     const frontendUrl = process.env.FRONTEND_URL || 
