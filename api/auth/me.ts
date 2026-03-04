@@ -1,36 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Rate limiting in-memory store
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30; // Allow frequent checks
-
-function isRateLimited(key: string): boolean {
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
-  
-  if (!record || now > record.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    return false;
-  }
-  
-  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return true;
-  }
-  
-  record.count++;
-  return false;
-}
-
-function getClientIp(req: VercelRequest): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.headers['x-real-ip'] as string || 'unknown';
-}
-
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -38,60 +8,29 @@ const supabase = createClient(
 
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
-  
-  // Validate bearer token format
-  if (!authHeader.startsWith('Bearer ')) return null;
-  
-  const token = authHeader.slice(7);
-  
-  // Basic JWT format validation
-  if (!token || token.split('.').length !== 3) return null;
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return null;
-    return user;
-  } catch {
-    return null;
-  }
+  const token = authHeader.replace('Bearer ', '');
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Security headers
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  
-  // CORS headers
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    'https://hamhao.com',
-    'https://www.hamhao.com',
-  ].filter(Boolean);
-  
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (process.env.NODE_ENV !== 'production') {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  }
-  
+  // CORS headers - be permissive
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Rate limiting
-  const clientIp = getClientIp(req);
-  if (isRateLimited(`me:${clientIp}`)) {
-    return res.status(429).json({ error: 'Too many requests' });
   }
 
   try {
@@ -107,13 +46,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', user.id)
       .single();
 
-    // Sync email to profiles table if it differs (e.g., after email change confirmation)
+    // Sync email to profiles table if it doesn't match (e.g., after email change)
     if (profile && user.email && profile.email !== user.email) {
+      console.log(`Syncing email for user ${user.id}: ${profile.email} -> ${user.email}`);
       await supabase
         .from('profiles')
         .update({ email: user.email })
         .eq('id', user.id);
-      console.log(`📧 Synced email for user ${user.id}: ${profile.email} -> ${user.email}`);
     }
 
     // Get purchased levels
@@ -126,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const purchasedLevels = purchasedLevelsData?.map(p => p.hsk_level) || [];
 
     // Determine account tier
+    // Check both account_tier column and legacy is_premium boolean
     let accountTier = profile?.account_tier || 'free';
     if (profile?.is_premium === true && accountTier === 'free') {
       accountTier = 'premium';
@@ -138,18 +78,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at,
-        last_sign_in_at: user.last_sign_in_at,
-      },
+      user,
       account_tier: accountTier,
       purchased_levels: purchasedLevels,
       stripe_customer_id: profile?.stripe_customer_id || null,
     });
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({ error: 'An unexpected error occurred' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

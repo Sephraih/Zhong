@@ -1,192 +1,69 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Rate limiting in-memory store
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_SIGNUPS = 3; // max signups per minute per IP
-
-function isRateLimited(key: string, maxRequests: number = RATE_LIMIT_MAX_SIGNUPS): boolean {
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
-  
-  if (!record || now > record.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    return false;
-  }
-  
-  if (record.count >= maxRequests) {
-    return true;
-  }
-  
-  record.count++;
-  return false;
-}
-
-function getClientIp(req: VercelRequest): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.headers['x-real-ip'] as string || 'unknown';
-}
-
-// Validate email format
-function isValidEmail(email: string): boolean {
-  if (!email || typeof email !== 'string') return false;
-  if (email.length > 254) return false;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-// Validate password strength
-function isValidPassword(password: string): { valid: boolean; error?: string } {
-  if (!password || typeof password !== 'string') {
-    return { valid: false, error: 'Password is required' };
-  }
-  if (password.length < 6) {
-    return { valid: false, error: 'Password must be at least 6 characters' };
-  }
-  if (password.length > 128) {
-    return { valid: false, error: 'Password is too long' };
-  }
-  return { valid: true };
-}
-
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Security headers
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  
-  // CORS headers - restrict to known origins
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    'https://hamhao.com',
-    'https://www.hamhao.com',
-  ].filter(Boolean);
-  
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (process.env.NODE_ENV !== 'production') {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  }
-  
+  // CORS headers - be permissive
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Rate limiting by IP
-  const clientIp = getClientIp(req);
-  if (isRateLimited(`signup:${clientIp}`)) {
-    return res.status(429).json({ error: 'Too many signup attempts. Please try again later.' });
-  }
-
   try {
-    // Validate request body
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ error: 'Invalid request body' });
-    }
-
     const { email, password, accept_tos, accept_privacy, captchaToken } = req.body;
-    
-    // Input validation
-    if (!email || !isValidEmail(email)) {
-      return res.status(400).json({ error: 'Valid email is required' });
-    }
-    
-    const passwordCheck = isValidPassword(password);
-    if (!passwordCheck.valid) {
-      return res.status(400).json({ error: passwordCheck.error });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Require TOS and Privacy acceptance
     if (accept_tos !== true || accept_privacy !== true) {
       return res.status(400).json({ error: 'You must accept the Terms of Service and Privacy Policy' });
     }
 
-    const trimmedEmail = email.trim().toLowerCase();
-
-    // Rate limit per email to prevent enumeration
-    if (isRateLimited(`signup:email:${trimmedEmail}`, 2)) {
-      return res.status(429).json({ error: 'Please wait before trying again' });
-    }
-
     // Ensure email confirmation redirects back into the app
-    const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
-    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
-    const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : 'https://hamhao.com');
+    const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+    const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
 
-    const signupOptions: any = {
-      emailRedirectTo: `${baseUrl}/auth/callback`,
-    };
+    const options = baseUrl ? { emailRedirectTo: `${baseUrl}/auth/callback` } : undefined;
 
-    // Forward Turnstile captcha token to Supabase if provided
-    if (captchaToken && typeof captchaToken === 'string') {
-      signupOptions.captchaToken = captchaToken;
-    }
-
+    // Forward Turnstile captcha token to Supabase (required when captcha is enabled)
     const { data, error } = await supabase.auth.signUp({
-      email: trimmedEmail,
+      email,
       password,
-      options: signupOptions,
+      options: {
+        ...(options || {}),
+        captchaToken: captchaToken || undefined,
+      },
     });
-
-    if (error) {
-      console.log(`Signup failed for ${trimmedEmail}: ${error.message}`);
-      
-      // Don't reveal if email already exists
-      if (error.message.includes('already registered') || error.message.includes('already exists')) {
-        return res.status(400).json({ error: 'Unable to create account with this email' });
-      }
-      
-      if (error.message.includes('captcha')) {
-        return res.status(400).json({ error: 'Security verification failed. Please try again.' });
-      }
-      
-      return res.status(400).json({ error: 'Signup failed. Please try again.' });
-    }
+    if (error) return res.status(400).json({ error: error.message });
 
     // Record consent timestamps in profiles (profile row is created by trigger)
     if (data.user?.id) {
-      const now = new Date().toISOString();
       await supabase
         .from('profiles')
         .update({
-          tos_accepted_at: now,
-          privacy_accepted_at: now,
+          tos_accepted_at: new Date().toISOString(),
+          privacy_accepted_at: new Date().toISOString(),
         })
         .eq('id', data.user.id);
     }
 
-    console.log(`✅ Signup initiated for ${trimmedEmail}`);
-
-    // Return minimal user info
-    res.json({ 
-      user: data.user ? {
-        id: data.user.id,
-        email: data.user.email,
-      } : null, 
-      session: data.session ? {
-        access_token: data.session.access_token,
-      } : null,
-      message: data.session ? 'Account created successfully' : 'Please check your email to confirm your account',
-    });
+    res.json({ user: data.user, session: data.session });
   } catch (error) {
     console.error('Signup error:', error);
-    res.status(500).json({ error: 'An unexpected error occurred' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

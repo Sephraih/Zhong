@@ -2,36 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-// Rate limiting
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_CHECKOUTS = 5; // max checkout attempts per minute
-
-function isRateLimited(key: string): boolean {
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
-  
-  if (!record || now > record.resetTime) {
-    rateLimitStore.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    return false;
-  }
-  
-  if (record.count >= RATE_LIMIT_MAX_CHECKOUTS) {
-    return true;
-  }
-  
-  record.count++;
-  return false;
-}
-
-function getClientIp(req: VercelRequest): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.headers['x-real-ip'] as string || 'unknown';
-}
-
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -42,10 +12,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 // Current versions of legal documents
 const TOS_VERSION = '2025-01-15';
 const PRIVACY_VERSION = '2025-01-15';
-
-// Valid product types
-const VALID_PRODUCT_TYPES = ['premium', 'hsk_level'];
-const VALID_HSK_LEVELS = [2, 3, 4, 5, 6];
 
 // Price IDs for each product
 const PRICE_IDS: Record<string, string | undefined> = {
@@ -59,18 +25,13 @@ const PRICE_IDS: Record<string, string | undefined> = {
 
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
-  if (!authHeader.startsWith('Bearer ')) return null;
-  
-  const token = authHeader.slice(7);
-  if (!token || token.split('.').length !== 3) return null;
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return null;
-    return user;
-  } catch {
-    return null;
-  }
+  const token = authHeader.replace('Bearer ', '');
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
 }
 
 async function getOrCreateStripeCustomer(userId: string, email: string) {
@@ -80,19 +41,26 @@ async function getOrCreateStripeCustomer(userId: string, email: string) {
     .eq('id', userId)
     .single();
 
-  // Verify existing customer exists in Stripe
+  // If we have a customer ID stored, verify it exists in the current Stripe environment.
+  // This commonly breaks when switching from Stripe test → live: old cus_ IDs won't exist.
   if (profile?.stripe_customer_id) {
     try {
       const existing = await stripe.customers.retrieve(profile.stripe_customer_id);
       if (existing && !('deleted' in existing && existing.deleted)) {
         return profile.stripe_customer_id;
       }
+      console.warn('⚠️ Stripe customer marked deleted, recreating:', profile.stripe_customer_id);
     } catch (err: any) {
-      console.warn('Stripe customer not found, recreating:', profile.stripe_customer_id);
+      const msg = typeof err?.message === 'string' ? err.message : String(err);
+      // If Stripe says the customer doesn't exist, recreate it and overwrite the profile value.
+      if (msg.includes('No such customer') || err?.code === 'resource_missing') {
+        console.warn('⚠️ Stripe customer missing in this environment, recreating:', profile.stripe_customer_id);
+      } else {
+        console.error('❌ Failed to retrieve Stripe customer, recreating as fallback:', msg);
+      }
     }
   }
 
-  // Create new customer
   const customer = await stripe.customers.create({
     email,
     metadata: { supabase_user_id: userId },
@@ -106,64 +74,34 @@ async function getOrCreateStripeCustomer(userId: string, email: string) {
   return customer.id;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Security headers
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  
-  // CORS headers
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    'https://hamhao.com',
-    'https://www.hamhao.com',
-  ].filter(Boolean);
-  
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (process.env.NODE_ENV !== 'production') {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+function getClientIp(req: VercelRequest): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
   }
-  
+  return req.headers['x-real-ip'] as string || 'unknown';
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers - be permissive
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-Forwarded-For, X-Real-IP');
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Validate environment
-  if (!process.env.STRIPE_SECRET_KEY) {
-    console.error('STRIPE_SECRET_KEY not configured');
-    return res.status(500).json({ error: 'Payment system not configured' });
-  }
-
   try {
-    // Rate limiting
-    const clientIp = getClientIp(req);
-    if (isRateLimited(`checkout:${clientIp}`)) {
-      return res.status(429).json({ error: 'Too many checkout attempts. Please try again later.' });
-    }
-
-    // Authenticate user
     const user = await getUserFromToken(req.headers.authorization as string);
     if (!user) {
-      return res.status(401).json({ error: 'Please sign in to make a purchase' });
-    }
-
-    // Rate limit per user
-    if (isRateLimited(`checkout:user:${user.id}`)) {
-      return res.status(429).json({ error: 'Too many checkout attempts. Please wait a moment.' });
-    }
-
-    // Validate request body
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ error: 'Invalid request' });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const { 
@@ -174,25 +112,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client_timestamp
     } = req.body;
     
-    // Require TOS and Privacy acceptance
-    if (tos_accepted !== true || privacy_accepted !== true) {
+    // Require TOS and Privacy acceptance for all purchases
+    if (!tos_accepted || !privacy_accepted) {
       return res.status(400).json({ 
-        error: 'You must accept the Terms of Service and Privacy Policy' 
+        error: 'You must accept the Terms of Service and Privacy Policy to make a purchase' 
       });
-    }
-
-    // Validate product_type
-    const validProductType = product_type && VALID_PRODUCT_TYPES.includes(product_type);
-    if (!validProductType && product_type) {
-      return res.status(400).json({ error: 'Invalid product type' });
-    }
-
-    // Validate hsk_level for hsk_level product type
-    if (product_type === 'hsk_level') {
-      const level = parseInt(hsk_level, 10);
-      if (!VALID_HSK_LEVELS.includes(level)) {
-        return res.status(400).json({ error: 'Invalid HSK level' });
-      }
     }
 
     // Determine which price to use
@@ -212,42 +136,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!priceId) {
-      console.error('Missing price ID for:', product_type, hsk_level);
+      console.error('Missing price ID for product:', product_type, hsk_level);
       return res.status(400).json({ 
-        error: 'This product is not available for purchase at this time' 
+        error: `Price not configured for ${product_type || 'premium'}${hsk_level ? ` level ${hsk_level}` : ''}` 
       });
-    }
-
-    // Check if user already has this product
-    if (product_type === 'premium') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('account_tier, is_premium')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile?.account_tier === 'premium' || profile?.is_premium) {
-        return res.status(400).json({ error: 'You already have Premium access' });
-      }
-    } else if (product_type === 'hsk_level') {
-      const { data: existing } = await supabase
-        .from('purchased_levels')
-        .select('hsk_level')
-        .eq('user_id', user.id)
-        .eq('hsk_level', parseInt(hsk_level, 10))
-        .single();
-      
-      if (existing) {
-        return res.status(400).json({ error: `You already own HSK Level ${hsk_level}` });
-      }
     }
 
     const customerId = await getOrCreateStripeCustomer(user.id, user.email || '');
 
     // Determine success/cancel URLs
-    const frontendUrl = process.env.FRONTEND_URL || 'https://hamhao.com';
+    const frontendUrl = process.env.FRONTEND_URL || 
+      (req.headers.origin as string) || 
+      (req.headers.referer ? new URL(req.headers.referer as string).origin : 'https://hamhao.com');
 
-    // Get client metadata for fraud prevention
+    // Get client metadata for fraud prevention and chargeback evidence
+    const clientIp = getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     // Create Stripe checkout session
@@ -260,11 +163,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           quantity: 1,
         },
       ],
-      mode: 'payment',
+      mode: 'payment', // One-time payment, not subscription
       success_url: `${frontendUrl}/?payment=success`,
       cancel_url: `${frontendUrl}/?payment=cancelled`,
       consent_collection: {
-        terms_of_service: 'required',
+        terms_of_service: 'required', // Also require consent in Stripe
       },
       custom_text: {
         terms_of_service_acceptance: {
@@ -280,9 +183,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    // Record the purchase attempt
+    // Record the purchase attempt with TOS acceptance in the database
     const now = new Date().toISOString();
-    await supabase
+    const { error: purchaseError } = await supabase
       .from('purchases')
       .insert({
         user_id: user.id,
@@ -301,20 +204,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         user_agent: userAgent,
         client_timestamp: client_timestamp || now,
         status: 'pending',
-      })
-      .catch(err => console.error('Error recording purchase:', err));
+      });
 
-    console.log(`✅ Checkout session created for ${productDescription}: ${session.id}`);
+    if (purchaseError) {
+      console.error('❌ Error recording purchase:', purchaseError);
+      // Don't block the checkout, just log the error
+    } else {
+      console.log(`📝 Recorded purchase attempt for ${productDescription} with TOS acceptance`);
+    }
+
+    console.log(`✅ Created checkout session for ${productDescription}:`, session.id);
     res.json({ url: session.url });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Checkout failed';
-    console.error('Checkout error:', message);
-    
-    // Don't expose internal errors
-    if (message.includes('Stripe') || message.includes('API')) {
-      return res.status(500).json({ error: 'Payment system temporarily unavailable' });
-    }
-    
-    res.status(500).json({ error: 'Unable to create checkout session' });
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    console.error('Checkout error:', message, error);
+    res.status(500).json({ error: message });
   }
 }
