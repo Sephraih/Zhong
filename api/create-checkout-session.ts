@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
 // Current versions of legal documents
@@ -7,7 +7,7 @@ const TOS_VERSION = '2025-01-15';
 const PRIVACY_VERSION = '2025-01-15';
 
 // Initialize clients lazily to ensure correct env vars are used per-request
-function getSupabaseClient() {
+function getSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
@@ -56,7 +56,7 @@ function getPriceIds(): Record<string, string | undefined> {
   };
 }
 
-async function getUserFromToken(supabase: ReturnType<typeof createClient>, authHeader: string | undefined) {
+async function getUserFromToken(supabase: SupabaseClient, authHeader: string | undefined) {
   if (!authHeader) return null;
   const token = authHeader.replace('Bearer ', '');
   const {
@@ -67,8 +67,12 @@ async function getUserFromToken(supabase: ReturnType<typeof createClient>, authH
   return user;
 }
 
+interface ProfileRow {
+  stripe_customer_id?: string | null;
+}
+
 async function getOrCreateStripeCustomer(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   stripe: Stripe,
   userId: string,
   email: string
@@ -77,7 +81,7 @@ async function getOrCreateStripeCustomer(
     .from('profiles')
     .select('stripe_customer_id')
     .eq('id', userId)
-    .single();
+    .single() as { data: ProfileRow | null };
 
   // If we have a customer ID stored, verify it exists in the current Stripe environment.
   // This commonly breaks when switching from Stripe test → live: old cus_ IDs won't exist.
@@ -88,10 +92,11 @@ async function getOrCreateStripeCustomer(
         return profile.stripe_customer_id;
       }
       console.warn('⚠️ Stripe customer marked deleted, recreating:', profile.stripe_customer_id);
-    } catch (err: any) {
-      const msg = typeof err?.message === 'string' ? err.message : String(err);
+    } catch (err: unknown) {
+      const errObj = err as { message?: string; code?: string };
+      const msg = typeof errObj?.message === 'string' ? errObj.message : String(err);
       // If Stripe says the customer doesn't exist, recreate it and overwrite the profile value.
-      if (msg.includes('No such customer') || err?.code === 'resource_missing') {
+      if (msg.includes('No such customer') || errObj?.code === 'resource_missing') {
         console.warn('⚠️ Stripe customer missing in this environment, recreating:', profile.stripe_customer_id);
       } else {
         console.error('❌ Failed to retrieve Stripe customer, recreating as fallback:', msg);
@@ -106,7 +111,7 @@ async function getOrCreateStripeCustomer(
 
   await supabase
     .from('profiles')
-    .update({ stripe_customer_id: customer.id })
+    .update({ stripe_customer_id: customer.id } as Record<string, unknown>)
     .eq('id', userId);
 
   return customer.id;
@@ -236,26 +241,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Record the purchase attempt with TOS acceptance in the database
     const now = new Date().toISOString();
+    const purchaseRecord = {
+      user_id: user.id,
+      user_email: user.email || '',
+      product_type: product_type || 'premium',
+      hsk_level: product_type === 'hsk_level' ? parseInt(hsk_level) : null,
+      stripe_customer_id: customerId,
+      stripe_session_id: session.id,
+      tos_accepted: true,
+      tos_accepted_at: now,
+      tos_version: TOS_VERSION,
+      privacy_accepted: true,
+      privacy_accepted_at: now,
+      privacy_version: PRIVACY_VERSION,
+      client_ip: clientIp,
+      user_agent: userAgent,
+      client_timestamp: client_timestamp || now,
+      status: 'pending',
+    };
+    
     const { error: purchaseError } = await supabase
       .from('purchases')
-      .insert({
-        user_id: user.id,
-        user_email: user.email || '',
-        product_type: product_type || 'premium',
-        hsk_level: product_type === 'hsk_level' ? parseInt(hsk_level) : null,
-        stripe_customer_id: customerId,
-        stripe_session_id: session.id,
-        tos_accepted: true,
-        tos_accepted_at: now,
-        tos_version: TOS_VERSION,
-        privacy_accepted: true,
-        privacy_accepted_at: now,
-        privacy_version: PRIVACY_VERSION,
-        client_ip: clientIp,
-        user_agent: userAgent,
-        client_timestamp: client_timestamp || now,
-        status: 'pending',
-      });
+      .insert(purchaseRecord as Record<string, unknown>);
 
     if (purchaseError) {
       console.error('❌ Error recording purchase:', purchaseError);

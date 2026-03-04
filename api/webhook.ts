@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { buffer } from 'micro';
 
@@ -11,7 +11,7 @@ export const config = {
 };
 
 // Initialize clients lazily to ensure correct env vars are used per-request
-function getSupabaseClient() {
+function getSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
@@ -39,7 +39,7 @@ function getStripeClient(): Stripe {
   return new Stripe(secretKey);
 }
 
-async function setUserPremium(supabase: ReturnType<typeof createClient>, userId: string) {
+async function setUserPremium(supabase: SupabaseClient, userId: string) {
   console.log(`🔧 Upgrading user ${userId} to premium`);
   
   // Update auth metadata
@@ -56,7 +56,7 @@ async function setUserPremium(supabase: ReturnType<typeof createClient>, userId:
   // Update profiles table
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ account_tier: 'premium', is_premium: true })
+    .update({ account_tier: 'premium', is_premium: true } as Record<string, unknown>)
     .eq('id', userId);
     
   if (profileError) {
@@ -66,18 +66,20 @@ async function setUserPremium(supabase: ReturnType<typeof createClient>, userId:
   }
 }
 
-async function addPurchasedLevel(supabase: ReturnType<typeof createClient>, userId: string, level: number, paymentId: string) {
+async function addPurchasedLevel(supabase: SupabaseClient, userId: string, level: number, paymentId: string) {
   console.log(`🔧 Adding HSK ${level} to user ${userId}`);
+  
+  const purchaseData = {
+    user_id: userId,
+    hsk_level: level,
+    stripe_payment_id: paymentId,
+    purchased_at: new Date().toISOString(),
+  };
   
   // Insert into purchased_levels
   const { error } = await supabase
     .from('purchased_levels')
-    .upsert({
-      user_id: userId,
-      hsk_level: level,
-      stripe_payment_id: paymentId,
-      purchased_at: new Date().toISOString(),
-    }, {
+    .upsert(purchaseData as Record<string, unknown>, {
       onConflict: 'user_id,hsk_level',
     });
     
@@ -89,7 +91,7 @@ async function addPurchasedLevel(supabase: ReturnType<typeof createClient>, user
 }
 
 async function updatePurchaseRecord(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   sessionId: string, 
   paymentIntentId: string | null, 
   amountCents: number | null,
@@ -134,7 +136,7 @@ async function updatePurchaseRecord(
  * - HSK level refund: Only removes that specific level, keeps premium status and other levels
  */
 async function revokeAccessForUser(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   userId: string,
   productType: string,
   hskLevel: number | null
@@ -160,7 +162,7 @@ async function revokeAccessForUser(
     // Update profiles table
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ account_tier: 'free', is_premium: false })
+      .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
       .eq('id', userId);
       
     if (profileError) {
@@ -188,11 +190,18 @@ async function revokeAccessForUser(
   }
 }
 
+interface PurchaseRecord {
+  stripe_session_id: string;
+  user_id: string;
+  product_type: string;
+  hsk_level: number | null;
+}
+
 /**
  * Find purchase info by payment intent ID
  */
 async function findPurchaseByPaymentIntent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   paymentIntentId: string
 ): Promise<{ session_id: string; user_id: string; product_type: string; hsk_level: number | null } | null> {
   const { data, error } = await supabase
@@ -200,7 +209,7 @@ async function findPurchaseByPaymentIntent(
     .select('stripe_session_id, user_id, product_type, hsk_level')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .limit(1)
-    .single();
+    .single() as { data: PurchaseRecord | null; error: unknown };
     
   if (error || !data) {
     return null;
@@ -298,12 +307,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('⚠️ Profile not found, creating one...');
           const { data: userData } = await supabase.auth.admin.getUserById(userId);
           if (userData?.user) {
-            await supabase.from('profiles').insert({
+            const newProfile = {
               id: userId,
               email: userData.user.email,
               account_tier: 'free',
               is_premium: false,
-            });
+            };
+            await supabase.from('profiles').insert(newProfile as Record<string, unknown>);
             console.log('✅ Profile created');
           }
         }

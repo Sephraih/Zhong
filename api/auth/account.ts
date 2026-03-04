@@ -8,13 +8,13 @@ const supabaseAdmin = createClient(
 
 async function getUserFromToken(authHeader: string | undefined) {
   if (!authHeader) return null;
-  const token = authHeader.replace('Bearer ', '');
+  const authToken = authHeader.replace('Bearer ', '');
   const {
     data: { user },
     error,
-  } = await supabaseAdmin.auth.getUser(token);
+  } = await supabaseAdmin.auth.getUser(authToken);
   if (error || !user) return null;
-  return { user, token };
+  return { user };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { user, token } = authResult;
+  const { user } = authResult;
 
   // Verify current password for sensitive actions
   if (['change-email', 'change-password', 'delete-account'].includes(action)) {
@@ -105,44 +105,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const baseUrl = process.env.FRONTEND_URL || 'https://hamhao.com';
         const redirectTo = `${baseUrl}/auth/callback`;
 
-        // Use Supabase's inviteUserByEmail or updateUserById with email_confirm option
-        // The proper way to trigger email confirmation is to use the GoTrue Admin API
-        // to request an email change with email confirmation required
-        
-        // Option 1: Use the Admin API to update email and send confirmation
-        // This approach sends the confirmation email to the NEW email address
-        const supabaseUrl = process.env.SUPABASE_URL!;
-        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-        
-        // Call the GoTrue admin API to initiate email change
-        const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${user.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceRoleKey}`,
-            'apikey': serviceRoleKey,
-          },
-          body: JSON.stringify({
-            email: newEmail,
-            email_confirm: false, // Don't auto-confirm, send confirmation email
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Email change API error:', response.status, errorData);
-          return res.status(400).json({ 
-            error: errorData.message || errorData.msg || 'Failed to initiate email change' 
-          });
-        }
-
-        // The admin API updates the email directly but marks it as unconfirmed
-        // For a true "confirmation required" flow, we need to use a different approach
-        
-        // Alternative: Generate a confirmation link manually
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        // Generate a confirmation link for the email change
+        // This will send a confirmation email to the NEW email address
+        const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'email_change_new',
-          email: newEmail,
+          email: user.email!,
           newEmail: newEmail,
           options: {
             redirectTo: redirectTo,
@@ -151,17 +118,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (linkError) {
           console.error('Error generating email change link:', linkError);
-          // The email was already updated above, so we need to revert or warn the user
-          // For now, just inform them the email was changed but no confirmation was sent
-          return res.json({
-            success: true,
-            message: 'Email has been updated. Please verify you can access your new email address.',
-            requiresConfirmation: false,
+          return res.status(400).json({ 
+            error: linkError.message || 'Failed to initiate email change' 
           });
         }
 
-        // If we got a link, the user needs to confirm
-        // Note: Supabase should send this automatically if SMTP is configured
         console.log('Email change initiated for user:', user.id);
         
         return res.json({ 

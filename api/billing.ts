@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
 // Initialize clients lazily to ensure correct env vars are used per-request
-function getSupabaseClient() {
+function getSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
@@ -32,7 +32,7 @@ function getStripeClient(): Stripe | null {
   return new Stripe(secretKey);
 }
 
-async function getUserFromToken(supabase: ReturnType<typeof createClient>, authHeader: string | undefined) {
+async function getUserFromToken(supabase: SupabaseClient, authHeader: string | undefined) {
   if (!authHeader) return null;
   const token = authHeader.replace('Bearer ', '');
   const {
@@ -89,17 +89,26 @@ async function getPrices(stripe: Stripe | null): Promise<{
   return result;
 }
 
-async function getSubscription(supabase: ReturnType<typeof createClient>, userId: string) {
+interface ProfileRow {
+  account_tier?: string;
+  stripe_customer_id?: string;
+}
+
+interface PurchasedLevelRow {
+  hsk_level: number;
+}
+
+async function getSubscription(supabase: SupabaseClient, userId: string) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('account_tier, stripe_customer_id')
     .eq('id', userId)
-    .single();
+    .single() as { data: ProfileRow | null };
 
   const { data: purchasedLevels } = await supabase
     .from('purchased_levels')
     .select('hsk_level')
-    .eq('user_id', userId);
+    .eq('user_id', userId) as { data: PurchasedLevelRow[] | null };
 
   const levels = purchasedLevels?.map((p) => p.hsk_level) || [];
 

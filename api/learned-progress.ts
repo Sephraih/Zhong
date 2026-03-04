@@ -124,9 +124,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Rate limiting
-  const clientIp = getClientIp(req);
-  
   // Authenticate user
   const user = await getUserFromToken(req.headers.authorization);
   if (!user) {

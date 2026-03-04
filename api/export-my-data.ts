@@ -164,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `attachment; filename="hamhao-my-data-${new Date().toISOString().slice(0, 10)}.json"`
     );
     res.json(exportData);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Export data error:', error);
     res.status(500).json({ error: 'Failed to export data' });
   }
