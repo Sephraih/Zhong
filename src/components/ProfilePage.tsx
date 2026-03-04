@@ -58,6 +58,16 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+  
+  // Check if user just confirmed an email change
+  useEffect(() => {
+    const emailChanged = sessionStorage.getItem("hamhao_email_changed");
+    if (emailChanged) {
+      sessionStorage.removeItem("hamhao_email_changed");
+      setEmailSuccess("Your email address has been successfully updated!");
+      setEmailOpen(true);
+    }
+  }, []);
 
   // Change password UI
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -435,7 +445,11 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                     try {
                       setEmailBusy(true);
                       await changeEmail(emailPassword, newEmail);
-                      setEmailSuccess("Email update initiated. Check your new email to confirm.");
+                      setEmailSuccess(
+                        "A confirmation link has been sent to your new email address. " +
+                        "Please click the link to complete the change. Your current email " +
+                        "will remain active until you confirm."
+                      );
                       setNewEmail("");
                       setEmailPassword("");
                     } catch (err) {

@@ -42,9 +42,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get profile with account_tier
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_tier, is_premium, stripe_customer_id')
+      .select('account_tier, is_premium, stripe_customer_id, email')
       .eq('id', user.id)
       .single();
+
+    // Sync email to profiles table if it has changed (after email confirmation)
+    // This ensures the profiles table stays in sync with auth.users
+    if (profile && user.email && profile.email !== user.email) {
+      console.log(`📧 Syncing email change in profiles: ${profile.email} → ${user.email}`);
+      await supabase
+        .from('profiles')
+        .update({ email: user.email })
+        .eq('id', user.id);
+    }
 
     // Get purchased levels
     const { data: purchasedLevelsData } = await supabase

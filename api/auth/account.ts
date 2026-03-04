@@ -85,26 +85,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'Invalid email format' });
         }
 
-        // Update email in Supabase Auth
+        // Check if new email is same as current
+        if (newEmail.toLowerCase() === user.email?.toLowerCase()) {
+          return res.status(400).json({ error: 'New email must be different from current email' });
+        }
+
+        // Check if new email is already in use
+        const { data: existingUser } = await supabase.auth.admin.listUsers();
+        const emailInUse = existingUser?.users?.some(
+          (u) => u.email?.toLowerCase() === newEmail.toLowerCase() && u.id !== user.id
+        );
+        if (emailInUse) {
+          return res.status(400).json({ error: 'This email is already in use' });
+        }
+
+        // Get the redirect URL for the confirmation email
+        const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+        const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+        const baseUrl = process.env.FRONTEND_URL || (host ? `${proto}://${host}` : undefined);
+
+        // Use Supabase's built-in email change flow with confirmation
+        // This sends a confirmation link to the NEW email address
+        // Note: Supabase can also send a notification to the old email (configured in dashboard)
         const { error: updateError } = await supabase.auth.admin.updateUserById(
           user.id,
-          { email: newEmail }
+          { 
+            email: newEmail,
+            email_confirm: false, // This triggers confirmation email to new address
+          }
         );
 
         if (updateError) {
           console.error('Email update error:', updateError);
+          
+          // Handle specific error cases
+          if (updateError.message.includes('already registered')) {
+            return res.status(400).json({ error: 'This email is already in use' });
+          }
+          
           return res.status(400).json({ error: updateError.message });
         }
 
-        // Also update in profiles table
-        await supabase
-          .from('profiles')
-          .update({ email: newEmail })
-          .eq('id', user.id);
+        // Log the email change request (for security audit)
+        console.log(`📧 Email change requested for user ${user.id}: ${user.email} → ${newEmail}`);
+
+        // Note: We do NOT update the profiles table here!
+        // The email in profiles should only be updated AFTER the user confirms
+        // via the email link. This is handled by Supabase's auth hooks or
+        // can be done in the auth-callback page.
 
         return res.json({ 
           success: true, 
-          message: 'Email updated successfully. Please check your new email for confirmation.' 
+          message: 'A confirmation link has been sent to your new email address. Please click the link to complete the change. Your current email will remain active until you confirm.'
         });
       }
 

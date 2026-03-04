@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { storageSetItem } from "../utils/storageConsent";
+import { storageSetItem, storageRemoveItem } from "../utils/storageConsent";
 
 function getBaseClient() {
   const url = import.meta.env.VITE_SUPABASE_URL;
@@ -31,25 +31,52 @@ function parseParams() {
     accessToken: get("access_token"),
     tokenHash: get("token_hash") || get("token"),
     type: get("type"),
+    // Email change confirmation may include these
+    newEmail: get("new_email"),
   };
 }
 
 export function AuthCallbackPage() {
   const [status, setStatus] = useState<"working" | "done" | "error">("working");
-  const [message, setMessage] = useState<string>("Confirming your email…");
+  const [message, setMessage] = useState<string>("Processing your request…");
+  const [isEmailChange, setIsEmailChange] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       try {
         const { code, accessToken, tokenHash, type } = parseParams();
 
+        // Determine if this is an email change confirmation
+        const isEmailChangeFlow = type === "email_change" || type === "email";
+        setIsEmailChange(isEmailChangeFlow);
+
+        if (isEmailChangeFlow) {
+          setMessage("Confirming your new email address…");
+        } else {
+          setMessage("Confirming your email…");
+        }
+
         // If the redirect contains an access token already, just use it.
         if (accessToken) {
+          // Clear old token first to prevent conflicts
+          storageRemoveItem("hanyu_auth_token");
+          
+          // Small delay to ensure storage is cleared
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
           storageSetItem("hanyu_auth_token", accessToken);
           sessionStorage.setItem("hamhao_email_confirmed", "1");
-          setStatus("done");
-          setMessage("Email confirmed! Redirecting to your profile…");
-          setTimeout(() => window.location.assign("/profile"), 600);
+          
+          if (isEmailChangeFlow) {
+            sessionStorage.setItem("hamhao_email_changed", "1");
+            setStatus("done");
+            setMessage("Email address updated successfully! Redirecting to your profile…");
+          } else {
+            setStatus("done");
+            setMessage("Email confirmed! Redirecting to your profile…");
+          }
+          
+          setTimeout(() => window.location.assign("/profile"), 800);
           return;
         }
 
@@ -73,11 +100,40 @@ export function AuthCallbackPage() {
             return;
           }
 
+          // Clear old token first to prevent conflicts
+          storageRemoveItem("hanyu_auth_token");
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
           storageSetItem("hanyu_auth_token", data.session.access_token);
           sessionStorage.setItem("hamhao_email_confirmed", "1");
-          setStatus("done");
-          setMessage("Email confirmed! Redirecting to your profile…");
-          setTimeout(() => window.location.assign("/profile"), 600);
+          
+          // If this was an email change, update the profiles table
+          if (isEmailChangeFlow && data.user?.email) {
+            try {
+              // Call the API to sync the profile email
+              const apiBase = import.meta.env?.VITE_API_BASE || "";
+              await fetch(`${apiBase}/api/auth/me`, {
+                headers: { 
+                  Authorization: `Bearer ${data.session.access_token}`,
+                  "Cache-Control": "no-store",
+                },
+              });
+              
+              sessionStorage.setItem("hamhao_email_changed", "1");
+              setStatus("done");
+              setMessage("Email address updated successfully! Redirecting to your profile…");
+            } catch (syncError) {
+              console.warn("Failed to sync profile email:", syncError);
+              // Still consider it a success - the auth email is updated
+              setStatus("done");
+              setMessage("Email address updated! Redirecting to your profile…");
+            }
+          } else {
+            setStatus("done");
+            setMessage("Email confirmed! Redirecting to your profile…");
+          }
+          
+          setTimeout(() => window.location.assign("/profile"), 800);
           return;
         }
 
@@ -95,12 +151,16 @@ export function AuthCallbackPage() {
           return;
         }
 
+        // Clear old token first to prevent conflicts
+        storageRemoveItem("hanyu_auth_token");
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         storageSetItem("hanyu_auth_token", data.session.access_token);
         sessionStorage.setItem("hamhao_email_confirmed", "1");
 
         setStatus("done");
         setMessage("Email confirmed! Redirecting to your profile…");
-        setTimeout(() => window.location.assign("/profile"), 600);
+        setTimeout(() => window.location.assign("/profile"), 800);
       } catch (e) {
         setStatus("error");
         setMessage(e instanceof Error ? e.message : "Failed to complete confirmation.");
@@ -112,9 +172,19 @@ export function AuthCallbackPage() {
 
   return (
     <div className="max-w-xl mx-auto py-20 text-center">
-      <div className="text-5xl mb-4">{status === "error" ? "⚠️" : "📧"}</div>
-      <h2 className="text-2xl font-bold text-white mb-2">Email confirmation</h2>
+      <div className="text-5xl mb-4">
+        {status === "error" ? "⚠️" : status === "done" ? "✅" : "📧"}
+      </div>
+      <h2 className="text-2xl font-bold text-white mb-2">
+        {isEmailChange ? "Email Change Confirmation" : "Email Confirmation"}
+      </h2>
       <p className="text-gray-400 mb-8">{message}</p>
+
+      {status === "working" && (
+        <div className="flex justify-center">
+          <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
 
       {status === "error" && (
         <div className="flex justify-center gap-3">
