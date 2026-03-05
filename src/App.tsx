@@ -18,6 +18,7 @@ import { FlashcardMode } from "./components/FlashcardMode";
 import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
+import { SentenceMode } from "./components/SentenceMode";
 import { useLearnedState } from "./hooks/useLearnedState";
 import { AuthModal } from "./components/AuthModal";
 import { AuthHeader } from "./components/AuthHeader";
@@ -112,6 +113,7 @@ type ViewMode =
   | "flashcards"
   | "quiz"
   | "practice"
+  | "sentences"
   | "profile"
   | "privacy"
   | "tos"
@@ -123,6 +125,7 @@ const VIEW_MODES: ViewMode[] = [
   "flashcards",
   "quiz",
   "practice",
+  "sentences",
   "profile",
   "privacy",
   "tos",
@@ -555,6 +558,12 @@ function AppContent() {
           "Test your Chinese vocabulary recall with multiple-choice quizzes by HSK level.",
         path: "/quiz",
       },
+      sentences: {
+        title: "Sentence Practice — HamHao",
+        description:
+          "Practice reading and understanding Chinese sentences with examples from HSK vocabulary.",
+        path: "/sentences",
+      },
       profile: {
         title: "Your Profile — HamHao",
         description:
@@ -647,6 +656,7 @@ function AppContent() {
                 { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
                 { id: "flashcards" as ViewMode, label: "Cards", icon: "🃏" },
                 { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
+                { id: "sentences" as ViewMode, label: "Sentences", icon: "💬" },
               ].map((mode) => (
                 <button
                   key={mode.id}
@@ -1191,6 +1201,17 @@ function AppContent() {
             </div>
 
             <QuizMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
+          </div>
+        )}
+
+        {viewMode === "sentences" && (
+          <div>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-white mb-2">💬 Sentence Practice</h2>
+              <p className="text-gray-400">Practice reading and understanding example sentences</p>
+            </div>
+
+            <SentenceMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
           </div>
         )}
       </main>
