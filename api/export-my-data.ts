@@ -145,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         hsk_level: p.hsk_level,
         purchased_at: p.purchased_at,
       })) ?? [],
-      purchase_history: purchases?.map(p => ({
+      purchase_history: purchases?.map((p: Record<string, unknown>) => ({
         product_type: p.product_type,
         hsk_level: p.hsk_level,
         status: p.status,
