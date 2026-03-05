@@ -233,10 +233,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  // Add a simple GET handler to test if the webhook endpoint is reachable
+  if (req.method === 'GET') {
+    const vercelEnv = process.env.VERCEL_ENV || 'unknown';
+    const hasWebhookSecret = !!process.env.STRIPE_WEBHOOK_SECRET;
+    const hasStripeKey = !!process.env.STRIPE_SECRET_KEY;
+    const isTestMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_');
+    
+    return res.status(200).json({
+      status: 'Webhook endpoint is reachable',
+      environment: vercelEnv,
+      stripe_mode: isTestMode ? 'TEST' : 'LIVE',
+      webhook_secret_configured: hasWebhookSecret,
+      stripe_key_configured: hasStripeKey,
+    });
+  }
+
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, OPTIONS');
+    res.setHeader('Allow', 'POST, GET, OPTIONS');
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Log incoming request details
+  console.log('📬 Webhook request received');
+  console.log('   Headers:', JSON.stringify({
+    'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing',
+    'content-type': req.headers['content-type'],
+  }));
 
   const sig = (req.headers['stripe-signature'] || req.headers['Stripe-Signature']) as string | string[] | undefined;
   if (!sig) {
@@ -245,8 +268,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Initialize clients
-  const supabase = getSupabaseClient();
-  const stripe = getStripeClient();
+  let supabase: SupabaseClient;
+  let stripe: Stripe;
+  
+  try {
+    supabase = getSupabaseClient();
+    stripe = getStripeClient();
+  } catch (err) {
+    console.error('❌ Failed to initialize clients:', err);
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
 
   let event: Stripe.Event;
 
@@ -256,10 +287,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      throw new Error('Missing STRIPE_WEBHOOK_SECRET');
+      console.error('❌ Missing STRIPE_WEBHOOK_SECRET env var');
+      return res.status(500).json({ error: 'Webhook secret not configured' });
     }
     
+    console.log('🔐 Verifying webhook signature...');
+    console.log('   Secret prefix:', webhookSecret.substring(0, 10) + '...');
+    
     event = stripe.webhooks.constructEvent(rawBody, signature!, webhookSecret);
+    console.log('✅ Webhook signature verified');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('❌ Webhook signature verification failed:', message);
@@ -267,27 +303,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   console.log(`📩 Webhook received: ${event.type}`);
+  console.log(`   Event ID: ${event.id}`);
 
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
+        
+        console.log('====== CHECKOUT SESSION COMPLETED ======');
+        console.log('💳 Session ID:', session.id);
+        console.log('📋 Full metadata:', JSON.stringify(session.metadata));
+        
         const userId = session.metadata?.user_id;
         const productType = session.metadata?.product_type;
         const hskLevel = session.metadata?.hsk_level;
 
-        console.log('💳 Checkout completed for session:', session.id);
         console.log('👤 User ID:', userId);
         console.log('📦 Product type:', productType);
         console.log('📊 HSK Level:', hskLevel);
         console.log('💰 Amount:', session.amount_total, session.currency);
+        console.log('🔗 Payment Intent:', session.payment_intent);
 
         if (!userId) {
           console.error('❌ No user_id in session metadata!');
+          console.error('   This means the checkout session was created without proper metadata.');
+          console.error('   Check create-checkout-session.ts to ensure metadata is being set.');
           break;
         }
 
         // Update the purchase record with completed status
+        console.log('📝 Updating purchase record...');
         await updatePurchaseRecord(
           supabase,
           session.id,
@@ -297,25 +342,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         );
 
         // Ensure profile exists
-        const { data: existingProfile } = await supabase
+        console.log('👤 Checking if profile exists...');
+        const { data: existingProfile, error: profileError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, account_tier')
           .eq('id', userId)
           .single();
 
+        if (profileError) {
+          console.log('⚠️ Profile query error:', profileError.message);
+        }
+
         if (!existingProfile) {
           console.log('⚠️ Profile not found, creating one...');
-          const { data: userData } = await supabase.auth.admin.getUserById(userId);
-          if (userData?.user) {
+          const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+          
+          if (userError) {
+            console.error('❌ Failed to get user from auth:', userError.message);
+          } else if (userData?.user) {
             const newProfile = {
               id: userId,
               email: userData.user.email,
               account_tier: 'free',
               is_premium: false,
             };
-            await supabase.from('profiles').insert(newProfile as Record<string, unknown>);
-            console.log('✅ Profile created');
+            const { error: insertError } = await supabase.from('profiles').insert(newProfile as Record<string, unknown>);
+            if (insertError) {
+              console.error('❌ Failed to create profile:', insertError.message);
+            } else {
+              console.log('✅ Profile created');
+            }
           }
+        } else {
+          console.log('✅ Profile exists, current tier:', existingProfile.account_tier);
         }
 
         // Handle based on product type
@@ -324,14 +383,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await setUserPremium(supabase, userId);
         } else if (productType === 'hsk_level' && hskLevel) {
           console.log(`🔄 Processing HSK ${hskLevel} purchase...`);
-          await addPurchasedLevel(supabase, userId, parseInt(hskLevel, 10), session.payment_intent as string);
+          const levelNum = parseInt(hskLevel, 10);
+          if (isNaN(levelNum)) {
+            console.error('❌ Invalid HSK level:', hskLevel);
+          } else {
+            await addPurchasedLevel(supabase, userId, levelNum, session.payment_intent as string || 'unknown');
+          }
         } else {
           // Fallback: treat as premium purchase for backwards compatibility
-          console.log('🔄 Processing legacy premium purchase...');
+          console.log('🔄 Processing legacy premium purchase (no product_type specified)...');
           await setUserPremium(supabase, userId);
         }
 
-        console.log('✅ Purchase processing complete!');
+        // Verify the update worked
+        const { data: verifyProfile } = await supabase
+          .from('profiles')
+          .select('account_tier, is_premium')
+          .eq('id', userId)
+          .single();
+        
+        const { data: verifyLevels } = await supabase
+          .from('purchased_levels')
+          .select('hsk_level')
+          .eq('user_id', userId);
+        
+        console.log('🔍 Verification after update:');
+        console.log('   Profile:', verifyProfile);
+        console.log('   Purchased levels:', verifyLevels?.map(l => l.hsk_level));
+
+        console.log('====== PURCHASE PROCESSING COMPLETE ======');
         break;
       }
 
