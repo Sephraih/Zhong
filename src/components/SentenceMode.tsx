@@ -93,6 +93,8 @@ function getLockedHskButtonClasses(level: HskLevel): string {
   }
 }
 
+type SentenceDirection = "zh-en" | "en-zh";
+
 export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps) {
   const isMobile = useIsMobile();
 
@@ -102,6 +104,8 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
   const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(HSK_LEVELS));
+  const [direction, setDirection] = useState<SentenceDirection>("zh-en");
+  const [infoMinimized, setInfoMinimized] = useState(true);
 
   // Animation state
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -344,43 +348,118 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
 
   const currentSentence = sessionSentences[currentIndex];
 
+  const toggleDirection = () => {
+    const newDir = direction === "zh-en" ? "en-zh" : "zh-en";
+    setDirection(newDir);
+    setIsFlipped(false);
+  };
+
+  const isChinese = direction === "zh-en";
+
   // HSK Level Filter UI
   const HskFilterButtons = () => (
-    <div className="mb-6 flex justify-center">
-      <div className="flex flex-wrap justify-center gap-2">
-        <button
-          onClick={toggleAllLevels}
-          className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-            allLevelsSelected
-              ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-              : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-neutral-700"
-          }`}
-          title={allLevelsSelected ? "Deselect all levels" : "Select all levels"}
-        >
-          All
-        </button>
+    <div className="mb-6 space-y-3">
+      {/* HSK Level multi-select */}
+      <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            onClick={toggleAllLevels}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              allLevelsSelected
+                ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
+                : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-neutral-700"
+            }`}
+            title={allLevelsSelected ? "Deselect all levels" : "Select all levels"}
+          >
+            All
+          </button>
 
-        {HSK_LEVELS.map((level) => {
-          const enabled = isLevelEnabled(level);
-          const selected = selectedLevels.has(level);
-          return (
-            <button
-              key={level}
-              onClick={() => toggleLevel(level)}
-              title={enabled ? undefined : "Sign in / purchase to unlock this level"}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                !enabled
-                  ? getLockedHskButtonClasses(level)
-                  : selected
-                  ? getHskButtonClasses(level, true)
-                  : `${getHskButtonClasses(level, false)} border border-neutral-800`
-              }`}
-            >
-              {!enabled ? "🔒 " : ""}HSK {level}
-            </button>
-          );
-        })}
+          {HSK_LEVELS.map((level) => {
+            const enabled = isLevelEnabled(level);
+            const selected = selectedLevels.has(level);
+            return (
+              <button
+                key={level}
+                onClick={() => toggleLevel(level)}
+                title={enabled ? undefined : "Sign in / purchase to unlock this level"}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  !enabled
+                    ? getLockedHskButtonClasses(level)
+                    : selected
+                    ? getHskButtonClasses(level, true)
+                    : `${getHskButtonClasses(level, false)} border border-neutral-800`
+                }`}
+              >
+                {!enabled ? "🔒 " : ""}HSK {level}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Direction toggle + help toggle */}
+      <div className="flex justify-center">
+        <div className="inline-flex items-center gap-2">
+          <button
+            onClick={toggleDirection}
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:border-neutral-700 transition-all"
+            title={direction === "zh-en" ? "Switch to English → Chinese" : "Switch to Chinese → English"}
+          >
+            {direction === "zh-en" ? (
+              <>
+                <span className="text-red-400">中</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                <span>EN</span>
+              </>
+            ) : (
+              <>
+                <span>EN</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+                <span className="text-red-400">中</span>
+              </>
+            )}
+          </button>
+
+          {/* Help toggle */}
+          <button
+            onClick={() => setInfoMinimized(!infoMinimized)}
+            className={`w-8 h-8 sm:w-10 sm:h-10 inline-flex items-center justify-center rounded-lg sm:rounded-xl border transition-all text-sm font-bold ${
+              infoMinimized
+                ? "bg-neutral-900 border-neutral-800 text-gray-500 hover:text-white hover:border-neutral-700"
+                : "bg-yellow-950/25 border-yellow-900/40 text-yellow-300 hover:bg-yellow-950/35 hover:border-yellow-700/50"
+            }`}
+            title={infoMinimized ? "Show help" : "Hide help"}
+          >
+            {infoMinimized ? "?" : "—"}
+          </button>
+        </div>
+      </div>
+
+      {/* Help panel (shown when not minimized) */}
+      {!infoMinimized && (
+        <div className="max-w-lg mx-auto bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 shadow-lg">
+          <div className="text-[11px] leading-relaxed text-gray-400">
+            <p className="font-semibold text-white">How to:</p>
+            <p className="mt-2">
+              Practice with 10 random example sentences. Use <span className="text-emerald-400 font-semibold">Got it</span>{" "}
+              / <span className="text-rose-400 font-semibold">Forgot it</span> to track your session progress.
+            </p>
+            <p className="mt-2">
+              At <span className="text-yellow-400 font-semibold">5/5 ⭐</span>, the sentence is ready to be removed from the session.
+            </p>
+            <p className="mt-2">
+              <span className="font-semibold text-white">No permanent state:</span> Sentence practice doesn't affect your word learning status. Removing a sentence just removes it from the current session.
+            </p>
+            <p className="mt-2">
+              <span className="font-semibold text-white">Direction:</span> Toggle between Chinese → English and English → Chinese to practice both recognition and recall.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -558,36 +637,70 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
 
         {/* Card content */}
         <div className="flex-1 flex flex-col items-center justify-center p-6 pt-16">
-          {/* Front: Chinese sentence with hover pinyin */}
+          {/* Front content */}
           <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-90 -translate-y-8 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
-            <div className="flex flex-wrap items-end gap-0.5 justify-center mb-4 max-w-full px-2">
-              {currentSentence.pinyinWords.map((pw, i) => (
-                <HoverCharacter
-                  key={`${currentSentence.id}-${i}`}
-                  char={pw.char}
-                  pinyin={pw.pinyin}
-                  size={isMobile ? "lg" : "xl"}
-                  wordId={currentSentence.id}
-                />
-              ))}
-            </div>
-            <SpeakerButton text={currentSentence.chinese} size="md" />
+            {isChinese ? (
+              /* Chinese → English: Show Chinese on front */
+              <>
+                <div className="flex flex-wrap items-end gap-0.5 justify-center mb-4 max-w-full px-2">
+                  {currentSentence.pinyinWords.map((pw, i) => (
+                    <HoverCharacter
+                      key={`${currentSentence.id}-${i}`}
+                      char={pw.char}
+                      pinyin={pw.pinyin}
+                      size={isMobile ? "lg" : "xl"}
+                      wordId={currentSentence.id}
+                    />
+                  ))}
+                </div>
+                <SpeakerButton text={currentSentence.chinese} size="md" />
+              </>
+            ) : (
+              /* English → Chinese: Show English on front */
+              <>
+                <p className="text-white text-2xl font-semibold text-center leading-relaxed px-4">
+                  {currentSentence.english}
+                </p>
+                <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
+              </>
+            )}
             
             {!isFlipped && (
               <>
                 <div className="mt-6"><ProgressBarInsideCard /></div>
-                <p className="text-gray-600 text-sm mt-4">Tap to reveal translation · Hover for pinyin</p>
+                <p className="text-gray-600 text-sm mt-4">
+                  {isChinese ? "Tap to reveal translation · Hover for pinyin" : "Tap to reveal Chinese"}
+                </p>
               </>
             )}
           </div>
 
-          {/* Back: English translation + source word info */}
+          {/* Back content */}
           <div className={`absolute inset-0 pt-24 pb-6 px-6 flex flex-col items-center bg-neutral-900/95 transition-all duration-300 overflow-y-auto ${
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"
           }`}>
-            <p className="text-white text-xl font-semibold text-center mb-6 leading-relaxed">
-              {currentSentence.english}
-            </p>
+            {isChinese ? (
+              /* Chinese → English: Show English on back */
+              <p className="text-white text-xl font-semibold text-center mb-6 leading-relaxed">
+                {currentSentence.english}
+              </p>
+            ) : (
+              /* English → Chinese: Show Chinese on back */
+              <>
+                <div className="flex flex-wrap items-end gap-0.5 justify-center mb-4 max-w-full px-2">
+                  {currentSentence.pinyinWords.map((pw, i) => (
+                    <HoverCharacter
+                      key={`${currentSentence.id}-back-${i}`}
+                      char={pw.char}
+                      pinyin={pw.pinyin}
+                      size={isMobile ? "lg" : "xl"}
+                      wordId={currentSentence.id}
+                    />
+                  ))}
+                </div>
+                <SpeakerButton text={currentSentence.chinese} size="md" />
+              </>
+            )}
 
             <div className="my-4"><ProgressBarInsideCard /></div>
 
