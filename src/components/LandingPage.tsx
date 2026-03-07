@@ -29,10 +29,10 @@ const DESKTOP_BG_ASSET = Object.values(desktopBgExact)[0] ?? null;
 const MOBILE_BG_ASSET = Object.values(mobileBgExact)[0] ?? null;
 
 interface LandingPageProps {
-  onSelectMode: (mode: "browse" | "practice" | "flashcards" | "quiz") => void;
+  onSelectMode: (mode: "browse" | "practice" | "sentences" | "flashcards" | "quiz") => void;
 }
 
-type ModeId = "browse" | "practice" | "flashcards" | "quiz";
+type ModeId = "browse" | "practice" | "sentences" | "flashcards" | "quiz";
 
 type SectionId = "hero" | ModeId | "footer";
 
@@ -437,6 +437,139 @@ function QuizPreview() {
   );
 }
 
+function SentencesPreview() {
+  const [flipped, setFlipped] = useState(false);
+  const [progress, setProgress] = useState(2);
+  const [pulse, setPulse] = useState<"got" | null>(null);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setFlipped(true), 900);
+    const t2 = setTimeout(() => {
+      setPulse("got");
+      setProgress(3);
+    }, 2100);
+    const t3 = setTimeout(() => setPulse(null), 2550);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, []);
+
+  const ring = pulse === "got" ? "ring-2 ring-emerald-500/40" : "";
+  const border = pulse === "got" ? "border-emerald-500/60" : "border-neutral-800";
+
+  return (
+    <PreviewFrame title="Sentences · Practice">
+      <div className="p-4">
+        <div className="mb-3 bg-neutral-950 border border-neutral-800 rounded-xl p-3">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
+            <span>Sentence 3 of 10</span>
+            <span className="bg-neutral-800 px-2 py-0.5 rounded">Sentences</span>
+          </div>
+          <div className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex ${ring}`}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={i}
+                className={`h-full flex-1 ${i === 2 ? "bg-green-500" : i < 2 ? "bg-green-700" : "bg-neutral-700"} ${i > 0 ? "border-l border-black/20" : ""}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div
+          className={`relative rounded-3xl border ${border} bg-neutral-900 shadow-2xl overflow-hidden transition-all duration-300 ${
+            pulse === "got" ? "shadow-[0_0_26px_6px_rgba(34,197,94,0.25)]" : ""
+          }`}
+          style={{ height: 420 }}
+        >
+          <div className="absolute top-5 left-6 flex items-center gap-2">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">HSK 1</span>
+          </div>
+          <div className="absolute top-5 right-6 text-xs text-gray-600 font-medium">From: 学习</div>
+
+          <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ${flipped ? "opacity-30 scale-75 -translate-y-10" : "opacity-100"}`}>
+            <div className="flex flex-wrap items-end gap-1 justify-center px-6">
+              {[
+                { c: "我", p: "wǒ" },
+                { c: "在", p: "zài" },
+                { c: "学", p: "xué" },
+                { c: "习", p: "xí" },
+                { c: "汉", p: "hàn" },
+                { c: "语", p: "yǔ" },
+                { c: "。", p: "" },
+              ].map((x, i) => (
+                <HoverCharacter key={`sp-${i}`} char={x.c} pinyin={x.p} size="xl" wordId={`sp-${i}`} />
+              ))}
+            </div>
+            <div className="mt-5 w-10 h-10 rounded-full bg-neutral-800 border border-neutral-700" />
+
+            <div className="mt-6 flex items-center gap-3">
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-3 rounded-sm transition-all duration-500 ${
+                      step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800 border border-neutral-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className={`text-xs font-semibold ${progress === 5 ? "text-yellow-400" : "text-gray-500"}`}>
+                {progress}/5 <span className={progress === 5 ? "text-yellow-300" : "text-gray-600"}>⭐</span>
+              </span>
+            </div>
+            <p className="text-gray-600 text-sm mt-5">Tap to reveal · Hover for pinyin</p>
+          </div>
+
+          <div className={`absolute inset-0 pt-28 px-8 transition-all duration-300 ${flipped ? "opacity-100" : "opacity-0 pointer-events-none translate-y-6"}`}>
+            <p className="text-white text-2xl font-bold text-center">I am studying Chinese.</p>
+            
+            <div className="mt-6 flex flex-wrap items-end gap-1 justify-center">
+              {[
+                { c: "我", p: "wǒ" },
+                { c: "在", p: "zài" },
+                { c: "学", p: "xué" },
+                { c: "习", p: "xí" },
+                { c: "汉", p: "hàn" },
+                { c: "语", p: "yǔ" },
+                { c: "。", p: "" },
+              ].map((x, i) => (
+                <HoverCharacter key={`sp-back-${i}`} char={x.c} pinyin={x.p} size="lg" wordId={`sp-back-${i}`} />
+              ))}
+            </div>
+            <p className="text-red-400 text-sm font-medium text-center mt-2">wǒ zài xué xí hàn yǔ.</p>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-3 rounded-sm transition-all duration-500 ${
+                      step <= progress ? "w-7 bg-emerald-500" : "w-6 bg-neutral-800 border border-neutral-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className={`text-xs font-semibold ${progress === 5 ? "text-yellow-400" : "text-gray-500"}`}>
+                {progress}/5 <span className={progress === 5 ? "text-yellow-300" : "text-gray-600"}>⭐</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="h-12 rounded-xl bg-neutral-900 border border-red-900/40 flex items-center justify-center gap-2 text-red-400 font-bold">✗ Forgot it</div>
+          <div className="h-12 rounded-xl bg-neutral-900 border border-emerald-900/40 flex items-center justify-center gap-2 text-emerald-400 font-bold">✓ Got it</div>
+        </div>
+        <div className="mt-3 h-11 rounded-xl bg-neutral-950 border border-yellow-900/30 flex items-center justify-center gap-2 text-yellow-400 font-semibold">
+          ⭐ Remove from Session
+        </div>
+      </div>
+    </PreviewFrame>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SectionConfig {
@@ -449,6 +582,7 @@ const SECTIONS: SectionConfig[] = [
   { id: "hero", label: "Home", color: "bg-gray-400" },
   { id: "browse", label: "Browse", color: "bg-red-500" },
   { id: "practice", label: "Practice", color: "bg-orange-500" },
+  { id: "sentences", label: "Sentences", color: "bg-teal-500" },
   { id: "flashcards", label: "Flashcards", color: "bg-blue-500" },
   { id: "quiz", label: "Quiz", color: "bg-yellow-500" },
   { id: "footer", label: "Start", color: "bg-gray-400" },
@@ -512,14 +646,16 @@ function ModeSectionDesktop({
   swap: boolean;
 }) {
   const accentText =
-    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
   const bulletDot =
-    id === "browse" ? "bg-red-500/60" : id === "practice" ? "bg-orange-500/60" : id === "flashcards" ? "bg-blue-500/60" : "bg-yellow-500/60";
+    id === "browse" ? "bg-red-500/60" : id === "practice" ? "bg-orange-500/60" : id === "sentences" ? "bg-teal-500/60" : id === "flashcards" ? "bg-blue-500/60" : "bg-yellow-500/60";
   const btn =
     id === "browse"
       ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
       : id === "practice"
       ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
+      : id === "sentences"
+      ? "bg-teal-600 hover:bg-teal-700 shadow-teal-900/30"
       : id === "flashcards"
       ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
       : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
@@ -615,12 +751,14 @@ function ModeSectionMobile({
   onSelectMode: (id: ModeId) => void;
 }) {
   const accentText =
-    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
   const btn =
     id === "browse"
       ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
       : id === "practice"
       ? "bg-orange-600 hover:bg-orange-700 shadow-orange-900/30"
+      : id === "sentences"
+      ? "bg-teal-600 hover:bg-teal-700 shadow-teal-900/30"
       : id === "flashcards"
       ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
       : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
@@ -670,10 +808,139 @@ function ModeSectionMobile({
   );
 }
 
+// Speech bubble messages
+const HAMHAO_MESSAGES = [
+  {
+    type: "english" as const,
+    text: "Hello, I'm HamHao! Please learn Chinese with me.",
+  },
+  {
+    type: "chinese" as const,
+    text: "你好，我是HamHao！请跟我学中文吧！",
+    pinyinWords: [
+      { char: "你", pinyin: "nǐ" },
+      { char: "好", pinyin: "hǎo" },
+      { char: "，", pinyin: "" },
+      { char: "我", pinyin: "wǒ" },
+      { char: "是", pinyin: "shì" },
+      { char: "H", pinyin: "" },
+      { char: "a", pinyin: "" },
+      { char: "m", pinyin: "" },
+      { char: "H", pinyin: "" },
+      { char: "a", pinyin: "" },
+      { char: "o", pinyin: "" },
+      { char: "！", pinyin: "" },
+      { char: "请", pinyin: "qǐng" },
+      { char: "跟", pinyin: "gēn" },
+      { char: "我", pinyin: "wǒ" },
+      { char: "学", pinyin: "xué" },
+      { char: "中", pinyin: "zhōng" },
+      { char: "文", pinyin: "wén" },
+      { char: "吧", pinyin: "ba" },
+      { char: "！", pinyin: "" },
+    ],
+  },
+];
+
+function HamHaoSpeechBubble({ 
+  message, 
+  onClose,
+  isMobile 
+}: { 
+  message: typeof HAMHAO_MESSAGES[number]; 
+  onClose: () => void;
+  isMobile: boolean;
+}) {
+  return (
+    <div 
+      className={`absolute z-50 ${
+        isMobile 
+          ? "top-full left-1/2 -translate-x-1/2 mt-3" 
+          : "left-full top-1/2 -translate-y-1/2 ml-3"
+      }`}
+      style={{ animation: "fadeInUp 0.3s ease-out" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Speech bubble */}
+      <div className="relative bg-white text-neutral-900 rounded-2xl px-4 py-3 shadow-xl max-w-[260px] sm:max-w-[280px]">
+        {/* Arrow - points up on mobile, left on desktop */}
+        {isMobile ? (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-b-8 border-transparent border-b-white" />
+        ) : (
+          <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-t-8 border-b-8 border-r-8 border-transparent border-r-white" />
+        )}
+        
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-2 -right-2 w-6 h-6 bg-neutral-800 text-white rounded-full flex items-center justify-center text-xs hover:bg-neutral-700 transition-colors shadow-lg"
+        >
+          ✕
+        </button>
+        
+        {/* Message content */}
+        {message.type === "english" ? (
+          <p className="text-sm font-medium leading-relaxed">
+            {message.text}
+          </p>
+        ) : (
+          <div>
+            <div className="flex flex-wrap items-end gap-0.5 mb-2">
+              {message.pinyinWords.map((pw, i) => (
+                <HoverCharacter 
+                  key={`hamhao-msg-${i}`} 
+                  char={pw.char} 
+                  pinyin={pw.pinyin} 
+                  size="sm" 
+                  wordId={`hamhao-msg-${i}`}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">
+              (Tap characters for pinyin)
+            </p>
+          </div>
+        )}
+        
+        {/* Language indicator */}
+        <div className="mt-2 pt-2 border-t border-neutral-200 flex items-center justify-between">
+          <span className="text-[10px] text-neutral-400 uppercase tracking-wider">
+            {message.type === "english" ? "🇬🇧 English" : "🇨🇳 中文"}
+          </span>
+          <span className="text-[10px] text-neutral-400">
+            Tap me again!
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LandingPage({ onSelectMode }: LandingPageProps) {
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const active = useActiveSection(containerRef, !isMobile);
+  
+  // HamHao mascot interaction state
+  const [showSpeechBubble, setShowSpeechBubble] = useState(false);
+  const [messageIndex, setMessageIndex] = useState(0);
+  
+  const handleHamHaoClick = useCallback(() => {
+    if (!showSpeechBubble) {
+      // First click - show English message
+      setShowSpeechBubble(true);
+      setMessageIndex(0);
+    } else {
+      // Subsequent clicks - cycle through messages
+      const nextIndex = (messageIndex + 1) % HAMHAO_MESSAGES.length;
+      setMessageIndex(nextIndex);
+    }
+  }, [showSpeechBubble, messageIndex]);
+  
+  const handleCloseSpeechBubble = useCallback(() => {
+    setShowSpeechBubble(false);
+    setMessageIndex(0);
+  }, []);
 
   const scrollToIndex = useCallback(
     (index: number) => {
@@ -723,6 +990,21 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       Preview: PracticePreview,
     },
     {
+      id: "sentences" as ModeId,
+      icon: "💬",
+      title: "Sentences",
+      subtitle: "Context is everything.",
+      description:
+        "Practice with real example sentences from the vocabulary. Learn words in context for better retention.",
+      bullets: [
+        "10 random sentences per session",
+        "Chinese ↔ English direction toggle",
+        "Per-character pinyin on hover/tap",
+        "Audio pronunciation for full sentences",
+      ],
+      Preview: SentencesPreview,
+    },
+    {
       id: "flashcards" as ModeId,
       icon: "🃏",
       title: "Flashcards",
@@ -760,17 +1042,42 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       <div className="absolute bottom-1/4 right-1/4 w-44 h-44 bg-red-400/8 rounded-full blur-2xl" />
 
       <div className={isMobile ? "relative z-10 text-center max-w-md mx-auto px-4" : "relative z-10 text-center max-w-3xl mx-auto"}>
-        {logoImage ? (
-          <img
-            src={logoImage}
-            alt="HamHao Logo"
-            className="w-20 h-20 rounded-3xl shadow-2xl shadow-red-900/50 mb-8 object-cover"
-          />
-        ) : (
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 mb-8">
-            <span className="text-white text-4xl font-bold">汉</span>
-          </div>
-        )}
+        {/* Interactive HamHao mascot */}
+        <div className="relative inline-block mb-8">
+          <button
+            onClick={handleHamHaoClick}
+            className="relative group focus:outline-none focus:ring-2 focus:ring-red-500/50 rounded-3xl transition-transform hover:scale-105 active:scale-95"
+            title="Click me!"
+          >
+            {logoImage ? (
+              <img
+                src={logoImage}
+                alt="HamHao - Click me!"
+                className="w-20 h-20 rounded-3xl shadow-2xl shadow-red-900/50 object-cover cursor-pointer"
+              />
+            ) : (
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-red-600 rounded-3xl shadow-2xl shadow-red-900/50 cursor-pointer">
+                <span className="text-white text-4xl font-bold">汉</span>
+              </div>
+            )}
+            {/* Pulsing indicator to show it's clickable */}
+            {!showSpeechBubble && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-[10px] items-center justify-center font-bold">?</span>
+              </span>
+            )}
+          </button>
+          
+          {/* Speech bubble */}
+          {showSpeechBubble && (
+            <HamHaoSpeechBubble 
+              message={HAMHAO_MESSAGES[messageIndex]} 
+              onClose={handleCloseSpeechBubble}
+              isMobile={isMobile}
+            />
+          )}
+        </div>
 
         <h1 className={isMobile ? "text-5xl font-black tracking-tight text-white leading-none" : "text-5xl sm:text-7xl font-black tracking-tight text-white leading-none"}>
           Learn Mandarin
@@ -861,11 +1168,12 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         <h2 className="text-4xl sm:text-5xl font-black text-white">Ready to start?</h2>
         <p className="mt-4 text-gray-400">Pick a mode and begin your first session. Progress is saved locally.</p>
 
-        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
             { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
-            { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
+            { id: "sentences" as ModeId, icon: "💬", label: "Sentences", cls: "border-teal-900/40 hover:border-teal-700/60 hover:bg-teal-950/20" },
+            { id: "flashcards" as ModeId, icon: "🃏", label: "Cards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
             { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
           ].map((m) => (
             <button
