@@ -888,24 +888,30 @@ function HamHaoSpeechBubble({
         ) : (
           <div>
             {/* Chinese characters with inline pinyin on hover/tap */}
-            <div className="flex flex-wrap items-baseline gap-0.5">
+            <div className="flex flex-wrap items-end gap-0.5">
               {message.pinyinWords.map((pw, i) => {
                 const isPunct = /^[，！。？、]$/.test(pw.char);
                 const isLetter = /^[a-zA-Z]$/.test(pw.char);
                 const isHovered = hoveredChar === i;
                 
+                // All elements get the same structure for alignment
+                // Chinese characters: have pinyin space + character
+                // Punctuation/letters: have empty pinyin space + character
+                
                 if (isPunct) {
                   return (
-                    <span key={i} className="text-neutral-500 text-lg">
-                      {pw.char}
+                    <span key={i} className="inline-flex flex-col items-center">
+                      <span className="h-4">{/* spacer for alignment */}</span>
+                      <span className="text-lg text-neutral-500 leading-none">{pw.char}</span>
                     </span>
                   );
                 }
                 
                 if (isLetter) {
                   return (
-                    <span key={i} className="text-red-500 font-bold text-lg">
-                      {pw.char}
+                    <span key={i} className="inline-flex flex-col items-center">
+                      <span className="h-4">{/* spacer for alignment */}</span>
+                      <span className="text-lg font-bold text-red-500 leading-none">{pw.char}</span>
                     </span>
                   );
                 }
@@ -913,7 +919,7 @@ function HamHaoSpeechBubble({
                 return (
                   <span
                     key={i}
-                    className="relative inline-flex flex-col items-center cursor-pointer group"
+                    className="inline-flex flex-col items-center cursor-pointer"
                     onMouseEnter={() => setHoveredChar(i)}
                     onMouseLeave={() => setHoveredChar(null)}
                     onClick={(e) => {
@@ -923,7 +929,7 @@ function HamHaoSpeechBubble({
                   >
                     {/* Pinyin - shows on hover */}
                     <span 
-                      className={`text-[10px] text-red-500 font-medium transition-all duration-200 h-4 ${
+                      className={`text-[10px] text-red-500 font-medium h-4 leading-none flex items-end transition-opacity duration-200 ${
                         isHovered ? "opacity-100" : "opacity-0"
                       }`}
                     >
@@ -931,7 +937,7 @@ function HamHaoSpeechBubble({
                     </span>
                     {/* Character */}
                     <span 
-                      className={`text-lg transition-colors duration-200 ${
+                      className={`text-lg leading-none transition-colors duration-200 ${
                         isHovered ? "text-red-500" : "text-neutral-800"
                       }`}
                     >
@@ -940,7 +946,11 @@ function HamHaoSpeechBubble({
                   </span>
                 );
               })}
-              <span className="ml-1 text-lg">🐹</span>
+              {/* Hamster emoji with same structure */}
+              <span className="inline-flex flex-col items-center ml-1">
+                <span className="h-4">{/* spacer for alignment */}</span>
+                <span className="text-lg leading-none">🐹</span>
+              </span>
             </div>
             <p className="text-[10px] text-neutral-400 mt-2">
               (Hover/tap characters for pinyin)
@@ -977,9 +987,16 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       setShowSpeechBubble(true);
       setMessageIndex(0);
     } else {
-      // Subsequent clicks - cycle through messages
-      const nextIndex = (messageIndex + 1) % HAMHAO_MESSAGES.length;
-      setMessageIndex(nextIndex);
+      // Check if we've shown all messages
+      const nextIndex = messageIndex + 1;
+      if (nextIndex >= HAMHAO_MESSAGES.length) {
+        // All messages shown, close the bubble
+        setShowSpeechBubble(false);
+        setMessageIndex(0);
+      } else {
+        // Show next message
+        setMessageIndex(nextIndex);
+      }
     }
   }, [showSpeechBubble, messageIndex]);
   
