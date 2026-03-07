@@ -851,6 +851,8 @@ function HamHaoSpeechBubble({
   onClose: () => void;
   isMobile: boolean;
 }) {
+  const [hoveredChar, setHoveredChar] = useState<number | null>(null);
+  
   return (
     <div 
       className={`absolute z-50 ${
@@ -861,8 +863,8 @@ function HamHaoSpeechBubble({
       style={{ animation: "fadeInUp 0.3s ease-out" }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Speech bubble */}
-      <div className="relative bg-white text-neutral-900 rounded-2xl px-4 py-3 shadow-xl max-w-[260px] sm:max-w-[280px]">
+      {/* Speech bubble - wider to reduce vertical space */}
+      <div className="relative bg-white text-neutral-900 rounded-2xl px-5 py-4 shadow-xl min-w-[300px] max-w-[340px]">
         {/* Arrow - points up on mobile, left on desktop */}
         {isMobile ? (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-b-8 border-transparent border-b-white" />
@@ -880,35 +882,79 @@ function HamHaoSpeechBubble({
         
         {/* Message content */}
         {message.type === "english" ? (
-          <p className="text-sm font-medium leading-relaxed">
-            {message.text}
+          <p className="text-sm font-medium leading-relaxed text-neutral-800">
+            {message.text} 🐹
           </p>
         ) : (
           <div>
-            <div className="flex flex-wrap items-end gap-0.5 mb-2">
-              {message.pinyinWords.map((pw, i) => (
-                <HoverCharacter 
-                  key={`hamhao-msg-${i}`} 
-                  char={pw.char} 
-                  pinyin={pw.pinyin} 
-                  size="sm" 
-                  wordId={`hamhao-msg-${i}`}
-                />
-              ))}
+            {/* Chinese characters with inline pinyin on hover/tap */}
+            <div className="flex flex-wrap items-baseline gap-0.5">
+              {message.pinyinWords.map((pw, i) => {
+                const isPunct = /^[，！。？、]$/.test(pw.char);
+                const isLetter = /^[a-zA-Z]$/.test(pw.char);
+                const isHovered = hoveredChar === i;
+                
+                if (isPunct) {
+                  return (
+                    <span key={i} className="text-neutral-500 text-lg">
+                      {pw.char}
+                    </span>
+                  );
+                }
+                
+                if (isLetter) {
+                  return (
+                    <span key={i} className="text-red-500 font-bold text-lg">
+                      {pw.char}
+                    </span>
+                  );
+                }
+                
+                return (
+                  <span
+                    key={i}
+                    className="relative inline-flex flex-col items-center cursor-pointer group"
+                    onMouseEnter={() => setHoveredChar(i)}
+                    onMouseLeave={() => setHoveredChar(null)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHoveredChar(isHovered ? null : i);
+                    }}
+                  >
+                    {/* Pinyin - shows on hover */}
+                    <span 
+                      className={`text-[10px] text-red-500 font-medium transition-all duration-200 h-4 ${
+                        isHovered ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      {pw.pinyin}
+                    </span>
+                    {/* Character */}
+                    <span 
+                      className={`text-lg transition-colors duration-200 ${
+                        isHovered ? "text-red-500" : "text-neutral-800"
+                      }`}
+                    >
+                      {pw.char}
+                    </span>
+                  </span>
+                );
+              })}
+              <span className="ml-1 text-lg">🐹</span>
             </div>
-            <p className="text-xs text-neutral-500 mt-1">
-              (Tap characters for pinyin)
+            <p className="text-[10px] text-neutral-400 mt-2">
+              (Hover/tap characters for pinyin)
             </p>
           </div>
         )}
         
         {/* Language indicator */}
-        <div className="mt-2 pt-2 border-t border-neutral-200 flex items-center justify-between">
+        <div className="mt-3 pt-2 border-t border-neutral-200 flex items-center justify-between">
           <span className="text-[10px] text-neutral-400 uppercase tracking-wider">
             {message.type === "english" ? "🇬🇧 English" : "🇨🇳 中文"}
           </span>
-          <span className="text-[10px] text-neutral-400">
-            Tap me again!
+          <span className="text-[10px] text-red-400 font-medium">
+            Tap HamHao again!
           </span>
         </div>
       </div>
