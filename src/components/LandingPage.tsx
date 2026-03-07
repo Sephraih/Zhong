@@ -851,7 +851,31 @@ function HamHaoSpeechBubble({
   onClose: () => void;
   isMobile: boolean;
 }) {
+  // On desktop: hoveredChar tracks which character is being hovered (show pinyin on hover)
+  // On mobile: revealedChars is a Set that tracks which characters have been tapped (toggle pinyin)
   const [hoveredChar, setHoveredChar] = useState<number | null>(null);
+  const [revealedChars, setRevealedChars] = useState<Set<number>>(new Set());
+  
+  // Toggle a character's pinyin visibility on mobile
+  const toggleChar = (idx: number) => {
+    setRevealedChars(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
+  
+  // Check if pinyin should be shown for a character
+  const isPinyinVisible = (idx: number) => {
+    if (isMobile) {
+      return revealedChars.has(idx);
+    }
+    return hoveredChar === idx;
+  };
   
   return (
     <div 
@@ -892,7 +916,6 @@ function HamHaoSpeechBubble({
               {message.pinyinWords.map((pw, i) => {
                 const isPunct = /^[，！。？、]$/.test(pw.char);
                 const isLetter = /^[a-zA-Z]$/.test(pw.char);
-                const isHovered = hoveredChar === i;
                 
                 // All elements get the same structure for alignment
                 // Chinese characters: have pinyin space + character
@@ -916,21 +939,31 @@ function HamHaoSpeechBubble({
                   );
                 }
                 
+                const showPinyin = isPinyinVisible(i);
+                
                 return (
                   <span
                     key={i}
-                    className="inline-flex flex-col items-center cursor-pointer"
-                    onMouseEnter={() => setHoveredChar(i)}
-                    onMouseLeave={() => setHoveredChar(null)}
+                    className="inline-flex flex-col items-center cursor-pointer select-none"
+                    onMouseEnter={() => !isMobile && setHoveredChar(i)}
+                    onMouseLeave={() => !isMobile && setHoveredChar(null)}
+                    onTouchEnd={(e) => {
+                      if (isMobile) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleChar(i);
+                      }
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setHoveredChar(isHovered ? null : i);
+                      // On desktop, clicking shouldn't do anything (hover handles it)
+                      // On mobile, touchEnd already handled it
                     }}
                   >
-                    {/* Pinyin - shows on hover */}
+                    {/* Pinyin - shows on hover (desktop) or tap (mobile) */}
                     <span 
                       className={`text-[10px] text-red-500 font-medium h-4 leading-none flex items-end transition-opacity duration-200 ${
-                        isHovered ? "opacity-100" : "opacity-0"
+                        showPinyin ? "opacity-100" : "opacity-0"
                       }`}
                     >
                       {pw.pinyin}
@@ -938,7 +971,7 @@ function HamHaoSpeechBubble({
                     {/* Character */}
                     <span 
                       className={`text-lg leading-none transition-colors duration-200 ${
-                        isHovered ? "text-red-500" : "text-neutral-800"
+                        showPinyin ? "text-red-500" : "text-neutral-800"
                       }`}
                     >
                       {pw.char}
