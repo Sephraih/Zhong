@@ -3,6 +3,7 @@ import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
+import { extractPinyinForChar } from "../utils/pinyinUtils";
 
 interface VocabCardProps {
   word: VocabWord;
@@ -159,58 +160,4 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
       )}
     </div>
   );
-}
-
-function extractPinyinForChar(fullPinyin: string, charIndex: number, _totalChars: number): string {
-  const syllables = splitPinyin(fullPinyin);
-  if (charIndex < syllables.length) {
-    return syllables[charIndex];
-  }
-  return fullPinyin;
-}
-
-function splitPinyin(pinyin: string): string[] {
-  const result: string[] = [];
-  let current = "";
-
-  const vowels = "aeiouüāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ";
-
-  for (let i = 0; i < pinyin.length; i++) {
-    const ch = pinyin[i];
-    if (ch === " ") {
-      if (current) result.push(current);
-      current = "";
-      continue;
-    }
-    current += ch;
-
-    if (i < pinyin.length - 1) {
-      const next = pinyin[i + 1];
-      if (next === " ") continue;
-      const isCurrentVowel = vowels.includes(ch.toLowerCase());
-      const isNextConsonant = !vowels.includes(next.toLowerCase());
-
-      if (isCurrentVowel && isNextConsonant) {
-        const remaining = pinyin.slice(i + 1);
-        const nextSyllableMatch = remaining.match(/^[bpmfdtnlgkhjqxzhchshrzcsyw]/i);
-        if (nextSyllableMatch) {
-          if (ch === "n" || (ch === "g" && current.endsWith("ng"))) {
-            continue;
-          }
-          result.push(current);
-          current = "";
-        }
-      }
-    }
-  }
-
-  if (current) {
-    result.push(current);
-  }
-
-  if (result.length === 0) {
-    return [pinyin];
-  }
-
-  return result;
 }

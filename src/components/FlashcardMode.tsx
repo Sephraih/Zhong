@@ -4,6 +4,7 @@ import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
+import { extractPinyinForChar } from "../utils/pinyinUtils";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
@@ -23,60 +24,40 @@ function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
     return "text-gray-400 hover:text-white hover:bg-neutral-900";
   }
   switch (level) {
-    case 1: return "bg-emerald-600 text-white";
-    case 2: return "bg-blue-600 text-white";
-    case 3: return "bg-purple-600 text-white";
-    case 4: return "bg-orange-600 text-white";
-    case 5: return "bg-pink-600 text-white";
-    case 6: return "bg-cyan-600 text-white";
-    default: return "bg-red-600 text-white";
+    case 1:
+      return "bg-emerald-600 text-white";
+    case 2:
+      return "bg-blue-600 text-white";
+    case 3:
+      return "bg-purple-600 text-white";
+    case 4:
+      return "bg-orange-600 text-white";
+    case 5:
+      return "bg-pink-600 text-white";
+    case 6:
+      return "bg-cyan-600 text-white";
+    default:
+      return "bg-red-600 text-white";
   }
 }
 
 function getLockedHskButtonClasses(level: HskLevel): string {
   switch (level) {
-    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
+    case 1:
+      return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
+    case 2:
+      return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
+    case 3:
+      return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
+    case 4:
+      return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
+    case 5:
+      return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
+    case 6:
+      return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
+    default:
+      return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
   }
-}
-
-function extractPinyinForChar(fullPinyin: string, charIndex: number, totalChars: number): string {
-  const syllables = splitPinyin(fullPinyin);
-  if (totalChars === 1) return fullPinyin;
-  if (charIndex < syllables.length) return syllables[charIndex];
-  return fullPinyin;
-}
-
-function splitPinyin(pinyin: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  const vowels = "aeiouüāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ";
-  for (let i = 0; i < pinyin.length; i++) {
-    const ch = pinyin[i];
-    if (ch === " ") { if (current) result.push(current); current = ""; continue; }
-    current += ch;
-    if (i < pinyin.length - 1) {
-      const next = pinyin[i + 1];
-      if (next === " ") continue;
-      const isCurrentVowel = vowels.includes(ch.toLowerCase());
-      const isNextConsonant = !vowels.includes(next.toLowerCase());
-      if (isCurrentVowel && isNextConsonant) {
-        const remaining = pinyin.slice(i + 1);
-        const nextSyllableMatch = remaining.match(/^[bpmfdtnlgkhjqxzhchshrzcsyw]/i);
-        if (nextSyllableMatch) {
-          if (ch === "n" || (ch === "g" && current.endsWith("ng"))) continue;
-          result.push(current); current = "";
-        }
-      }
-    }
-  }
-  if (current) result.push(current);
-  return result.length === 0 ? [pinyin] : result;
 }
 
 export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick }: FlashcardModeProps) {
@@ -84,9 +65,18 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   const [isFlipped, setIsFlipped] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
   const [shuffleSeed, setShuffleSeed] = useState(0);
+  // selectedLevels is initialized after availableLevels is computed (see below)
 
   const { toggleLearned, isLearned, learnedCount } = learnedState;
 
+  // NOTE: access control is enforced by App.tsx (allWords is already access-filtered).
+  // Still: show disabled level selectors for locked / not-yet-available levels.
+
+  // NOTE: allWords is already access-filtered by App.tsx.
+  // We still want to SHOW all levels 1-4 in the selector, and grey out the ones
+  // not currently accessible (because they were filtered out).
+  //
+  // So we treat "present in allWords" as "accessible" (for this viewer), not as "available".
   const accessibleLevels = useMemo(() => {
     const levels = new Set<HskLevel>();
     allWords.forEach((w) => {
@@ -97,8 +87,14 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
   const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
 
+  // default: select all levels that are currently present
   const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(shownLevels));
 
+  // Determine if "All" is effectively selected (all accessible levels are selected)
+  // If accessibleLevels is empty, then "All" state is trivial.
+  const allLevelsSelected = accessibleLevels.length > 0 && accessibleLevels.every((l) => selectedLevels.has(l));
+
+  // Enabled in UI if the user currently has access to that level (i.e. words exist in allWords)
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
 
   const toggleLevel = (level: HskLevel) => {
@@ -115,16 +111,18 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   };
 
   const toggleAllLevels = () => {
-    const allAccessibleSelected = accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l));
-    if (allAccessibleSelected) {
+    if (allLevelsSelected) {
+      // If all are selected -> Deselect all
       setSelectedLevels(new Set());
     } else {
+      // If not all are selected -> Select all accessible
       setSelectedLevels(new Set(accessibleLevels));
     }
     setCurrentIndex(0);
     setIsFlipped(false);
   };
 
+  // Filter words — by HSK level, learned status, then optionally shuffle
   const displayWords = useMemo(() => {
     let filtered = allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
     
@@ -143,10 +141,12 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
       return arr;
     }
     return filtered;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords, selectedLevels, wordStatusFilter, isShuffled, shuffleSeed]);
 
   const currentWord = displayWords[currentIndex];
 
+  // Loop: last -> first, first -> last
   const goNext = useCallback(() => {
     setIsFlipped(false);
     setCurrentIndex((prev) => (prev + 1) % displayWords.length);
@@ -162,6 +162,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     toggleLearned(currentWord.id);
   }, [currentWord, toggleLearned]);
 
+  // Shuffle is always clickable to reshuffle
   const handleShuffle = () => {
     setIsShuffled(true);
     setShuffleSeed((s) => s + 1);
@@ -169,26 +170,29 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     setIsFlipped(false);
   };
 
+  // Reset to ordered
   const handleReset = () => {
     setIsShuffled(false);
     setCurrentIndex(0);
     setIsFlipped(false);
   };
 
+  // Counts from actual learned state
   const totalLearned = learnedCount;
   const totalLearning = allWords.length - learnedCount;
 
   const progress = displayWords.length > 0 ? ((currentIndex + 1) / displayWords.length) * 100 : 0;
   const currentIsLearned = currentWord ? isLearned(currentWord.id) : false;
 
+  // HSK Filter component - always rendered
   const HskFilterButtons = () => (
-    <div className="mb-6 flex justify-center">
+    <div className="mb-5 flex justify-center">
       <div className="max-w-full">
         <div className="flex flex-wrap justify-center gap-2">
           <button
             onClick={toggleAllLevels}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-              accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l))
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
+              allLevelsSelected
                 ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
                 : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
             }`}
@@ -211,12 +215,12 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
                   toggleLevel(level);
                 }}
                 title={enabled ? undefined : "Sign in / purchase to unlock this level"}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
                   !enabled
                     ? `${getLockedHskButtonClasses(level)}`
                     : selected
-                    ? `${getHskButtonClasses(level, true)} border-transparent`
-                    : `${getHskButtonClasses(level, false)} border-neutral-800`
+                    ? getHskButtonClasses(level, true)
+                    : `${getHskButtonClasses(level, false)} border border-neutral-800`
                 }`}
               >
                 {!enabled ? "🔒 " : ""}HSK {level}
@@ -228,6 +232,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     </div>
   );
 
+  // Empty state - but still show the filter buttons!
   if (selectedLevels.size === 0) {
     return (
       <div className="max-w-lg mx-auto">
@@ -240,7 +245,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     );
   }
 
-  if (displayWords.length === 0 || !currentWord) {
+  if (displayWords.length === 0) {
     return (
       <div className="max-w-lg mx-auto">
         <HskFilterButtons />
@@ -259,10 +264,20 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
     );
   }
 
+  if (!currentWord) {
+    return (
+      <div className="max-w-lg mx-auto">
+        <HskFilterButtons />
+        <div className="text-center py-16 text-gray-400">Loading cards...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto">
       <HskFilterButtons />
 
+      {/* Top bar: counter + shuffle + learned stats */}
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 text-sm">
           <span className="text-emerald-400 font-semibold">✅ {totalLearned}</span>
@@ -300,6 +315,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         </div>
       </div>
 
+      {/* Progress Bar */}
       <div className="mb-4">
         <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
           <div
@@ -309,6 +325,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         </div>
       </div>
 
+      {/* Flashcard */}
       <div
         className={`bg-neutral-900 rounded-3xl shadow-2xl border h-[min(560px,calc(var(--app-inner-h,100svh)-300px))] flex flex-col items-center justify-center cursor-pointer select-none transition-all relative overflow-hidden ${
           currentIsLearned
@@ -320,6 +337,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
           setIsFlipped(!isFlipped);
         }}
       >
+        {/* Top-left: HSK badge + learned check */}
         <div className="absolute top-5 left-6 flex items-center gap-2">
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getHskBadgeClasses(currentWord.hskLevel)}`}>
             HSK {currentWord.hskLevel}
@@ -336,6 +354,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
           <span className="text-xs text-gray-600 font-medium">{currentWord.category}</span>
         </div>
 
+        {/* Front Content */}
         <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
           <div className="flex items-end gap-2 justify-center">
             {currentWord.hanzi.split("").map((char, i) => (
@@ -356,6 +375,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
           )}
         </div>
 
+        {/* Revealed Info (Overlay) */}
         <div
           className={`absolute inset-0 pt-28 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 ${
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
@@ -384,6 +404,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         </div>
       </div>
 
+      {/* Action Buttons: Prev | Toggle Learned | Next */}
       <div className="flex gap-3 mt-4">
         <button
           onClick={goPrev}
