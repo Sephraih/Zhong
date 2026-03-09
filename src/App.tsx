@@ -559,9 +559,9 @@ function AppContent() {
         path: "/quiz",
       },
       sentences: {
-        title: "Sentence Practice — HamHao",
+        title: "Chinese Sentence Practice (HSK 1-6) — HamHao",
         description:
-          "Practice reading and understanding Chinese sentences with examples from HSK vocabulary.",
+          "Master Mandarin syntax with thousands of HSK-graded example sentences. Switch between Chinese and English modes with pinyin and audio support.",
         path: "/sentences",
       },
       profile: {

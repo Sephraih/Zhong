@@ -1,8 +1,22 @@
+# HamHao - Chinese Language Learning App
+# https://hamhao.com
+
 User-agent: *
 Allow: /
 
-# Block private app areas
-Disallow: /profile
-Disallow: /api/
+# Main pages
+Allow: /browse
+Allow: /practice
+Allow: /sentences
+Allow: /flashcards
+Allow: /quiz
+Allow: /privacy
+Allow: /tos
 
+# Disallow auth and API routes
+Disallow: /auth/callback
+Disallow: /api/
+Disallow: /profile
+
+# Sitemap location
 Sitemap: https://hamhao.com/sitemap.xml
