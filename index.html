@@ -25,6 +25,195 @@
       /* Prevent flash of unstyled content */
       html { background: #000; }
     </style>
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://hamhao.com/#organization",
+          "name": "HamHao",
+          "url": "https://hamhao.com",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://hamhao.com/logo.png",
+            "width": 512,
+            "height": 512
+          },
+          "description": "HamHao is a modern Chinese language learning platform focused on HSK vocabulary mastery."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://hamhao.com/#website",
+          "url": "https://hamhao.com",
+          "name": "HamHao - Learn Chinese HSK Vocabulary",
+          "description": "Master Mandarin Chinese with HSK-graded vocabulary, interactive flashcards, quizzes, and sentence practice.",
+          "publisher": { "@id": "https://hamhao.com/#organization" },
+          "inLanguage": ["en", "zh-CN"],
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://hamhao.com/browse?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Course",
+          "@id": "https://hamhao.com/#course",
+          "name": "HSK Chinese Vocabulary Course",
+          "description": "Comprehensive Chinese Mandarin vocabulary course covering HSK levels 1-6. Learn over 5000 words with example sentences, pinyin pronunciation, and interactive practice modes.",
+          "provider": { "@id": "https://hamhao.com/#organization" },
+          "educationalLevel": ["Beginner", "Intermediate", "Advanced"],
+          "inLanguage": "zh-CN",
+          "teaches": [
+            "Mandarin Chinese vocabulary",
+            "HSK exam preparation",
+            "Chinese character recognition",
+            "Pinyin pronunciation",
+            "Chinese sentence structure"
+          ],
+          "coursePrerequisites": "No prior knowledge required for HSK 1",
+          "hasCourseInstance": [
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 1 - Beginner Chinese",
+              "description": "150 essential Chinese words for beginners",
+              "courseMode": "online",
+              "courseWorkload": "PT20H"
+            },
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 2 - Elementary Chinese",
+              "description": "300 words building on HSK 1 foundations",
+              "courseMode": "online",
+              "courseWorkload": "PT40H"
+            },
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 3 - Intermediate Chinese",
+              "description": "600 words for intermediate learners",
+              "courseMode": "online",
+              "courseWorkload": "PT80H"
+            },
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 4 - Upper Intermediate Chinese",
+              "description": "1200 words for upper intermediate proficiency",
+              "courseMode": "online",
+              "courseWorkload": "PT120H"
+            },
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 5 - Advanced Chinese",
+              "description": "2500 words for advanced learners",
+              "courseMode": "online",
+              "courseWorkload": "PT200H"
+            },
+            {
+              "@type": "CourseInstance",
+              "name": "HSK 6 - Mastery Chinese",
+              "description": "5000+ words for near-native proficiency",
+              "courseMode": "online",
+              "courseWorkload": "PT300H"
+            }
+          ],
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free Tier",
+              "description": "HSK 1 vocabulary with all study modes",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            {
+              "@type": "Offer",
+              "name": "Premium Access",
+              "description": "Full access to all HSK levels 1-6",
+              "price": "29.99",
+              "priceCurrency": "USD"
+            }
+          ]
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://hamhao.com/#app",
+          "name": "HamHao Chinese Learning App",
+          "url": "https://hamhao.com",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Any",
+          "browserRequirements": "Requires JavaScript",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "Interactive flashcards with spaced repetition",
+            "Multiple choice vocabulary quizzes",
+            "Sentence practice with context",
+            "Per-character pinyin on hover",
+            "Native audio pronunciation",
+            "Progress tracking",
+            "HSK level filtering"
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://hamhao.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is HSK?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "HSK (Hanyu Shuiping Kaoshi) is the standardized Chinese proficiency test for non-native speakers. It has 6 levels, from HSK 1 (beginner) to HSK 6 (advanced). HamHao covers vocabulary for all 6 levels."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is HamHao free to use?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes! HamHao offers free access to HSK 1 vocabulary with all study modes including flashcards, quizzes, and sentence practice. Premium access unlocks HSK levels 2-6."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What study modes does HamHao offer?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "HamHao offers 5 study modes: Browse (search and explore vocabulary), Practice (focused 10-card sessions), Sentences (learn vocabulary in context), Flashcards (quick review with flip cards), and Quiz (multiple choice tests)."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does HamHao have audio pronunciation?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes! HamHao uses text-to-speech technology to provide native Mandarin pronunciation for all words and example sentences. You can also hover or tap on individual characters to see their pinyin."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://hamhao.com/#breadcrumb",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://hamhao.com" },
+            { "@type": "ListItem", "position": 2, "name": "Browse", "item": "https://hamhao.com/browse" },
+            { "@type": "ListItem", "position": 3, "name": "Practice", "item": "https://hamhao.com/practice" },
+            { "@type": "ListItem", "position": 4, "name": "Sentences", "item": "https://hamhao.com/sentences" },
+            { "@type": "ListItem", "position": 5, "name": "Flashcards", "item": "https://hamhao.com/flashcards" },
+            { "@type": "ListItem", "position": 6, "name": "Quiz", "item": "https://hamhao.com/quiz" }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
