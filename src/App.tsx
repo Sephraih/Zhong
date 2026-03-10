@@ -29,6 +29,9 @@ import { TosPage } from "./components/TosPage";
 import { AuthCallbackPage } from "./components/AuthCallbackPage";
 import { AppBackground } from "./components/AppBackground";
 import { useIsMobile } from "./hooks/useIsMobile";
+import { BlogPage } from "./components/BlogPage";
+import { BlogPost } from "./components/BlogPost";
+import { BLOG_POSTS } from "./data/blogPosts";
 
 // Mobile-only compact user button
 function MobileUserButton({
@@ -117,7 +120,8 @@ type ViewMode =
   | "profile"
   | "privacy"
   | "tos"
-  | "auth-callback";
+  | "auth-callback"
+  | "blog";
 
 const VIEW_MODES: ViewMode[] = [
   "home",
@@ -130,6 +134,7 @@ const VIEW_MODES: ViewMode[] = [
   "privacy",
   "tos",
   "auth-callback",
+  "blog",
 ];
 
 function isViewMode(x: string): x is ViewMode {
@@ -144,6 +149,8 @@ function pathToViewMode(pathname: string): ViewMode | null {
   // Special auth callback route used by Supabase email confirmation.
   // Supabase redirects to /auth/callback with either ?code=... or #access_token=...
   if (clean.startsWith("/auth/callback")) return "auth-callback";
+  
+  if (clean.startsWith("/blog")) return "blog";
 
   const seg = clean.replace(/^\//, "").split("/")[0].trim();
   if (!seg) return "home";
@@ -281,15 +288,28 @@ function AppContent() {
 
   // UI state
   const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewMode());
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
-  const navigate = useCallback((mode: ViewMode) => {
+  // Track which page the user was on before navigating to legal pages (for Back button)
+  const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
+
+  const navigate = useCallback((mode: ViewMode, subPath?: string) => {
+    if (mode === "privacy" || mode === "tos") {
+      setLegalReturnMode(viewMode);
+    }
+
     setViewMode(mode);
 
     // Persist mode for refresh (fallback) and push a clean URL path (SEO-friendly)
     try {
       storageSetItem("hanyu_view_mode", mode);
-      const nextPath = mode === "home" ? "/" : `/${mode}`;
+      let nextPath = mode === "home" ? "/" : `/${mode}`;
+      if (mode === "blog" && subPath) {
+        nextPath = `/blog/${subPath}`;
+      }
+      
       window.history.pushState({}, "", nextPath);
+      setCurrentPath(nextPath);
     } catch {
       // ignore
     }
@@ -300,7 +320,7 @@ function AppContent() {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       });
     }
-  }, [isMobile]);
+  }, [isMobile, viewMode]);
 
   const handleLockedLevelClick = useCallback(() => {
     // If level isn't accessible, guide the user appropriately.
@@ -412,9 +432,6 @@ function AppContent() {
   const [browsePage, setBrowsePage] = useState(1);
   const browsePageSize = isMobile ? 18 : 30;
 
-  // Track which page the user was on before navigating to legal pages (for Back button)
-  const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
-
   const learnedState = useLearnedState(user?.id, vocabulary, accessToken);
   const { isLearned, toggleLearned } = learnedState;
 
@@ -491,7 +508,7 @@ function AppContent() {
       }
       return true;
     });
-  }, [visibleVocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
+  }, [vocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
 
   // Reset pagination when the user changes filters/search.
   useEffect(() => {
@@ -510,18 +527,12 @@ function AppContent() {
   useEffect(() => {
     const onPopState = () => {
       const fromPath = pathToViewMode(window.location.pathname);
-      const nextMode = fromPath ?? "home";
-      
-      // If navigating to legal pages via popstate, remember current mode for back button
-      if (nextMode === "privacy" || nextMode === "tos") {
-        setLegalReturnMode(viewMode);
-      }
-      
-      setViewMode(nextMode);
+      setViewMode(fromPath ?? "home");
+      setCurrentPath(window.location.pathname);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [viewMode]);
+  }, []);
 
   // Basic SPA SEO: update title/description/canonical per view
   useEffect(() => {
@@ -546,6 +557,12 @@ function AppContent() {
           "Run focused practice sessions that mix review and new words, with pinyin hints and examples.",
         path: "/practice",
       },
+      sentences: {
+        title: "Chinese Sentence Practice (HSK 1-6) — HamHao",
+        description:
+          "Master Mandarin syntax with context-rich sentence practice. Audio support, HSK-graded examples, and instant feedback.",
+        path: "/sentences",
+      },
       flashcards: {
         title: "Flashcards — HamHao",
         description:
@@ -558,12 +575,6 @@ function AppContent() {
           "Test your Chinese vocabulary recall with multiple-choice quizzes by HSK level.",
         path: "/quiz",
       },
-      sentences: {
-        title: "Chinese Sentence Practice (HSK 1-6) — HamHao",
-        description:
-          "Master Mandarin syntax with thousands of HSK-graded example sentences. Switch between Chinese and English modes with pinyin and audio support.",
-        path: "/sentences",
-      },
       profile: {
         title: "Your Profile — HamHao",
         description:
@@ -572,12 +583,12 @@ function AppContent() {
       },
       privacy: {
         title: "Privacy Policy — HamHao",
-        description: "Read HamHao's Privacy Policy.",
+        description: "Read HamHao’s Privacy Policy.",
         path: "/privacy",
       },
       tos: {
         title: "Terms of Service — HamHao",
-        description: "Read HamHao's Terms of Service.",
+        description: "Read HamHao’s Terms of Service.",
         path: "/tos",
       },
       "auth-callback": {
@@ -585,9 +596,31 @@ function AppContent() {
         description: "Email confirmation callback.",
         path: "/auth/callback",
       },
+      blog: {
+        title: "HamHao Blog — Chinese Learning Tips",
+        description: "Tips, strategies, and guides to master Mandarin Chinese efficiently.",
+        path: "/blog",
+      },
     };
 
     const next = map[viewMode];
+    
+    // Dynamic metadata for individual blog posts
+    if (viewMode === "blog") {
+      const slug = currentPath.split("/").filter(Boolean).pop();
+      if (slug && slug !== "blog") {
+        const post = BLOG_POSTS.find((p) => p.slug === slug);
+        if (post) {
+          document.title = `${post.title} — HamHao Blog`;
+          const metaDesc = document.querySelector('meta[name="description"]');
+          if (metaDesc) metaDesc.setAttribute("content", post.description);
+          const canonical = document.querySelector('link[rel="canonical"]');
+          if (canonical) canonical.setAttribute("href", `${base}/blog/${slug}`);
+          return;
+        }
+      }
+    }
+
     document.title = next.title;
 
     const metaDesc = document.querySelector('meta[name="description"]');
@@ -595,15 +628,7 @@ function AppContent() {
 
     const canonical = document.querySelector('link[rel="canonical"]');
     if (canonical) canonical.setAttribute("href", `${base}${next.path}`);
-  }, [viewMode]);
-
-  const navigateWithLegalReturn = useCallback((mode: ViewMode) => {
-    // If navigating to legal pages, remember the current mode for the Back button.
-    if (mode === "privacy" || mode === "tos") {
-      setLegalReturnMode(viewMode);
-    }
-    navigate(mode);
-  }, [viewMode, navigate]);
+  }, [viewMode, currentPath]);
 
   // Show background on all modes except home (landing page has its own background)
   const showAppBackground = viewMode !== "home";
@@ -627,7 +652,7 @@ function AppContent() {
             {/* Logo */}
             <button
               onClick={() => {
-                navigateWithLegalReturn("home");
+                navigate("home");
               }}
               className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
@@ -660,7 +685,7 @@ function AppContent() {
               ].map((mode) => (
                 <button
                   key={mode.id}
-                  onClick={() => navigateWithLegalReturn(mode.id)}
+                  onClick={() => navigate(mode.id)}
                   className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
@@ -679,11 +704,11 @@ function AppContent() {
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Desktop: full auth header */}
               <div className="hidden sm:block">
-                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigateWithLegalReturn("profile")} />
+                <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
               </div>
               
               {/* Mobile: small user icon */}
-              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigateWithLegalReturn("profile")} />
+              <MobileUserButton onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
             </div>
           </div>
         </div>
@@ -724,7 +749,7 @@ function AppContent() {
               {/* Right: CTA */}
               <div className="flex items-center gap-2 ml-auto">
                 <button
-                  onClick={() => navigateWithLegalReturn("browse")}
+                  onClick={() => navigate("browse")}
                   className="px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
                   title="Browse your available words"
                 >
@@ -741,7 +766,7 @@ function AppContent() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => navigateWithLegalReturn("profile")}
+                    onClick={() => navigate("profile")}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
                     title="View unlock options and your progress"
                   >
@@ -919,20 +944,26 @@ function AppContent() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigateWithLegalReturn(mode)} />}
+        {viewMode === "home" && <LandingPage onSelectMode={(mode) => navigate(mode)} />}
 
         {viewMode === "profile" && (
           <ProfilePage
             totalWords={vocabulary.length}
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
-            onBack={() => navigateWithLegalReturn("browse")}
+            onBack={() => navigate("browse")}
           />
         )}
 
-        {viewMode === "privacy" && <PrivacyPage onBack={() => navigateWithLegalReturn(legalReturnMode)} />}
-        {viewMode === "tos" && <TosPage onBack={() => navigateWithLegalReturn(legalReturnMode)} />}
+        {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
         {viewMode === "auth-callback" && <AuthCallbackPage />}
+
+        {viewMode === "blog" && (
+          window.location.pathname === "/blog" || window.location.pathname === "/blog/" 
+            ? <BlogPage onOpenPost={(slug) => navigate("blog", slug)} />
+            : <BlogPost onBack={() => navigate("blog")} currentPath={currentPath} />
+        )}
 
         {viewMode === "browse" && (
           <>
@@ -1228,17 +1259,24 @@ function AppContent() {
 
             <div className="mt-3 flex items-center justify-center gap-4 text-xs">
               <button
-                onClick={() => navigateWithLegalReturn("tos")}
+                onClick={() => navigate("tos")}
                 className="text-gray-500 hover:text-gray-200 transition-colors"
               >
                 Terms
               </button>
               <span className="text-gray-700">•</span>
               <button
-                onClick={() => navigateWithLegalReturn("privacy")}
+                onClick={() => navigate("privacy")}
                 className="text-gray-500 hover:text-gray-200 transition-colors"
               >
                 Privacy
+              </button>
+              <span className="text-gray-700">•</span>
+              <button
+                onClick={() => navigate("blog")}
+                className="text-gray-500 hover:text-gray-200 transition-colors"
+              >
+                Blog
               </button>
             </div>
           </div>
@@ -1253,7 +1291,7 @@ function AppContent() {
       />
 
       {/* Storage consent gate (shown on first visit until user makes a choice) */}
-      <StorageNotice onOpenPrivacy={() => navigateWithLegalReturn("privacy")} onOpenTos={() => navigateWithLegalReturn("tos")} />
+      <StorageNotice onOpenPrivacy={() => navigate("privacy")} onOpenTos={() => navigate("tos")} />
     </div>
   );
 }
