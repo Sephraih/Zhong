@@ -13,7 +13,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: "why-you-forget-chinese-words",
     title: "Why You Keep Forgetting Chinese Words (And How to Fix It)",
     description: "Struggling to remember Hanzi? Learn about the 'Forgetting Curve' and how Spaced Repetition Systems (SRS) can 10x your vocabulary retention.",
-    date: "January 15, 2025",
+    date: "January 15, 2026",
     readTime: "5 min read",
     content: `
 # Why You Keep Forgetting Chinese Words (And How to Fix It)
@@ -55,7 +55,7 @@ HamHao is built entirely around this principle.
 
 1.  **Practice Mode**: We mix new words with words you are struggling with.
 2.  **Tracking**: We track every "Got it" and "Forgot it" click.
-3.  **Efficiency**: You don't waste time reviewing words you already know perfectly (like "ni hao"). You spend your time on the difficult ones.
+3.  **Efficiency**: You don't waste time reviewing words you already know by simply removing them from the session. You spend your time on the difficult ones.
 
 ## 3 Tips for Better Retention
 
@@ -70,7 +70,7 @@ Start your daily session now and beat the forgetting curve!
     slug: "80-20-rule-hsk",
     title: "The 80/20 Rule of HSK Vocabulary",
     description: "You don't need to know 5,000 characters to be fluent. Discover how the HSK system helps you prioritize the words that actually matter.",
-    date: "January 12, 2025",
+    date: "February 12, 2026",
     readTime: "4 min read",
     content: `
 # The 80/20 Rule of HSK Vocabulary
@@ -95,9 +95,12 @@ This means if you learn just the HSK 1, 2, and 3 lists, you can recognize nearly
 
 The Hanyu Shuiping Kaoshi (HSK) is designed with frequency in mind.
 
-*   **HSK 1 (150 words)**: The absolute essentials. Pronouns, numbers, basic verbs.
-*   **HSK 2 (150 new words)**: Daily life. Buying things, asking directions, time.
-*   **HSK 3 (300 new words)**: Conversational fluency. expressing opinions, describing situations.
+*   **HSK 1 (~500 words / 300 Characters)**: The absolute essentials. Pronouns, numbers, basic verbs.
+*   **HSK 2 (~750 new words / 300 new Characters)**: Daily life. Buying things, asking directions, time.
+*   **HSK 3 (~950 new words / 300 new Characters )**: Conversational fluency. expressing opinions, describing situations.
+
+So after the Elementary stages 1-3 you will know roughly 2200 words consisting of 900 different characters. 
+Then there are the intermediate Levels of 4-6, after which you will know a total of 5500 words and 1800 characters. 
 
 By following the HSK path, you are automatically applying the 80/20 rule. You aren't wasting time learning the word for "photosynthesis" before you know how to say "lunch".
 
@@ -106,6 +109,8 @@ By following the HSK path, you are automatically applying the 80/20 rule. You ar
 When you use HamHao's **Browse** or **Flashcard** modes, filter by HSK level.
 
 Don't jump to HSK 5 just to feel smart. Master HSK 1 and 2 completely first. Because those simple words—*de, le, shì, yòu*—appear in almost every single sentence.
+
+At HamHao, we are using the newer HSK 3.0 2021 standard, that copntains more words than the old standard.
 
 ## Quality over Quantity
 
@@ -118,7 +123,7 @@ Use the **Sentence Practice** mode to see these high-frequency words in action. 
     slug: "is-chinese-hard",
     title: "Is Learning Chinese Hard? A Realistic Guide for 2025",
     description: "Debunking the myths: Why Mandarin is actually easier than French grammatically, and how to overcome the real challenges (Tones & Hanzi).",
-    date: "January 10, 2025",
+    date: "March 10, 2025",
     readTime: "6 min read",
     content: `
 # Is Learning Chinese Hard? A Realistic Guide for 2025
