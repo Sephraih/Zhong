@@ -262,10 +262,375 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           <div className="text-4xl mb-3">⭐</div>
           <h3 className="text-xl font-bold text-white mb-2">You're a Premium Member!</h3>
           <p className="text-gray-400">
-            You have access to all current HSK levels, including all future content. :)
+            You have access to all HSK levels (1-9), including all future content.
           </p>
         </div>
       )}
 
-      {/* Rest of your file (Account Settings, Your Data, Danger Zone) remains unchanged */}
-      {/* ... [All the account settings, change email, password, export 
+      {/* Account Settings */}
+      <div className="mt-10 mb-8">
+        <h3 className="text-xl font-bold text-white mb-6">Account Settings</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Change Email */}
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h4 className="text-lg font-semibold text-white">Change Email</h4>
+                <p className="text-sm text-gray-400 mt-1">Update your email address</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEmailError(null);
+                  setEmailSuccess(null);
+                  setEmailOpen((v) => !v);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-neutral-700 text-gray-300 hover:text-white hover:border-neutral-600 hover:bg-neutral-800/50 transition-colors"
+              >
+                {emailOpen ? "Close" : "Change"}
+              </button>
+            </div>
+
+            {emailOpen && (
+              <div className="space-y-4">
+                {emailError && (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                    {emailError}
+                  </div>
+                )}
+                {emailSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 text-sm">
+                    {emailSuccess}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    New email address
+                  </label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="new@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm with your password
+                  </label>
+                  <input
+                    type="password"
+                    value={emailPassword}
+                    onChange={(e) => setEmailPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your current password"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    setEmailError(null);
+                    setEmailSuccess(null);
+                    if (!newEmail) {
+                      setEmailError("Please enter a new email address.");
+                      return;
+                    }
+                    if (!emailPassword) {
+                      setEmailError("Please enter your password to confirm.");
+                      return;
+                    }
+                    try {
+                      setEmailBusy(true);
+                      await changeEmail(emailPassword, newEmail);
+                      setEmailSuccess(
+                        "A confirmation link has been sent to your new email address. " +
+                        "Please click the link to complete the change. Your current email " +
+                        "will remain active until you confirm."
+                      );
+                      setNewEmail("");
+                      setEmailPassword("");
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to change email";
+                      setEmailError(msg);
+                    } finally {
+                      setEmailBusy(false);
+                    }
+                  }}
+                  disabled={emailBusy}
+                  className="w-full py-3 rounded-xl font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-60"
+                >
+                  {emailBusy ? "Updating..." : "Update Email"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Change Password */}
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h4 className="text-lg font-semibold text-white">Change Password</h4>
+                <p className="text-sm text-gray-400 mt-1">Update your account password</p>
+              </div>
+              <button
+                onClick={() => {
+                  setPasswordError(null);
+                  setPasswordSuccess(null);
+                  setPasswordOpen((v) => !v);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-neutral-700 text-gray-300 hover:text-white hover:border-neutral-600 hover:bg-neutral-800/50 transition-colors"
+              >
+                {passwordOpen ? "Close" : "Change"}
+              </button>
+            </div>
+
+            {passwordOpen && (
+              <div className="space-y-4">
+                {passwordError && (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                    {passwordError}
+                  </div>
+                )}
+                {passwordSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-300 text-sm">
+                    {passwordSuccess}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Current password
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your current password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    New password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="At least 6 characters"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm new password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Repeat new password"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                    if (!currentPassword) {
+                      setPasswordError("Please enter your current password.");
+                      return;
+                    }
+                    if (!newPassword) {
+                      setPasswordError("Please enter a new password.");
+                      return;
+                    }
+                    if (newPassword.length < 6) {
+                      setPasswordError("New password must be at least 6 characters.");
+                      return;
+                    }
+                    if (newPassword !== confirmNewPassword) {
+                      setPasswordError("New passwords do not match.");
+                      return;
+                    }
+                    try {
+                      setPasswordBusy(true);
+                      await changePassword(currentPassword, newPassword);
+                      setPasswordSuccess("Password updated successfully!");
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmNewPassword("");
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to change password";
+                      setPasswordError(msg);
+                    } finally {
+                      setPasswordBusy(false);
+                    }
+                  }}
+                  disabled={passwordBusy}
+                  className="w-full py-3 rounded-xl font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-60"
+                >
+                  {passwordBusy ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Your Data + Legal */}
+      <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Your Data</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Download a copy of the data we store about your account and learning progress.
+            </p>
+            <button
+              onClick={exportMyData}
+              className="w-full py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+            >
+              📥 Export My Data
+            </button>
+            <p className="text-xs text-gray-500 mt-3">
+              This will download a JSON file containing your profile, purchases, and learning progress.
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Legal</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Review our Terms of Service and Privacy Policy.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  window.history.pushState({}, "", "/tos");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                }}
+                className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+              >
+                Terms
+              </button>
+              <button
+                onClick={() => {
+                  window.history.pushState({}, "", "/privacy");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                }}
+                className="flex-1 py-2.5 rounded-xl font-semibold bg-neutral-900 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
+              >
+                Privacy
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Danger zone */}
+        <div className="bg-neutral-950/70 border border-red-900/40 rounded-2xl p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Danger zone</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Permanently delete your account and learning data.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen((v) => !v);
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-900/50 text-red-300 hover:text-red-200 hover:border-red-700/70 hover:bg-red-950/30 transition-colors"
+            >
+              {deleteOpen ? "Close" : "Delete account"}
+            </button>
+          </div>
+
+          {deleteOpen && (
+            <div className="mt-5">
+              <div className="p-4 rounded-xl bg-black/40 border border-red-900/40">
+                <p className="text-sm text-gray-300">
+                  This action is <span className="font-bold text-red-300">irreversible</span>.
+                </p>
+                <ul className="mt-3 space-y-1.5 text-sm text-gray-400">
+                  <li>• Your profile and purchases will be removed.</li>
+                  <li>• Your learned progress will be deleted.</li>
+                  <li>• You'll need to sign up again to use cloud sync.</li>
+                </ul>
+              </div>
+
+              {deleteError && (
+                <div className="mt-4 p-3 rounded-xl bg-red-950/40 border border-red-900/60 text-red-300 text-sm">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Confirm password
+                  </label>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="Your password"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Type DELETE to confirm
+                  </label>
+                  <input
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                    placeholder="DELETE"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <p className="text-xs text-gray-500">
+                  We require your password to prevent accidental or unauthorized deletion.
+                </p>
+
+                <button
+                  onClick={async () => {
+                    setDeleteError(null);
+                    if (deleteConfirm.trim().toUpperCase() !== "DELETE") {
+                      setDeleteError("Please type DELETE to confirm.");
+                      return;
+                    }
+                    if (!deletePassword) {
+                      setDeleteError("Please enter your password.");
+                      return;
+                    }
+                    try {
+                      setDeleteBusy(true);
+                      await deleteAccount(deletePassword);
+                      // After deletion, user is logged out; return to home.
+                      window.history.pushState({}, "", "/");
+                      window.dispatchEvent(new PopStateEvent("popstate"));
+                      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "Failed to delete account";
+                      setDeleteError(msg);
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  }}
+                  disabled={deleteBusy}
+                  className="px-5 py-3 rounded-xl font-bold border border-red-800/60 bg-red-950/40 text-red-200 hover:bg-red-900/40 hover:border-red-600/70 transition-colors disabled:opacity-60"
+                >
+                  {deleteBusy ? "Deleting…" : "Delete my account"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
