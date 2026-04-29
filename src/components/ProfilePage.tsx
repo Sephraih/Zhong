@@ -304,6 +304,59 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
               </div>
             </div>
           </div>
+
+          {/* Individual Level Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {AVAILABLE_LEVELS.filter(l => l > 1).map((level) => {
+              const isOwned = accessibleLevels.includes(level);
+              const price = levelPriceMap[level];
+              
+              return (
+                <div
+                  key={level}
+                  className={`rounded-2xl p-5 shadow-lg border ${
+                    isOwned
+                      ? "bg-neutral-900/50 border-neutral-700"
+                      : "bg-neutral-900/80 border-neutral-800 hover:border-neutral-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getHskBadgeClasses(level)}`}>
+                      HSK {level}
+                    </span>
+                    {isOwned && (
+                      <span className="text-emerald-400 text-sm font-medium">✓ Owned</span>
+                    )}
+                  </div>
+                  
+                  {isOwned ? (
+                    <p className="text-gray-500 text-sm">You have access to this level</p>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-white mb-3">{price}</div>
+                      <button
+                        onClick={() => purchaseLevel(level)}
+                        disabled={isCheckingOut}
+                        className={`w-full py-2.5 rounded-xl font-semibold transition-all disabled:opacity-60 disabled:cursor-wait ${
+                          level === 2
+                            ? "bg-blue-600 hover:bg-blue-500 text-white"
+                            : level === 3
+                            ? "bg-purple-600 hover:bg-purple-500 text-white"
+                            : level === 4
+                            ? "bg-orange-600 hover:bg-orange-500 text-white"
+                            : level === 5
+                            ? "bg-pink-600 hover:bg-pink-500 text-white"
+                            : "bg-cyan-600 hover:bg-cyan-500 text-white"
+                        }`}
+                      >
+                        {isCheckingOut ? "Redirecting..." : `Purchase HSK ${level}`}
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
