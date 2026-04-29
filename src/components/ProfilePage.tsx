@@ -262,7 +262,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           <div className="text-4xl mb-3">⭐</div>
           <h3 className="text-xl font-bold text-white mb-2">You're a Premium Member!</h3>
           <p className="text-gray-400">
-            You have access to all HSK levels (1-9), including all future content.
+            You have access to all available HSK levels, including all future content.
           </p>
         </div>
       )}
