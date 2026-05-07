@@ -20,7 +20,7 @@ async function setUserPremium(supabase: SupabaseClient, userId: string) {
   const { error: profileErr } = await supabase
     .from('profiles')
     .update({ account_tier: 'premium', is_premium: true } as Record<string, unknown>)
-    .eq('user_id', userId);
+    .eq('id', userId);
   if (profileErr) console.error('❌ [RC] Profile update error:', profileErr);
   else console.log('✅ [RC] Profile updated to premium');
 }
@@ -36,7 +36,7 @@ async function revokeUserPremium(supabase: SupabaseClient, userId: string) {
   const { error: profileErr } = await supabase
     .from('profiles')
     .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
-    .eq('user_id', userId);
+    .eq('id', userId);
   if (profileErr) console.error('❌ [RC] Failed to update profile:', profileErr);
   else console.log('✅ [RC] Premium revoked');
 }
