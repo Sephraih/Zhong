@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
-import { setCors } from './_cors';
+import { setCors } from '../lib/cors';
 
 // Initialize clients lazily to ensure correct env vars are used per-request
 function getSupabaseClient(): SupabaseClient {

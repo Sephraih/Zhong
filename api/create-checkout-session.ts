@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
-import { setCors } from './_cors';
+import { setCors } from '../lib/cors';
 
 // Current versions of legal documents
 const TOS_VERSION = '2025-01-15';
