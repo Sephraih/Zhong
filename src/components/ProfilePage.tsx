@@ -14,7 +14,7 @@ interface ProfilePageProps {
 }
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
-  const { user, accountTier, purchasedLevels, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
+  const { user, accountTier, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
 
   const [premiumPrice, setPremiumPrice] = useState<string>("$9.99");
 
@@ -98,7 +98,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
   const accessibleLevels = getAccessibleLevels({
     isLoggedIn: true,
     accountTier,
-    purchasedLevels,
   });
 
   const learnedPercent = totalWords > 0 ? Math.round((learnedCount / totalWords) * 100) : 0;

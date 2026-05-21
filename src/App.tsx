@@ -189,34 +189,21 @@ function signature(words: VocabWord[]): string {
 }
 
 function AppContent() {
-  const { user, accountTier, purchasedLevels, accessToken } = useAuth();
+  const { user, accountTier, accessToken } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
 
   // Access rules:
   // - Anonymous: HSK 1 only, top 200 words
-  // - Logged in (free): all HSK 1
-  // - Purchased levels: those levels
+  // - Free (logged in): HSK 1 only
   // - Premium: all levels
   const accessInfo = useMemo(
     () => ({
       isLoggedIn: Boolean(user),
       accountTier,
-      purchasedLevels,
     }),
-    [user, accountTier, purchasedLevels]
+    [user, accountTier]
   );
-
-  const accessibleLevels = useMemo(() => {
-    if (accessInfo.accountTier === "premium") return [1, 2, 3, 4, 5, 6, 7, 8, 9];
-    if (!accessInfo.isLoggedIn) return [1];
-    const set = new Set<number>([1, ...accessInfo.purchasedLevels]);
-    return Array.from(set).sort((a, b) => a - b);
-  }, [accessInfo]);
-
-  // Prevent unused variable removal by TS (and for debugging):
-  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-  void accessibleLevels;
   // 1) Load from localStorage cache synchronously if present.
   // 2) Otherwise show fallback immediately.
   // Wrapped in try/catch for sandboxed environments where localStorage may be blocked.
@@ -242,26 +229,19 @@ function AppContent() {
     if (!accessInfo.isLoggedIn) {
       return vocabulary.filter((w) => w.hskLevel === 1).slice(0, 200);
     }
-
     // Premium: everything we have
     if (accessInfo.accountTier === "premium") {
       return vocabulary;
     }
-
-    // Logged in free: HSK 1 + purchased levels
-    const allowed = new Set<number>([1, ...accessInfo.purchasedLevels]);
-    return vocabulary.filter((w) => allowed.has(w.hskLevel));
+    // Free logged-in: HSK 1 only
+    return vocabulary.filter((w) => w.hskLevel === 1);
   }, [vocabulary, accessInfo]);
 
   const hasAccessToLevel = useCallback(
     (level: number) => {
-      // Anonymous: only HSK 1 preview
       if (!accessInfo.isLoggedIn) return level === 1;
-      // Premium: all currently available levels
       if (accessInfo.accountTier === "premium") return level >= 1 && level <= 9;
-      // Logged-in free: HSK 1 + purchased levels
-      if (level === 1) return true;
-      return accessInfo.purchasedLevels.includes(level);
+      return level === 1;
     },
     [accessInfo]
   );
@@ -271,8 +251,7 @@ function AppContent() {
       if (!accessInfo.isLoggedIn) return `Sign in to access HSK ${level}`;
       if (accessInfo.accountTier === "premium") return null;
       if (level === 1) return null;
-      if (accessInfo.purchasedLevels.includes(level)) return null;
-      return `Purchase HSK ${level} (or Premium) to unlock`;
+      return `Upgrade to Premium to unlock HSK ${level}`;
     },
     [accessInfo]
   );

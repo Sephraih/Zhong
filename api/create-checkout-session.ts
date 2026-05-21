@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
+import { setCors } from './_cors';
 
 // Current versions of legal documents
 const TOS_VERSION = '2025-01-15';
@@ -45,15 +46,8 @@ function getStripeClient(): Stripe {
   return new Stripe(secretKey);
 }
 
-function getPriceIds(): Record<string, string | undefined> {
-  return {
-    hsk_2: process.env.STRIPE_PRICE_HSK2,
-    hsk_3: process.env.STRIPE_PRICE_HSK3,
-    hsk_4: process.env.STRIPE_PRICE_HSK4,
-    hsk_5: process.env.STRIPE_PRICE_HSK5,
-    hsk_6: process.env.STRIPE_PRICE_HSK6,
-    premium: process.env.STRIPE_PRICE_PREMIUM,
-  };
+function getPremiumPriceId(): string | undefined {
+  return process.env.STRIPE_PRICE_PREMIUM;
 }
 
 async function getUserFromToken(supabase: SupabaseClient, authHeader: string | undefined) {
@@ -126,11 +120,7 @@ function getClientIp(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers - be permissive
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-Forwarded-For, X-Real-IP');
+  setCors(res, req.headers.origin as string | undefined);
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -145,57 +135,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Initialize clients per-request to ensure correct env vars
     const supabase = getSupabaseClient();
     const stripe = getStripeClient();
-    const PRICE_IDS = getPriceIds();
-    
-    // Log environment info for debugging
+
     const vercelEnv = process.env.VERCEL_ENV || 'unknown';
     console.log(`📍 Environment: ${vercelEnv}`);
-    console.log(`💰 Price IDs configured: ${Object.entries(PRICE_IDS).filter(([, v]) => v).map(([k]) => k).join(', ')}`);
 
     const user = await getUserFromToken(supabase, req.headers.authorization as string);
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { 
-      product_type, 
-      hsk_level,
+    const {
+      product_type,
       tos_accepted,
       privacy_accepted,
       client_timestamp
     } = req.body;
-    
-    // Require TOS and Privacy acceptance for all purchases
+
+    // Only 'premium' is supported
+    if (product_type !== 'premium') {
+      return res.status(400).json({ error: 'Invalid product_type. Only "premium" is supported.' });
+    }
+
+    // Require TOS and Privacy acceptance
     if (!tos_accepted || !privacy_accepted) {
-      return res.status(400).json({ 
-        error: 'You must accept the Terms of Service and Privacy Policy to make a purchase' 
+      return res.status(400).json({
+        error: 'You must accept the Terms of Service and Privacy Policy to make a purchase'
       });
     }
 
-    // Determine which price to use
-    let priceId: string | undefined;
-    let productDescription: string;
-    
-    if (product_type === 'premium') {
-      priceId = PRICE_IDS.premium;
-      productDescription = 'Premium - All HSK Levels';
-    } else if (product_type === 'hsk_level' && hsk_level) {
-      priceId = PRICE_IDS[`hsk_${hsk_level}`];
-      productDescription = `HSK Level ${hsk_level}`;
-    } else {
-      // Fallback to old STRIPE_PRICE_ID for backwards compatibility
-      priceId = process.env.STRIPE_PRICE_ID;
-      productDescription = 'Premium';
-    }
+    const priceId = getPremiumPriceId();
+    const productDescription = 'Premium - All HSK Levels';
 
     if (!priceId) {
-      console.error('Missing price ID for product:', product_type, hsk_level);
-      console.error('Available PRICE_IDS:', PRICE_IDS);
-      return res.status(400).json({ 
-        error: `Price not configured for ${product_type || 'premium'}${hsk_level ? ` level ${hsk_level}` : ''}` 
-      });
+      console.error('Missing STRIPE_PRICE_PREMIUM environment variable');
+      return res.status(400).json({ error: 'Price not configured' });
     }
-    
+
     console.log(`🛒 Using price ID: ${priceId} for ${productDescription}`);
 
     const customerId = await getOrCreateStripeCustomer(supabase, stripe, user.id, user.email || '');
@@ -232,8 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       metadata: {
         user_id: user.id,
-        product_type: product_type || 'premium',
-        hsk_level: hsk_level?.toString() || '',
+        product_type: 'premium',
         tos_version: TOS_VERSION,
         privacy_version: PRIVACY_VERSION,
       },
@@ -244,8 +218,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const purchaseRecord = {
       user_id: user.id,
       user_email: user.email || '',
-      product_type: product_type || 'premium',
-      hsk_level: product_type === 'hsk_level' ? parseInt(hsk_level) : null,
+      product_type: 'premium',
+      hsk_level: null,
       stripe_customer_id: customerId,
       stripe_session_id: session.id,
       tos_accepted: true,

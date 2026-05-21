@@ -66,30 +66,6 @@ async function setUserPremium(supabase: SupabaseClient, userId: string) {
   }
 }
 
-async function addPurchasedLevel(supabase: SupabaseClient, userId: string, level: number, paymentId: string) {
-  console.log(`🔧 Adding HSK ${level} to user ${userId}`);
-  
-  const purchaseData = {
-    user_id: userId,
-    hsk_level: level,
-    stripe_payment_id: paymentId,
-    purchased_at: new Date().toISOString(),
-  };
-  
-  // Insert into purchased_levels
-  const { error } = await supabase
-    .from('purchased_levels')
-    .upsert(purchaseData as Record<string, unknown>, {
-      onConflict: 'user_id,hsk_level',
-    });
-    
-  if (error) {
-    console.error('❌ Purchased level insert error:', error);
-  } else {
-    console.log(`✅ HSK ${level} added to user's purchased levels`);
-  }
-}
-
 async function updatePurchaseRecord(
   supabase: SupabaseClient,
   sessionId: string, 
@@ -128,99 +104,48 @@ async function updatePurchaseRecord(
   }
 }
 
-/**
- * Revoke access for a user when they get a refund or chargeback.
- * 
- * IMPORTANT: This function is careful to only revoke what was purchased:
- * - Premium refund: Only removes premium status, keeps individually purchased levels
- * - HSK level refund: Only removes that specific level, keeps premium status and other levels
- */
-async function revokeAccessForUser(
-  supabase: SupabaseClient,
-  userId: string,
-  productType: string,
-  hskLevel: number | null
-) {
-  console.log(`🔒 Revoking access for user ${userId}: product_type=${productType}, hsk_level=${hskLevel}`);
+async function revokeAccessForUser(supabase: SupabaseClient, userId: string) {
+  console.log(`🔒 Revoking premium access for user ${userId}`);
 
-  if (productType === 'premium') {
-    // Revoke premium status only - do NOT touch purchased_levels
-    // The user may have purchased individual levels before upgrading to premium,
-    // and those should remain valid after a premium refund.
-    
-    // Update auth metadata
-    const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-      app_metadata: { account_tier: 'free' },
-    });
-    
-    if (authError) {
-      console.error('❌ Failed to update auth metadata:', authError);
-    } else {
-      console.log('✅ Revoked premium from auth metadata');
-    }
-    
-    // Update profiles table
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
-      .eq('id', userId);
-      
-    if (profileError) {
-      console.error('❌ Failed to update profile:', profileError);
-    } else {
-      console.log('✅ Revoked premium from profile');
-    }
-    
-    // NOTE: We intentionally do NOT delete from purchased_levels here.
-    // Those are separate purchases that remain valid.
-    
-  } else if (productType === 'hsk_level' && hskLevel) {
-    // Revoke specific HSK level only
-    const { error } = await supabase
-      .from('purchased_levels')
-      .delete()
-      .eq('user_id', userId)
-      .eq('hsk_level', hskLevel);
-      
-    if (error) {
-      console.error(`❌ Failed to revoke HSK ${hskLevel}:`, error);
-    } else {
-      console.log(`✅ Revoked HSK ${hskLevel} from user`);
-    }
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+    app_metadata: { account_tier: 'free' },
+  });
+  if (authError) {
+    console.error('❌ Failed to update auth metadata:', authError);
+  } else {
+    console.log('✅ Revoked premium from auth metadata');
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
+    .eq('id', userId);
+  if (profileError) {
+    console.error('❌ Failed to update profile:', profileError);
+  } else {
+    console.log('✅ Revoked premium from profile');
   }
 }
 
 interface PurchaseRecord {
   stripe_session_id: string;
   user_id: string;
-  product_type: string;
-  hsk_level: number | null;
 }
 
-/**
- * Find purchase info by payment intent ID
- */
 async function findPurchaseByPaymentIntent(
   supabase: SupabaseClient,
   paymentIntentId: string
-): Promise<{ session_id: string; user_id: string; product_type: string; hsk_level: number | null } | null> {
+): Promise<{ session_id: string; user_id: string } | null> {
   const { data, error } = await supabase
     .from('purchases')
-    .select('stripe_session_id, user_id, product_type, hsk_level')
+    .select('stripe_session_id, user_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .limit(1)
     .single() as { data: PurchaseRecord | null; error: unknown };
-    
-  if (error || !data) {
-    return null;
-  }
-  
-  return {
-    session_id: data.stripe_session_id,
-    user_id: data.user_id,
-    product_type: data.product_type,
-    hsk_level: data.hsk_level,
-  };
+
+  if (error || !data) return null;
+
+  return { session_id: data.stripe_session_id, user_id: data.user_id };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -233,24 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Add a simple GET handler to test if the webhook endpoint is reachable
-  if (req.method === 'GET') {
-    const vercelEnv = process.env.VERCEL_ENV || 'unknown';
-    const hasWebhookSecret = !!process.env.STRIPE_WEBHOOK_SECRET;
-    const hasStripeKey = !!process.env.STRIPE_SECRET_KEY;
-    const isTestMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_');
-    
-    return res.status(200).json({
-      status: 'Webhook endpoint is reachable',
-      environment: vercelEnv,
-      stripe_mode: isTestMode ? 'TEST' : 'LIVE',
-      webhook_secret_configured: hasWebhookSecret,
-      stripe_key_configured: hasStripeKey,
-    });
-  }
-
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET, OPTIONS');
+    res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -316,11 +225,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         const userId = session.metadata?.user_id;
         const productType = session.metadata?.product_type;
-        const hskLevel = session.metadata?.hsk_level;
 
         console.log('👤 User ID:', userId);
         console.log('📦 Product type:', productType);
-        console.log('📊 HSK Level:', hskLevel);
         console.log('💰 Amount:', session.amount_total, session.currency);
         console.log('🔗 Payment Intent:', session.payment_intent);
 
@@ -377,23 +284,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('✅ Profile exists, current tier:', existingProfile.account_tier);
         }
 
-        // Handle based on product type
-        if (productType === 'premium') {
-          console.log('🔄 Processing Premium purchase...');
-          await setUserPremium(supabase, userId);
-        } else if (productType === 'hsk_level' && hskLevel) {
-          console.log(`🔄 Processing HSK ${hskLevel} purchase...`);
-          const levelNum = parseInt(hskLevel, 10);
-          if (isNaN(levelNum)) {
-            console.error('❌ Invalid HSK level:', hskLevel);
-          } else {
-            await addPurchasedLevel(supabase, userId, levelNum, session.payment_intent as string || 'unknown');
-          }
-        } else {
-          // Fallback: treat as premium purchase for backwards compatibility
-          console.log('🔄 Processing legacy premium purchase (no product_type specified)...');
-          await setUserPremium(supabase, userId);
-        }
+        // Grant premium access (always — only premium purchases are accepted)
+        console.log('🔄 Processing Premium purchase...');
+        await setUserPremium(supabase, userId);
 
         // Verify the update worked
         const { data: verifyProfile } = await supabase
@@ -401,15 +294,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select('account_tier, is_premium')
           .eq('id', userId)
           .single();
-        
-        const { data: verifyLevels } = await supabase
-          .from('purchased_levels')
-          .select('hsk_level')
-          .eq('user_id', userId);
-        
-        console.log('🔍 Verification after update:');
-        console.log('   Profile:', verifyProfile);
-        console.log('   Purchased levels:', verifyLevels?.map(l => l.hsk_level));
+
+        console.log('🔍 Verification after update - Profile:', verifyProfile);
 
         console.log('====== PURCHASE PROCESSING COMPLETE ======');
         break;
@@ -466,12 +352,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             );
             
             // Revoke access
-            await revokeAccessForUser(
-              supabase,
-              purchase.user_id,
-              purchase.product_type,
-              purchase.hsk_level
-            );
+            await revokeAccessForUser(supabase, purchase.user_id);
           } else {
             console.log('⚠️ Partial refund detected - logging for manual review');
             console.log(`   Refunded: ${charge.amount_refunded} of ${charge.amount} (${Math.round(charge.amount_refunded / charge.amount * 100)}%)`);
@@ -506,13 +387,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'disputed'
           );
           
-          await revokeAccessForUser(
-            supabase,
-            purchase.user_id,
-            purchase.product_type,
-            purchase.hsk_level
-          );
-          
+          await revokeAccessForUser(supabase, purchase.user_id);
+
           // Log evidence details for dispute response
           console.log('📋 Dispute evidence due by:', 
             new Date((dispute.evidence_details?.due_by || 0) * 1000).toISOString()

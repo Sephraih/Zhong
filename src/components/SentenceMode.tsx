@@ -381,7 +381,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
               <button
                 key={level}
                 onClick={() => toggleLevel(level)}
-                title={enabled ? undefined : "Sign in / purchase to unlock this level"}
+                title={enabled ? undefined : "Sign in or upgrade to Premium to unlock"}
                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                   !enabled
                     ? getLockedHskButtonClasses(level)

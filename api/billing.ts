@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
+import { setCors } from './_cors';
 
 // Initialize clients lazily to ensure correct env vars are used per-request
 function getSupabaseClient(): SupabaseClient {
@@ -43,46 +44,18 @@ async function getUserFromToken(supabase: SupabaseClient, authHeader: string | u
   return user;
 }
 
-async function getPrices(stripe: Stripe | null): Promise<{
-  hsk2: number | null;
-  hsk3: number | null;
-  hsk4: number | null;
-  hsk5: number | null;
-  hsk6: number | null;
-  premium: number | null;
-}> {
-  const result = {
-    hsk2: null as number | null,
-    hsk3: null as number | null,
-    hsk4: null as number | null,
-    hsk5: null as number | null,
-    hsk6: null as number | null,
-    premium: null as number | null,
-  };
+async function getPrices(stripe: Stripe | null): Promise<{ premium: number | null }> {
+  const result = { premium: null as number | null };
 
-  if (!stripe) {
-    return result;
-  }
+  if (!stripe) return result;
 
-  const priceIds = {
-    hsk2: process.env.STRIPE_PRICE_HSK2,
-    hsk3: process.env.STRIPE_PRICE_HSK3,
-    hsk4: process.env.STRIPE_PRICE_HSK4,
-    hsk5: process.env.STRIPE_PRICE_HSK5,
-    hsk6: process.env.STRIPE_PRICE_HSK6,
-    premium: process.env.STRIPE_PRICE_PREMIUM,
-  };
-  
-  console.log(`💰 Fetching prices for: ${Object.entries(priceIds).filter(([, v]) => v).map(([k]) => k).join(', ')}`);
-
-  for (const [key, priceId] of Object.entries(priceIds)) {
-    if (priceId) {
-      try {
-        const price = await stripe.prices.retrieve(priceId);
-        result[key as keyof typeof result] = price.unit_amount;
-      } catch (e) {
-        console.error(`Failed to fetch price for ${key} (${priceId}):`, e);
-      }
+  const priceId = process.env.STRIPE_PRICE_PREMIUM;
+  if (priceId) {
+    try {
+      const price = await stripe.prices.retrieve(priceId);
+      result.premium = price.unit_amount;
+    } catch (e) {
+      console.error(`Failed to fetch premium price (${priceId}):`, e);
     }
   }
 
@@ -94,10 +67,6 @@ interface ProfileRow {
   stripe_customer_id?: string;
 }
 
-interface PurchasedLevelRow {
-  hsk_level: number;
-}
-
 async function getSubscription(supabase: SupabaseClient, userId: string) {
   const { data: profile } = await supabase
     .from('profiles')
@@ -105,26 +74,14 @@ async function getSubscription(supabase: SupabaseClient, userId: string) {
     .eq('id', userId)
     .single() as { data: ProfileRow | null };
 
-  const { data: purchasedLevels } = await supabase
-    .from('purchased_levels')
-    .select('hsk_level')
-    .eq('user_id', userId) as { data: PurchasedLevelRow[] | null };
-
-  const levels = purchasedLevels?.map((p) => p.hsk_level) || [];
-
   return {
     account_tier: profile?.account_tier || 'free',
-    purchased_levels: levels,
     stripe_customer_id: profile?.stripe_customer_id || null,
   };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCors(res, req.headers.origin as string | undefined);
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
 
   if (req.method === 'OPTIONS') {
@@ -137,7 +94,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const action = req.query.action as string | undefined;
   
-  // Log environment info for debugging
   const vercelEnv = process.env.VERCEL_ENV || 'unknown';
   console.log(`📍 Billing API - Environment: ${vercelEnv}, Action: ${action || 'prices'}`);
 

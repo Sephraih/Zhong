@@ -29,7 +29,6 @@ interface AuthContextType {
   isLoading: boolean;
   isCheckingOut: boolean;
   accountTier: AccountTier;
-  purchasedLevels: number[];
   login: (email: string, password: string) => Promise<void>;
   signup: (
     email: string,
@@ -37,7 +36,6 @@ interface AuthContextType {
     consent?: { acceptTos: boolean; acceptPrivacy: boolean; captchaToken?: string | null }
   ) => Promise<void>;
   logout: () => Promise<void>;
-  purchaseLevel: (level: number) => Promise<void>;
   purchasePremium: () => Promise<void>;
   changeEmail: (currentPassword: string, newEmail: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -88,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return storageGetItem("hanyu_auth_token");
   });
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
-  const [purchasedLevels, setPurchasedLevels] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(() => !getCachedIsSandboxed());
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,8 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
-        setPurchasedLevels(data.purchased_levels || []);
-        console.log("Auth refreshed. Tier:", data.account_tier, "Levels:", data.purchased_levels);
+        console.log("Auth refreshed. Tier:", data.account_tier);
         return data;
       } else if (response.status === 401) {
         // Only clear auth on explicit 401 Unauthorized
@@ -133,7 +129,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storageRemoveItem("hanyu_auth_token");
         setUser(null);
         setAccountTier('free');
-        setPurchasedLevels([]);
       } else {
         // For other errors (500, 503, etc.), keep current state
         // The user might still be logged in, just a temporary server issue
@@ -185,12 +180,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           attempts++;
           console.log(`🔄 Checking purchase status... (attempt ${attempts})`);
           const data = await fetchUser(token);
-          if (data?.account_tier === 'premium' || (data?.purchased_levels && data.purchased_levels.length > 0) || attempts >= 10) {
+          if (data?.account_tier === 'premium' || attempts >= 10) {
             clearInterval(pollInterval);
             if (data?.account_tier === 'premium') {
               console.log("✅ Premium status confirmed!");
-            } else if (data?.purchased_levels?.length > 0) {
-              console.log("✅ Level purchase confirmed!");
             } else {
               console.log("⚠️ Purchase status not yet updated. It may take a moment.");
             }
@@ -265,7 +258,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storageSetItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
-        setPurchasedLevels(data.purchased_levels || []);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
@@ -322,14 +314,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setAccessToken(null);
         setAccountTier('free');
-        setPurchasedLevels([]);
         storageRemoveItem("hanyu_auth_token");
       } else if (data.session?.access_token) {
         setAccessToken(data.session.access_token);
         storageSetItem("hanyu_auth_token", data.session.access_token);
         setUser(data.user);
         setAccountTier('free');
-        setPurchasedLevels([]);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Signup failed";
@@ -337,65 +327,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw err;
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const purchaseLevel = async (level: number) => {
-    if (getCachedIsSandboxed()) {
-      setError("Purchases unavailable in preview mode");
-      return;
-    }
-
-    const token = accessToken || storageGetItem("hanyu_auth_token");
-    if (!token) {
-      setError("Please sign in to purchase");
-      return;
-    }
-
-    try {
-      setIsCheckingOut(true);
-      setError(null);
-      console.log(`🛒 Starting HSK ${level} purchase...`);
-      const res = await apiFetch(`/api/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          product_type: "hsk_level",
-          hsk_level: level,
-          tos_accepted: true,
-          privacy_accepted: true,
-          client_timestamp: new Date().toISOString(),
-        }),
-      });
-
-      // Try to parse response as JSON
-      const text = await res.text();
-      let body;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        console.error("Checkout API response not JSON:", res.status, text.slice(0, 500));
-        throw new Error(`Server error (${res.status}). Please try again later.`);
-      }
-
-      if (!res.ok) throw new Error(body.error || "Failed to create checkout session");
-
-      if (body.url) {
-        console.log("🔗 Redirecting to Stripe...");
-        window.location.assign(body.url);
-        return;
-      }
-
-      throw new Error("No checkout URL returned from server");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Purchase failed";
-      console.error("❌ Purchase error:", message);
-      setError(message);
-    } finally {
-      setIsCheckingOut(false);
     }
   };
 
@@ -465,7 +396,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storageRemoveItem("hanyu_auth_token");
     setUser(null);
     setAccountTier('free');
-    setPurchasedLevels([]);
 
     // Best-effort server-side signout (non-blocking)
     if (token && !getCachedIsSandboxed()) {
@@ -521,7 +451,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storageRemoveItem("hanyu_auth_token");
       setUser(null);
       setAccountTier('free');
-      setPurchasedLevels([]);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to delete account";
       setError(message);
@@ -664,11 +593,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isCheckingOut,
         accountTier,
-        purchasedLevels,
         login,
         signup,
         logout,
-        purchaseLevel,
         purchasePremium,
         changeEmail,
         changePassword,

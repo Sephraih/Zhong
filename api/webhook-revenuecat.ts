@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'crypto';
 
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
@@ -44,11 +45,15 @@ async function revokeUserPremium(supabase: SupabaseClient, userId: string) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Verify shared secret
+  // Verify shared secret using constant-time comparison to prevent timing attacks
   const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
   const authHeader = req.headers.authorization;
-  if (!secret || authHeader !== `Bearer ${secret}`) {
-    console.warn('⚠️ [RC] Webhook authorisation failed');
+  if (!secret || !authHeader) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const provided = Buffer.from(authHeader);
+  const expected = Buffer.from(`Bearer ${secret}`);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

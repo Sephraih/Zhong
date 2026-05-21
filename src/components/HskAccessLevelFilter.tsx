@@ -5,7 +5,6 @@ import { getHskFilterActiveClasses } from "../utils/hskColors";
 export interface AccessContextInfo {
   isLoggedIn: boolean;
   isPremium: boolean;
-  purchasedLevels: number[];
 }
 
 interface HskAccessLevelFilterProps {
@@ -26,18 +25,14 @@ function normalizeSelected(availableLevels: number[], selectedLevels: number[]):
 function isLevelAccessible(level: number, access: AccessContextInfo): boolean {
   if (level >= 5) return false;
   if (access.isPremium) return true;
-  if (!access.isLoggedIn) return level === 1;
-  if (level === 1) return true;
-  return access.purchasedLevels.includes(level);
+  return level === 1;
 }
 
 function lockReason(level: number, access: AccessContextInfo): string {
   if (level >= 5) return `HSK ${level} not available yet`;
   if (!access.isLoggedIn) return `Sign in to access HSK ${level}`;
-  if (access.isPremium) return "";
-  if (level === 1) return "";
-  if (access.purchasedLevels.includes(level)) return "";
-  return `Purchase HSK ${level} (or Premium) to unlock`;
+  if (access.isPremium || level === 1) return "";
+  return `Upgrade to Premium to unlock`;
 }
 
 export function HskAccessLevelFilter({

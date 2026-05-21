@@ -557,7 +557,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                               ? undefined
                               : level >= 5
                               ? `HSK ${level} not available yet`
-                              : "Sign in / purchase to unlock this level"
+                              : "Sign in or upgrade to Premium to unlock"
                           }
                           className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
                             !enabled

@@ -5,7 +5,6 @@ export type AccountTier = 'free' | 'premium';
 export interface AccessInfo {
   isLoggedIn: boolean;
   accountTier: AccountTier;
-  purchasedLevels: number[];
 }
 
 // Levels currently available in the database
@@ -26,13 +25,7 @@ export function getAccessibleLevels(access: AccessInfo): number[] {
     return [...AVAILABLE_LEVELS];
   }
   
-  // Logged in users always get HSK 1
-  if (access.isLoggedIn) {
-    const levels = new Set([1, ...access.purchasedLevels]);
-    return Array.from(levels).filter(l => AVAILABLE_LEVELS.includes(l)).sort((a, b) => a - b);
-  }
-  
-  // Anonymous users get HSK 1 (limited to 200 words, handled elsewhere)
+  // Free users (logged in or anonymous) get HSK 1 only
   return [1];
 }
 
@@ -81,12 +74,8 @@ export function getLockReason(level: number, access: AccessInfo): string | null 
   if (!access.isLoggedIn) {
     return `Sign in to access HSK ${level}`;
   }
-  
-  if (level === 1) {
-    return null; // HSK 1 is always free for logged in users
-  }
-  
-  return `Purchase HSK ${level} to unlock`;
+
+  return `Upgrade to Premium to unlock`;
 }
 
 /**

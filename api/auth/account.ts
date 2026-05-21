@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from '../_cors';
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL!,
@@ -18,11 +19,7 @@ async function getUserFromToken(authHeader: string | undefined) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers - be permissive for same-origin requests
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCors(res, req.headers.origin as string | undefined);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -137,8 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'New password is required' });
         }
 
-        if (newPassword.length < 6) {
-          return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        if (newPassword.length < 8) {
+          return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
 
         if (newPassword === currentPassword) {

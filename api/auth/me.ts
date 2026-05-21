@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { setCors } from '../_cors';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -18,11 +19,7 @@ async function getUserFromToken(authHeader: string | undefined) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers - be permissive
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  setCors(res, req.headers.origin as string | undefined);
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -55,15 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq('id', user.id);
     }
 
-    // Get purchased levels
-    const { data: purchasedLevelsData } = await supabase
-      .from('purchased_levels')
-      .select('hsk_level')
-      .eq('user_id', user.id)
-      .order('hsk_level', { ascending: true });
-
-    const purchasedLevels = purchasedLevelsData?.map(p => p.hsk_level) || [];
-
     // Determine account tier
     // Check both account_tier column and legacy is_premium boolean
     let accountTier = profile?.account_tier || 'free';
@@ -80,7 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.json({
       user,
       account_tier: accountTier,
-      purchased_levels: purchasedLevels,
       stripe_customer_id: profile?.stripe_customer_id || null,
     });
   } catch (error) {

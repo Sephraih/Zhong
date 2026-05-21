@@ -5,7 +5,6 @@ import type { VocabWord } from "../data/vocabulary";
 export interface AccessInfoLite {
   isLoggedIn: boolean;
   accountTier: 'free' | 'premium';
-  purchasedLevels: number[];
 }
 
 // All HSK levels that could exist
@@ -49,9 +48,8 @@ export function hasAccessToLevel(level: number, access: AccessInfoLite): boolean
     return level === 1;
   }
   
-  // Logged in free users get HSK 1 + purchased levels
-  if (level === 1) return true;
-  return access.purchasedLevels.includes(level);
+  // Free users get HSK 1 only
+  return level === 1;
 }
 
 /**
@@ -73,7 +71,7 @@ export function lockReasonForLevel(level: number, access: AccessInfoLite): strin
     return `Sign in to access HSK ${level}`;
   }
   
-  return `Purchase HSK ${level} (or Premium) to unlock`;
+  return `Upgrade to Premium to unlock`;
 }
 
 /**
