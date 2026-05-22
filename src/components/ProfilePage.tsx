@@ -247,7 +247,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                   disabled={isCheckingOut}
                   className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-xl transition-all shadow-lg shadow-yellow-900/30 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {isCheckingOut ? "Redirecting to Stripe..." : "Upgrade to Premium"}
+                  {isCheckingOut ? "Redirecting to Stripe..." : "Unlock Premium"}
                 </button>
               </div>
             </div>

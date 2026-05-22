@@ -104,7 +104,7 @@ function buildPinyinWords(hanzi: string, pinyin: string | null): { char: string;
   return chars.map((char) => ({ char, pinyin: "" }));
 }
 
-function limitEnglish(english: string, max = 3): string {
+function limitEnglish(english: string, max = 6): string {
   const parts = english
     .split(/[,;]/)
     .map((s) => s.trim())
@@ -176,7 +176,7 @@ export function buildFallbackVocabulary(): VocabWord[] {
       id: index + 1,
       hanzi: item.hanzi,
       pinyin: item.pinyin,
-      english: limitEnglish(item.english, 3),
+      english: limitEnglish(item.english, 6),
       hskLevel,
       category: getCategory(null, item.english, hskLevel),
       examples,
@@ -297,7 +297,7 @@ export async function fetchVocabularyFromSupabase(
         id: row.word_id,
         hanzi: row.hanzi,
         pinyin: row.pinyin,
-        english: limitEnglish(row.english, 3),
+        english: limitEnglish(row.english, 6),
         hskLevel,
         category: getCategory(row.word_type, row.english, hskLevel),
         examples,
