@@ -2,14 +2,16 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { TurnstileWidget } from "./TurnstileWidget";
 
+type AuthMode = "login" | "signup" | "forgot" | "new-password";
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialMode?: "login" | "signup";
+  initialMode?: AuthMode;
 }
 
 export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalProps) {
-  const [mode, setMode] = useState<"login" | "signup">(initialMode);
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,7 +22,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [formHint, setFormHint] = useState<string | null>(null);
 
-  const { login, signup, error, clearError } = useAuth();
+  const { login, signup, sendPasswordResetEmail, setNewPassword, refreshAuth, error, clearError } = useAuth();
 
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
   const turnstileEnabled = Boolean(turnstileSiteKey);
@@ -48,6 +50,11 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
       return;
     }
 
+    if (mode === "new-password" && password !== confirmPassword) {
+      setFormHint("Passwords do not match.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -55,17 +62,25 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
         await login(email, password);
         onClose();
         resetForm();
-      } else {
+      } else if (mode === "signup") {
         await signup(email, password, {
           acceptTos,
           acceptPrivacy,
           captchaToken: turnstileToken,
         });
-        // Supabase email confirmation is enabled: user must confirm via email.
         setSuccessMessage(
           "Check your email to confirm your account. After you click the confirmation link, you'll be redirected to your profile."
         );
-        // Do NOT auto-redirect here. User will be redirected by /auth/callback after confirming.
+      } else if (mode === "forgot") {
+        await sendPasswordResetEmail(email);
+        setSuccessMessage(
+          "Check your email for a password reset link. The link expires after an hour."
+        );
+      } else if (mode === "new-password") {
+        await setNewPassword(password);
+        await refreshAuth();
+        onClose();
+        resetForm();
       }
     } catch {
       // Error is handled by context
@@ -83,14 +98,16 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
     setSuccessMessage(null);
   };
 
-  const switchMode = () => {
-    setMode(mode === "login" ? "signup" : "login");
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
     clearError();
     setSuccessMessage(null);
     setFormHint(null);
     setAcceptTos(false);
     setAcceptPrivacy(false);
     setTurnstileToken(null);
+    setPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -111,12 +128,16 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
             </div>
           </div>
           <h2 className="text-2xl font-bold text-white text-center">
-            {mode === "login" ? "Welcome Back" : "Create Account"}
+            {mode === "login" ? "Welcome Back"
+              : mode === "signup" ? "Create Account"
+              : mode === "forgot" ? "Forgot Password"
+              : "Set New Password"}
           </h2>
           <p className="text-gray-400 text-center mt-1">
-            {mode === "login"
-              ? "Sign in to continue your learning"
-              : "Start your Chinese learning journey"}
+            {mode === "login" ? "Sign in to continue your learning"
+              : mode === "signup" ? "Start your Chinese learning journey"
+              : mode === "forgot" ? "Enter your email and we'll send a reset link"
+              : "Choose a new password for your account"}
           </p>
         </div>
 
@@ -141,36 +162,54 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
           )}
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50 transition-all"
-                placeholder="you@example.com"
-              />
-            </div>
+            {/* Email — shown for login, signup, forgot */}
+            {mode !== "new-password" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50 transition-all"
+                  placeholder="you@example.com"
+                />
+              </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50 transition-all"
-                placeholder="••••••••"
-              />
-            </div>
+            {/* Password — shown for login, signup, new-password */}
+            {mode !== "forgot" && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-gray-400">
+                    {mode === "new-password" ? "New Password" : "Password"}
+                  </label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode("forgot")}
+                      className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50 transition-all"
+                  placeholder="••••••••"
+                />
+              </div>
+            )}
 
-            {mode === "signup" && (
+            {/* Confirm password — shown for signup and new-password */}
+            {(mode === "signup" || mode === "new-password") && (
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1.5">
                   Confirm Password
@@ -180,7 +219,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                   className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50 transition-all"
                   placeholder="••••••••"
                 />
@@ -189,7 +228,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                 )}
 
                 {/* Turnstile Captcha (signup only) */}
-                {turnstileEnabled && (
+                {mode === "signup" && turnstileEnabled && (
                   <div className="mt-4 p-3 bg-neutral-950 border border-neutral-800 rounded-lg">
                     <p className="text-xs text-gray-500 mb-2">Security verification</p>
                     <TurnstileWidget
@@ -201,45 +240,48 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                   </div>
                 )}
 
-                <div className="mt-4 space-y-2">
-                  <label className="flex items-start gap-2 text-sm text-gray-400">
-                    <input
-                      type="checkbox"
-                      checked={acceptTos}
-                      onChange={(e) => setAcceptTos(e.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
-                      required
-                    />
-                    <span>
-                      I agree to the{" "}
-                      <a className="text-red-400 hover:underline" href="/tos" target="_blank" rel="noreferrer">
-                        Terms of Service
-                      </a>
-                    </span>
-                  </label>
+                {/* TOS checkboxes (signup only) */}
+                {mode === "signup" && (
+                  <div className="mt-4 space-y-2">
+                    <label className="flex items-start gap-2 text-sm text-gray-400">
+                      <input
+                        type="checkbox"
+                        checked={acceptTos}
+                        onChange={(e) => setAcceptTos(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
+                        required
+                      />
+                      <span>
+                        I agree to the{" "}
+                        <a className="text-red-400 hover:underline" href="/tos" target="_blank" rel="noreferrer">
+                          Terms of Service
+                        </a>
+                      </span>
+                    </label>
 
-                  <label className="flex items-start gap-2 text-sm text-gray-400">
-                    <input
-                      type="checkbox"
-                      checked={acceptPrivacy}
-                      onChange={(e) => setAcceptPrivacy(e.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
-                      required
-                    />
-                    <span>
-                      I agree to the{" "}
-                      <a className="text-red-400 hover:underline" href="/privacy" target="_blank" rel="noreferrer">
-                        Privacy Policy
-                      </a>
-                    </span>
-                  </label>
+                    <label className="flex items-start gap-2 text-sm text-gray-400">
+                      <input
+                        type="checkbox"
+                        checked={acceptPrivacy}
+                        onChange={(e) => setAcceptPrivacy(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-neutral-700 bg-black"
+                        required
+                      />
+                      <span>
+                        I agree to the{" "}
+                        <a className="text-red-400 hover:underline" href="/privacy" target="_blank" rel="noreferrer">
+                          Privacy Policy
+                        </a>
+                      </span>
+                    </label>
 
-                  {(!acceptTos || !acceptPrivacy) && (
-                    <p className="text-xs text-gray-500">
-                      Required to create an account.
-                    </p>
-                  )}
-                </div>
+                    {(!acceptTos || !acceptPrivacy) && (
+                      <p className="text-xs text-gray-500">
+                        Required to create an account.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -248,29 +290,42 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
             type="submit"
             disabled={
               isSubmitting ||
-              (mode === "signup" && password !== confirmPassword) ||
+              ((mode === "signup" || mode === "new-password") && password !== confirmPassword) ||
               (mode === "signup" && (!acceptTos || !acceptPrivacy))
             }
             className="w-full mt-6 py-3.5 bg-red-600 hover:bg-red-700 disabled:bg-red-900/50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all shadow-lg shadow-red-900/30 disabled:shadow-none"
           >
-            {isSubmitting
-              ? "Please wait..."
-              : mode === "login"
-              ? "Sign In"
-              : "Create Account"}
+            {isSubmitting ? "Please wait..."
+              : mode === "login" ? "Sign In"
+              : mode === "signup" ? "Create Account"
+              : mode === "forgot" ? "Send Reset Link"
+              : "Set New Password"}
           </button>
 
           <div className="mt-6 text-center">
-            <span className="text-gray-500">
-              {mode === "login" ? "Don't have an account?" : "Already have an account?"}
-            </span>
-            <button
-              type="button"
-              onClick={switchMode}
-              className="ml-1 text-red-400 hover:text-red-300 font-medium transition-colors"
-            >
-              {mode === "login" ? "Sign up" : "Sign in"}
-            </button>
+            {(mode === "login" || mode === "signup") && (
+              <>
+                <span className="text-gray-500">
+                  {mode === "login" ? "Don't have an account?" : "Already have an account?"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => switchMode(mode === "login" ? "signup" : "login")}
+                  className="ml-1 text-red-400 hover:text-red-300 font-medium transition-colors"
+                >
+                  {mode === "login" ? "Sign up" : "Sign in"}
+                </button>
+              </>
+            )}
+            {mode === "forgot" && (
+              <button
+                type="button"
+                onClick={() => switchMode("login")}
+                className="text-gray-500 hover:text-gray-300 transition-colors text-sm"
+              >
+                ← Back to sign in
+              </button>
+            )}
           </div>
         </form>
 

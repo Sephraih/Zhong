@@ -166,10 +166,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: updateError.message });
         }
 
-        return res.json({ 
-          success: true, 
-          message: 'Password updated successfully' 
+        return res.json({
+          success: true,
+          message: 'Password updated successfully'
         });
+      }
+
+      case 'reset-password': {
+        // No current password check — the recovery token itself proves identity.
+        if (!newPassword) {
+          return res.status(400).json({ error: 'New password is required' });
+        }
+
+        if (newPassword.length < 8) {
+          return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        const { error: resetError } = await supabaseAdmin.auth.admin.updateUserById(
+          user.id,
+          { password: newPassword }
+        );
+
+        if (resetError) {
+          console.error('Password reset error:', resetError);
+          return res.status(400).json({ error: resetError.message });
+        }
+
+        return res.json({ success: true, message: 'Password updated successfully' });
       }
 
       case 'delete-account': {

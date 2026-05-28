@@ -258,12 +258,22 @@ function AppContent() {
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
+  const [authModalMode, setAuthModalMode] = useState<"login" | "signup" | "forgot" | "new-password">("login");
 
-  const openAuthModal = (mode: "login" | "signup") => {
+  const openAuthModal = (mode: "login" | "signup" | "forgot" | "new-password") => {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
+
+  // Detect password-reset redirect from /auth/callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setAuthModalMode("new-password");
+      setAuthModalOpen(true);
+    }
+  }, []);
 
   // UI state
   const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewMode());

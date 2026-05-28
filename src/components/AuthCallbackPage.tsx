@@ -40,17 +40,22 @@ export function AuthCallbackPage() {
   const [status, setStatus] = useState<"working" | "done" | "error">("working");
   const [message, setMessage] = useState<string>("Processing your request…");
   const [isEmailChange, setIsEmailChange] = useState(false);
+  const [isPasswordReset, setIsPasswordReset] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       try {
         const { code, accessToken, tokenHash, type } = parseParams();
 
-        // Determine if this is an email change confirmation
+        // Determine flow type
         const isEmailChangeFlow = type === "email_change" || type === "email";
+        const isRecoveryFlow = type === "recovery";
         setIsEmailChange(isEmailChangeFlow);
+        setIsPasswordReset(isRecoveryFlow);
 
-        if (isEmailChangeFlow) {
+        if (isRecoveryFlow) {
+          setMessage("Verifying your reset link…");
+        } else if (isEmailChangeFlow) {
           setMessage("Confirming your new email address…");
         } else {
           setMessage("Confirming your email…");
@@ -60,13 +65,17 @@ export function AuthCallbackPage() {
         if (accessToken) {
           // Clear old token first to prevent conflicts
           storageRemoveItem("hanyu_auth_token");
-          
-          // Small delay to ensure storage is cleared
           await new Promise(resolve => setTimeout(resolve, 50));
-          
           storageSetItem("hanyu_auth_token", accessToken);
+
+          if (isRecoveryFlow) {
+            setStatus("done");
+            setMessage("Link verified! Redirecting to set your new password…");
+            setTimeout(() => window.location.assign("/?reset=1"), 800);
+            return;
+          }
+
           sessionStorage.setItem("hamhao_email_confirmed", "1");
-          
           if (isEmailChangeFlow) {
             sessionStorage.setItem("hamhao_email_changed", "1");
             setStatus("done");
@@ -75,7 +84,6 @@ export function AuthCallbackPage() {
             setStatus("done");
             setMessage("Email confirmed! Redirecting to your profile…");
           }
-          
           setTimeout(() => window.location.assign("/profile"), 800);
           return;
         }
@@ -103,10 +111,17 @@ export function AuthCallbackPage() {
           // Clear old token first to prevent conflicts
           storageRemoveItem("hanyu_auth_token");
           await new Promise(resolve => setTimeout(resolve, 50));
-          
           storageSetItem("hanyu_auth_token", data.session.access_token);
+
+          if (isRecoveryFlow) {
+            setStatus("done");
+            setMessage("Link verified! Redirecting to set your new password…");
+            setTimeout(() => window.location.assign("/?reset=1"), 800);
+            return;
+          }
+
           sessionStorage.setItem("hamhao_email_confirmed", "1");
-          
+
           // If this was an email change, update the profiles table
           if (isEmailChangeFlow && data.user?.email) {
             try {
@@ -154,10 +169,16 @@ export function AuthCallbackPage() {
         // Clear old token first to prevent conflicts
         storageRemoveItem("hanyu_auth_token");
         await new Promise(resolve => setTimeout(resolve, 50));
-        
         storageSetItem("hanyu_auth_token", data.session.access_token);
-        sessionStorage.setItem("hamhao_email_confirmed", "1");
 
+        if (isRecoveryFlow) {
+          setStatus("done");
+          setMessage("Link verified! Redirecting to set your new password…");
+          setTimeout(() => window.location.assign("/?reset=1"), 800);
+          return;
+        }
+
+        sessionStorage.setItem("hamhao_email_confirmed", "1");
         setStatus("done");
         setMessage("Email confirmed! Redirecting to your profile…");
         setTimeout(() => window.location.assign("/profile"), 800);
@@ -176,7 +197,7 @@ export function AuthCallbackPage() {
         {status === "error" ? "⚠️" : status === "done" ? "✅" : "📧"}
       </div>
       <h2 className="text-2xl font-bold text-white mb-2">
-        {isEmailChange ? "Email Change Confirmation" : "Email Confirmation"}
+        {isPasswordReset ? "Password Reset" : isEmailChange ? "Email Change Confirmation" : "Email Confirmation"}
       </h2>
       <p className="text-gray-400 mb-8">{message}</p>
 

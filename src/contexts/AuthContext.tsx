@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { storageGetItem, storageRemoveItem, storageSetItem } from "../utils/storageConsent";
 import { getCachedIsSandboxed } from "../utils/environment";
+import { supabase } from "../supabaseClient";
 
 // Safe localStorage access for sandboxed environments
 function safeLocalStorageGet(key: string): string | null {
@@ -39,6 +40,8 @@ interface AuthContextType {
   purchasePremium: () => Promise<void>;
   changeEmail: (currentPassword: string, newEmail: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
+  setNewPassword: (newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   exportMyData: () => Promise<void>;
   refreshAuth: () => Promise<void>;
@@ -585,6 +588,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const sendPasswordResetEmail = async (email: string) => {
+    if (getCachedIsSandboxed()) {
+      setError("Password reset unavailable in preview mode");
+      throw new Error("Password reset unavailable in preview mode");
+    }
+
+    if (!supabase) {
+      setError("Service unavailable. Please try again later.");
+      throw new Error("Supabase not configured");
+    }
+
+    setError(null);
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (resetError) {
+      setError(resetError.message);
+      throw resetError;
+    }
+  };
+
+  const setNewPassword = async (newPassword: string) => {
+    if (getCachedIsSandboxed()) {
+      setError("Password reset unavailable in preview mode");
+      throw new Error("Password reset unavailable in preview mode");
+    }
+
+    const token = safeLocalStorageGet("hanyu_auth_token");
+    if (!token) {
+      setError("Session expired. Please request a new password reset link.");
+      throw new Error("No token");
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const res = await apiFetch(`/api/auth/account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: "reset-password", newPassword }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to set new password");
+      }
+
+      // Refresh user state so the app knows they are now logged in
+      await fetchUser(token);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to set new password";
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -599,6 +663,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         purchasePremium,
         changeEmail,
         changePassword,
+        sendPasswordResetEmail,
+        setNewPassword,
         deleteAccount,
         exportMyData,
         refreshAuth,
