@@ -4,7 +4,7 @@ import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
-import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 
 interface SentenceModeProps {
   allWords: VocabWord[];
@@ -657,14 +657,18 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
               /* Chinese → English: Show Chinese on front */
               <>
                 <div className="flex flex-wrap items-end gap-0.5 justify-center mb-4 max-w-full px-2">
-                  {currentSentence.pinyinWords.map((pw, i) => (
-                    <HoverCharacter
-                      key={`${currentSentence.id}-${i}`}
-                      char={pw.char}
-                      pinyin={pw.pinyin}
-                      size={isMobile ? "lg" : "xl"}
-                      wordId={currentSentence.id}
-                    />
+                  {groupByTrailingPunctuation(currentSentence.pinyinWords).map((group, gi) => (
+                    <span key={`${currentSentence.id}-g${gi}`} className="inline-flex items-end gap-0.5">
+                      {group.map((pw, i) => (
+                        <HoverCharacter
+                          key={`${currentSentence.id}-${gi}-${i}`}
+                          char={pw.char}
+                          pinyin={pw.pinyin}
+                          size={isMobile ? "lg" : "xl"}
+                          wordId={currentSentence.id}
+                        />
+                      ))}
+                    </span>
                   ))}
                 </div>
                 <SpeakerButton text={currentSentence.chinese} size="md" />
@@ -702,14 +706,18 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
               /* English → Chinese: Show Chinese on back */
               <>
                 <div className="flex flex-wrap items-end gap-0.5 justify-center mb-4 max-w-full px-2">
-                  {currentSentence.pinyinWords.map((pw, i) => (
-                    <HoverCharacter
-                      key={`${currentSentence.id}-back-${i}`}
-                      char={pw.char}
-                      pinyin={pw.pinyin}
-                      size={isMobile ? "lg" : "xl"}
-                      wordId={currentSentence.id}
-                    />
+                  {groupByTrailingPunctuation(currentSentence.pinyinWords).map((group, gi) => (
+                    <span key={`${currentSentence.id}-back-g${gi}`} className="inline-flex items-end gap-0.5">
+                      {group.map((pw, i) => (
+                        <HoverCharacter
+                          key={`${currentSentence.id}-back-${gi}-${i}`}
+                          char={pw.char}
+                          pinyin={pw.pinyin}
+                          size={isMobile ? "lg" : "xl"}
+                          wordId={currentSentence.id}
+                        />
+                      ))}
+                    </span>
                   ))}
                 </div>
                 <SpeakerButton text={currentSentence.chinese} size="md" />

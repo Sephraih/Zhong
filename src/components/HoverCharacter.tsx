@@ -6,6 +6,7 @@ interface HoverCharacterProps {
   pinyin: string;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   wordId?: number | string;
+  charClassName?: string;
 }
 
 /**
@@ -17,7 +18,7 @@ export function isHoverCharacterEvent(e: React.MouseEvent | React.TouchEvent | M
   return !!target?.closest?.("[data-hover-char]");
 }
 
-export function HoverCharacter({ char, pinyin, size = "md", wordId }: HoverCharacterProps) {
+export function HoverCharacter({ char, pinyin, size = "md", wordId, charClassName }: HoverCharacterProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const isMobile = useIsMobile();
   const isTouching = useRef(false);
@@ -110,7 +111,7 @@ export function HoverCharacter({ char, pinyin, size = "md", wordId }: HoverChara
 
   if (isPunctuation) {
     return (
-      <span className={`${activeSizeClasses[size]} text-gray-500`}>
+      <span className={`${charClassName ?? activeSizeClasses[size]} text-white`}>
         {char}
       </span>
     );
@@ -150,7 +151,7 @@ export function HoverCharacter({ char, pinyin, size = "md", wordId }: HoverChara
 
       {/* Character */}
       <span
-        className={`${activeSizeClasses[size]} transition-colors duration-200 ${
+        className={`${charClassName ?? activeSizeClasses[size]} transition-colors duration-200 ${
           isRevealed ? "text-red-400" : "text-white"
         }`}
       >

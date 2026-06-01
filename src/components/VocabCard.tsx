@@ -3,7 +3,7 @@ import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
-import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 interface VocabCardProps {
@@ -147,8 +147,12 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
                 <div className="flex items-start gap-2">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-end gap-0.5 mb-2">
-                      {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} />
+                      {groupByTrailingPunctuation(example.pinyinWords).map((group, gi) => (
+                        <span key={gi} className="inline-flex items-end gap-0.5">
+                          {group.map((pw, i) => (
+                            <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} charClassName={isMobile ? undefined : "text-[43px]"} />
+                          ))}
+                        </span>
                       ))}
                     </div>
                     <p className="text-gray-500 text-sm">{example.english}</p>

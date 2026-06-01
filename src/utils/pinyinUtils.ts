@@ -2,6 +2,26 @@
 // ─── Pinyin Helper Utilities ──────────────────────────────────────────────────
 
 /**
+ * Groups a pinyinWords array so each group is [normalChar, ...trailingPunctuation].
+ * Prevents punctuation from wrapping to a new flex line alone.
+ */
+export function groupByTrailingPunctuation(
+  words: { char: string; pinyin: string }[]
+): { char: string; pinyin: string }[][] {
+  const isPunct = (c: string) =>
+    /^[。，！？、；：""''（）《》…—\s.!?,;:'"()\-]$/.test(c);
+  const groups: { char: string; pinyin: string }[][] = [];
+  for (const word of words) {
+    if (isPunct(word.char) && groups.length > 0) {
+      groups[groups.length - 1].push(word);
+    } else {
+      groups.push([word]);
+    }
+  }
+  return groups;
+}
+
+/**
  * Split pinyin into syllables.
  *
  * Strategy:

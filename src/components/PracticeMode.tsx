@@ -5,7 +5,7 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
-import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 
 interface PracticeModeProps {
   allWords: VocabWord[];
@@ -773,8 +773,12 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                         <div key={`${currentWord.id}-ex-${idx}`} className="p-3 bg-black/40 rounded-xl border border-neutral-800 flex items-start gap-2">
                           <div className="flex-1">
                             <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
-                              {ex.pinyinWords.map((pw, i) => (
-                                <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} />
+                              {groupByTrailingPunctuation(ex.pinyinWords).map((group, gi) => (
+                                <span key={`${currentWord.id}-ex-${idx}-g${gi}`} className="inline-flex items-end gap-0.5">
+                                  {group.map((pw, i) => (
+                                    <HoverCharacter key={`${currentWord.id}-ex-${idx}-${gi}-${i}`} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} charClassName={isMobile ? undefined : "text-[43px]"} />
+                                  ))}
+                                </span>
                               ))}
                             </div>
                             <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
