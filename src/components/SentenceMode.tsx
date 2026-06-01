@@ -111,6 +111,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
   // Animation state
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [feedback, setFeedback] = useState<"got" | "forgot" | "gold" | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Delta indicator (+1 / -1)
@@ -275,8 +276,10 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
     };
 
     if (isFlipped) {
+      setIsNavigating(true);
       setIsFlipped(false);
-      setTimeout(applyNext, 300);
+      applyNext();
+      setTimeout(() => setIsNavigating(false), 0);
     } else {
       applyNext();
     }
@@ -649,7 +652,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
         {/* Card content */}
         <div className="flex-1 flex flex-col items-center justify-center p-6 pt-16">
           {/* Front content */}
-          <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-90 -translate-y-8 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
+          <div className={`flex flex-col items-center ${isNavigating ? "" : "transition-all duration-300"} ${isFlipped ? "scale-90 -translate-y-8 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
             {isChinese ? (
               /* Chinese → English: Show Chinese on front */
               <>
@@ -687,7 +690,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
           </div>
 
           {/* Back content */}
-          <div className={`absolute inset-0 pt-24 pb-6 px-6 flex flex-col items-center bg-neutral-900/95 transition-all duration-300 overflow-y-auto ${
+          <div className={`absolute inset-0 pt-24 pb-6 px-6 flex flex-col items-center bg-neutral-900/95 ${isNavigating ? "" : "transition-all duration-300"} overflow-y-auto ${
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8 pointer-events-none"
           }`}>
             {isChinese ? (
@@ -729,7 +732,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
                         i,
                         currentSentence.sourceWord.hanzi.length
                       )}
-                      size="2xl"
+                      size={isMobile ? "lg" : "xl"}
                       wordId={currentSentence.id}
                     />
                   ))}

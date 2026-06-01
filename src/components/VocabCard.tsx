@@ -4,6 +4,7 @@ import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 interface VocabCardProps {
   word: VocabWord;
@@ -12,6 +13,7 @@ interface VocabCardProps {
 }
 
 export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) {
+  const isMobile = useIsMobile();
   const [isFlipped, setIsFlipped] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
 
@@ -146,7 +148,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
                   <div className="flex-1">
                     <div className="flex flex-wrap items-end gap-0.5 mb-2">
                       {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size="md" />
+                        <HoverCharacter key={i} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} />
                       ))}
                     </div>
                     <p className="text-gray-500 text-sm">{example.english}</p>

@@ -5,6 +5,7 @@ import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
@@ -61,8 +62,10 @@ function getLockedHskButtonClasses(level: HskLevel): string {
 }
 
 export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick }: FlashcardModeProps) {
+  const isMobile = useIsMobile();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
   const [shuffleSeed, setShuffleSeed] = useState(0);
   // selectedLevels is initialized after availableLevels is computed (see below)
@@ -149,8 +152,10 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   // Loop: last -> first, first -> last
   const goNext = useCallback(() => {
     if (isFlipped) {
+      setIsNavigating(true);
       setIsFlipped(false);
-      setTimeout(() => setCurrentIndex((prev) => (prev + 1) % displayWords.length), 300);
+      setCurrentIndex((prev) => (prev + 1) % displayWords.length);
+      setTimeout(() => setIsNavigating(false), 0);
     } else {
       setCurrentIndex((prev) => (prev + 1) % displayWords.length);
     }
@@ -158,8 +163,10 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
   const goPrev = useCallback(() => {
     if (isFlipped) {
+      setIsNavigating(true);
       setIsFlipped(false);
-      setTimeout(() => setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length), 300);
+      setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length);
+      setTimeout(() => setIsNavigating(false), 0);
     } else {
       setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length);
     }
@@ -363,7 +370,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         </div>
 
         {/* Front Content */}
-        <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
+        <div className={`flex flex-col items-center ${isNavigating ? "" : "transition-all duration-300"} ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
           <div className="flex items-end gap-2 justify-center">
             {currentWord.hanzi.split("").map((char, i) => (
               <HoverCharacter
@@ -385,7 +392,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
         {/* Revealed Info (Overlay) */}
         <div
-          className={`absolute inset-0 pt-28 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 ${
+          className={`absolute inset-0 pt-28 pb-6 px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 ${isNavigating ? "" : "transition-all duration-300"} ${
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
           }`}
         >
@@ -399,7 +406,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
                       {example.pinyinWords.map((pw, i) => (
-                        <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" wordId={currentWord.id} />
+                        <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} wordId={currentWord.id} />
                       ))}
                     </div>
                     <p className="text-gray-400 text-xs leading-relaxed">{example.english}</p>

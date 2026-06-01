@@ -123,6 +123,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
   // Animation state
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [feedback, setFeedback] = useState<"got" | "forgot" | "gold" | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Delta indicator (+1 / -1)
@@ -324,8 +325,10 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
     };
 
     if (isFlipped) {
+      setIsNavigating(true);
       setIsFlipped(false);
-      setTimeout(applyNext, 300);
+      applyNext();
+      setTimeout(() => setIsNavigating(false), 0);
     } else {
       applyNext();
     }
@@ -726,7 +729,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                   </div>
 
                   {/* Front content */}
-                  <div className={`flex flex-col items-center transition-all duration-300 ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
+                  <div className={`flex flex-col items-center ${isNavigating ? "" : "transition-all duration-300"} ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
                     {isChinese ? (
                       <>
                         <div className="flex items-end gap-2 justify-center">
@@ -747,7 +750,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                   </div>
 
                   {/* Back overlay */}
-                  <div className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"}`}>
+                  <div className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 ${isNavigating ? "" : "transition-all duration-300"} scrollbar-hide ${isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"}`}>
                     {isChinese ? (
                       <>
                         <p className="text-red-400 text-4xl font-medium mb-1">{currentWord.pinyin}</p>
@@ -771,7 +774,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                           <div className="flex-1">
                             <div className="flex flex-wrap items-end gap-0.5 mb-1.5">
                               {ex.pinyinWords.map((pw, i) => (
-                                <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size="sm" />
+                                <HoverCharacter key={`${currentWord.id}-ex-${idx}-${i}`} char={pw.char} pinyin={pw.pinyin} size={isMobile ? "lg" : "xl"} />
                               ))}
                             </div>
                             <p className="text-gray-400 text-xs leading-relaxed">{ex.english}</p>
