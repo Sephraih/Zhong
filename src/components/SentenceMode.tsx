@@ -4,6 +4,7 @@ import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
+import { extractPinyinForChar } from "../utils/pinyinUtils";
 
 interface SentenceModeProps {
   allWords: VocabWord[];
@@ -263,12 +264,22 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
       nextIndex = 0;
       nextCycle += 1;
       nextSentences = shuffleArray(sentences);
-      setSessionSentences(nextSentences);
-      setCycleCount(nextCycle);
     }
 
-    setCurrentIndex(nextIndex);
-    setIsFlipped(false);
+    const applyNext = () => {
+      if (nextSentences !== sentences) {
+        setSessionSentences(nextSentences);
+        setCycleCount(nextCycle);
+      }
+      setCurrentIndex(nextIndex);
+    };
+
+    if (isFlipped) {
+      setIsFlipped(false);
+      setTimeout(applyNext, 300);
+    } else {
+      applyNext();
+    }
   };
 
   const scheduleAdvance = (updatedSentences: SessionSentence[], feedbackType: "got" | "forgot" | "gold") => {
@@ -706,13 +717,25 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
 
             {/* Source word info */}
             <div className="mt-4 p-4 bg-black/40 rounded-xl border border-neutral-800 w-full">
-              <p className="text-xs text-gray-500 mb-2">From vocabulary word:</p>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl text-white font-bold">{currentSentence.sourceWord.hanzi}</span>
-                <div>
-                  <p className="text-red-400 text-sm">{currentSentence.sourceWord.pinyin}</p>
-                  <p className="text-gray-400 text-sm">{currentSentence.sourceWord.english}</p>
+              <p className="text-xs text-gray-500 mb-3">From vocabulary word:</p>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-end gap-1 justify-center">
+                  {currentSentence.sourceWord.hanzi.split("").map((char, i) => (
+                    <HoverCharacter
+                      key={i}
+                      char={char}
+                      pinyin={extractPinyinForChar(
+                        currentSentence.sourceWord.pinyin,
+                        i,
+                        currentSentence.sourceWord.hanzi.length
+                      )}
+                      size="2xl"
+                      wordId={currentSentence.id}
+                    />
+                  ))}
                 </div>
+                <p className="text-gray-400 text-sm">{currentSentence.sourceWord.english}</p>
+                <p className="text-xs text-gray-600">{isMobile ? "Tap characters for pinyin" : "Hover for pinyin"}</p>
               </div>
             </div>
           </div>

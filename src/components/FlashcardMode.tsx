@@ -148,14 +148,22 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
   // Loop: last -> first, first -> last
   const goNext = useCallback(() => {
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev + 1) % displayWords.length);
-  }, [displayWords.length]);
+    if (isFlipped) {
+      setIsFlipped(false);
+      setTimeout(() => setCurrentIndex((prev) => (prev + 1) % displayWords.length), 300);
+    } else {
+      setCurrentIndex((prev) => (prev + 1) % displayWords.length);
+    }
+  }, [isFlipped, displayWords.length]);
 
   const goPrev = useCallback(() => {
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length);
-  }, [displayWords.length]);
+    if (isFlipped) {
+      setIsFlipped(false);
+      setTimeout(() => setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length), 300);
+    } else {
+      setCurrentIndex((prev) => (prev - 1 + displayWords.length) % displayWords.length);
+    }
+  }, [isFlipped, displayWords.length]);
 
   const handleToggleLearned = useCallback(() => {
     if (!currentWord) return;
@@ -381,7 +389,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
           }`}
         >
-          <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
+          <p className="text-red-400 text-4xl font-medium mb-1">{currentWord.pinyin}</p>
           <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
 
           {currentWord.examples.length > 0 && (

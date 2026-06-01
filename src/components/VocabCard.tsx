@@ -58,7 +58,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
                     ? word.pinyin
                     : extractPinyinForChar(word.pinyin, i, word.hanzi.length)
                 }
-                size="xl"
+                size="2xl"
               />
             ))}
           </div>
@@ -69,7 +69,7 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
             }`}
           >
             <div className="flex items-center justify-center gap-2 mt-1">
-              <p className="text-red-400 text-sm font-medium">{word.pinyin}</p>
+              <p className="text-red-400 text-2xl font-medium">{word.pinyin}</p>
               <SpeakerButton text={word.hanzi} size="sm" />
             </div>
             <p className="text-white text-lg font-semibold mt-1">{word.english}</p>

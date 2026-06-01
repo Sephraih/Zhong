@@ -313,12 +313,22 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
       nextIndex = 0;
       nextCycle += 1;
       nextWords = shuffleArray(words);
-      setSessionWords(nextWords);
-      setCycleCount(nextCycle);
     }
 
-    setCurrentIndex(nextIndex);
-    setIsFlipped(false);
+    const applyNext = () => {
+      if (nextWords !== words) {
+        setSessionWords(nextWords);
+        setCycleCount(nextCycle);
+      }
+      setCurrentIndex(nextIndex);
+    };
+
+    if (isFlipped) {
+      setIsFlipped(false);
+      setTimeout(applyNext, 300);
+    } else {
+      applyNext();
+    }
   };
 
   const scheduleAdvance = (updatedWords: SessionWord[], feedbackType: "got" | "forgot" | "gold") => {
@@ -740,17 +750,17 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
                   <div className={`absolute inset-0 pt-28 sm:pt-36 pb-5 px-5 sm:px-6 w-full flex flex-col items-center overflow-y-auto bg-neutral-900/90 transition-all duration-300 scrollbar-hide ${isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"}`}>
                     {isChinese ? (
                       <>
-                        <p className="text-red-400 text-xl font-medium mb-1">{currentWord.pinyin}</p>
+                        <p className="text-red-400 text-4xl font-medium mb-1">{currentWord.pinyin}</p>
                         <p className="text-white text-3xl font-bold mb-4 text-center">{currentWord.english}</p>
                       </>
                     ) : (
                       <>
                         <div className="flex items-end gap-2 justify-center mb-2">
                           {currentWord.hanzi.split("").map((char, i) => (
-                            <HoverCharacter key={`${currentWord.id}-back-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="xl" />
+                            <HoverCharacter key={`${currentWord.id}-back-${i}`} char={char} pinyin={extractPinyinForChar(currentWord.pinyin, i, currentWord.hanzi.length)} size="2xl" />
                           ))}
                         </div>
-                        <p className="text-red-400 text-lg font-medium mb-2">{currentWord.pinyin}</p>
+                        <p className="text-red-400 text-4xl font-medium mb-2">{currentWord.pinyin}</p>
                         <SpeakerButton text={currentWord.hanzi} size="md" />
                       </>
                     )}
