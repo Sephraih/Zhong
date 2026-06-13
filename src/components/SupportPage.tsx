@@ -12,18 +12,18 @@ const FAQ_ITEMS = [
   },
   {
     q: "What's included in the free plan?",
-    a: "Free accounts get full access to the HSK 1 vocabulary list, flashcards, sentence practice, and quiz mode. Premium unlocks HSK 2–9.",
+    a: "Free accounts get full access to the HSK 1 vocabulary list, flashcards, sentence practice, and quiz mode. Premium unlocks HSK 2–6 and any levels added in the future.",
   },
   {
     q: "How do I upgrade to Premium?",
-    a: "Open your Profile (top-right corner) and click Upgrade to Premium. Payment is a one-time purchase — no subscription.",
+    a: "Open your Profile (top-right corner) and click Upgrade to Premium. Payment is a one-time purchase — not a subscription.",
   },
   {
     q: "What platforms is HamHao available on?",
-    a: "HamHao is available on the web at hamhao.com, on iOS via the App Store, and on Android via Google Play.",
+    a: "HamHao is available on the web at hamhao.com, on iOS via the App Store, and on Android via Google Play. The mobile versions are still in development, but you can send us an email if you would like to become a tester / get early access to the app on either platforms.",
   },
   {
-    q: "How do I export or delete my data?",
+    q: "I want to know what data you are storing of me - How do I export or delete my data?",
     a: "Go to Profile → scroll to Your Data. You can export a full copy of your account data or permanently delete your account from there.",
   },
   {
