@@ -32,6 +32,7 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { BlogPage } from "./components/BlogPage";
 import { BlogPost } from "./components/BlogPost";
 import { BLOG_POSTS } from "./data/blogPosts";
+import { SupportPage } from "./components/SupportPage";
 
 // Mobile-only compact user button
 function MobileUserButton({
@@ -121,7 +122,8 @@ type ViewMode =
   | "privacy"
   | "tos"
   | "auth-callback"
-  | "blog";
+  | "blog"
+  | "support";
 
 const VIEW_MODES: ViewMode[] = [
   "home",
@@ -135,6 +137,7 @@ const VIEW_MODES: ViewMode[] = [
   "tos",
   "auth-callback",
   "blog",
+  "support",
 ];
 
 function isViewMode(x: string): x is ViewMode {
@@ -283,7 +286,7 @@ function AppContent() {
   const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
 
   const navigate = useCallback((mode: ViewMode, subPath?: string) => {
-    if (mode === "privacy" || mode === "tos") {
+    if (mode === "privacy" || mode === "tos" || mode === "support") {
       setLegalReturnMode(viewMode);
     }
 
@@ -589,6 +592,11 @@ function AppContent() {
         title: "HamHao Blog — Chinese Learning Tips",
         description: "Tips, strategies, and guides to master Mandarin Chinese efficiently.",
         path: "/blog",
+      },
+      support: {
+        title: "Support — HamHao",
+        description: "Get help with HamHao. Browse FAQs or contact our support team.",
+        path: "/support",
       },
     };
 
@@ -946,6 +954,7 @@ function AppContent() {
 
         {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
         {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "support" && <SupportPage onBack={() => navigate(legalReturnMode)} />}
         {viewMode === "auth-callback" && <AuthCallbackPage />}
 
         {viewMode === "blog" && (
@@ -1266,6 +1275,13 @@ function AppContent() {
                 className="text-gray-500 hover:text-gray-200 transition-colors"
               >
                 Blog
+              </button>
+              <span className="text-gray-700">•</span>
+              <button
+                onClick={() => navigate("support")}
+                className="text-gray-500 hover:text-gray-200 transition-colors"
+              >
+                Support
               </button>
             </div>
           </div>
