@@ -39,6 +39,54 @@ interface StoredDecksData {
 const CARDS_KEY = "hamhao_custom_cards";
 const DECKS_KEY = "hamhao_decks";
 
+/**
+ * Directly writes a deck word entry to localStorage without React state.
+ * Use this when the useCardStore hook is NOT mounted (e.g., App.tsx-level callbacks
+ * that fire while CardsDecksMode is unmounted), to avoid stale-state overwrites.
+ */
+export function addWordToDeckDirect(
+  deckId: number,
+  cardId: number,
+  cardType: "custom" | "hsk",
+  hanzi: string,
+  pinyin: string
+): boolean {
+  try {
+    const raw = storageGetItem(DECKS_KEY);
+    const data: StoredDecksData = raw ? (JSON.parse(raw) as StoredDecksData) : { decks: [], deckCards: [] };
+    const exists = data.deckCards.some(
+      (dc) => dc.deckId === deckId && dc.cardId === cardId && dc.cardType === cardType
+    );
+    if (exists) return false;
+    data.deckCards.push({ deckId, cardId, cardType, hanzi, pinyin, addedAt: Date.now() });
+    storageSetItem(DECKS_KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface DeckSummary {
+  id: number;
+  title: string;
+  description: string;
+  cardCount: number;
+}
+
+export function getDecksFromStorage(): DeckSummary[] {
+  try {
+    const raw = storageGetItem(DECKS_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as StoredDecksData;
+    return (data.decks ?? []).map((deck) => ({
+      ...deck,
+      cardCount: (data.deckCards ?? []).filter((dc) => dc.deckId === deck.id).length,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function loadCards(): CustomCard[] {
   try {
     const raw = storageGetItem(CARDS_KEY);

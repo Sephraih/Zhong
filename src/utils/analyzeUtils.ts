@@ -45,17 +45,25 @@ export function enrichTokens(
       return { ...token, pinyin: perChar };
     }
 
-    // Fallback for single chars: search words containing this char
-    if (token.text.length === 1) {
-      for (const [hanzi, words] of lookupMap) {
-        const idx = hanzi.indexOf(token.text);
-        if (idx !== -1 && words.length > 0) {
-          const pinyin = extractPinyinForChar(words[0].pinyin, idx, hanzi.length);
-          if (pinyin) return { ...token, pinyin };
+    // Fallback: look up each character individually (handles both single-char tokens
+    // and multi-char tokens not found in the HSK dictionary as a phrase)
+    const perChar = token.text
+      .split("")
+      .map((char) => {
+        // Direct single-char entry
+        const direct = lookupMap.get(char);
+        if (direct && direct.length > 0) return direct[0].pinyin;
+        // Scan multi-char entries that contain this char
+        for (const [hanzi, words] of lookupMap) {
+          const idx = hanzi.indexOf(char);
+          if (idx !== -1 && words.length > 0) {
+            const p = extractPinyinForChar(words[0].pinyin, idx, hanzi.length);
+            if (p) return p;
+          }
         }
-      }
-    }
-
-    return token;
+        return "";
+      })
+      .join(" ");
+    return { ...token, pinyin: perChar };
   });
 }

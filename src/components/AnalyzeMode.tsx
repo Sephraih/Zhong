@@ -5,12 +5,12 @@ import { segmentText, type Token } from "../utils/segment";
 import { HoverCharacter } from "./HoverCharacter";
 import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { speakChinese } from "../utils/tts";
 
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
 }
 
-// Persistent state across tab switches
 let _persistedText = "";
 let _persistedTokens: EnrichedToken[] = [];
 
@@ -20,28 +20,8 @@ interface EnrichedToken extends Token {
 }
 
 const RATES = [0.75, 1, 1.25] as const;
-type Rate = typeof RATES[number];
-
-function findChineseVoice(): SpeechSynthesisVoice | undefined {
-  const voices = window.speechSynthesis.getVoices();
-  return (
-    voices.find((v) => v.name.includes("Xiaoxiao")) ||
-    voices.find((v) => v.name.includes("Huihui")) ||
-    voices.find((v) => v.lang === "zh-CN") ||
-    voices.find((v) => v.lang.startsWith("zh"))
-  );
-}
-
-function speak(text: string, rate: Rate, onEnd?: () => void) {
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = "zh-CN";
-  utter.rate = rate;
-  const voice = findChineseVoice();
-  if (voice) utter.voice = voice;
-  if (onEnd) utter.onend = onEnd;
-  window.speechSynthesis.speak(utter);
-}
+type Rate = (typeof RATES)[number];
+const LONG_PRESS_MS = 480;
 
 // ── Dictionary Panel ──────────────────────────────────────────────────────────
 
@@ -54,12 +34,11 @@ interface DictPanelProps {
 
 function DictPanel({ token, store, onClose, onReadFromHere }: DictPanelProps) {
   const [savedCard, setSavedCard] = useState(false);
-
   useEffect(() => { setSavedCard(false); }, [token?.text]);
 
   if (!token || !token.isHanzi) return null;
-
   const word = token.vocabMatches[0];
+
   const hskBadgeColors: Record<number, string> = {
     1: "bg-emerald-900/60 text-emerald-300 border-emerald-700/40",
     2: "bg-blue-900/60 text-blue-300 border-blue-700/40",
@@ -165,7 +144,29 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [rate, setRate] = useState<Rate>(1);
   const [showDrawer, setShowDrawer] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Interaction state ─────────────────────────────────────────────────────
+  // Desktop: pointer position for click-vs-drag detection
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  // Mobile: long press detection
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lpStartPos = useRef<{ x: number; y: number } | null>(null);
+  // When a long press fires, suppress the subsequent touchend on HoverCharacter
+  const suppressNextTouchEnd = useRef(false);
+
+  const handleTokenClick = useCallback((token: EnrichedToken) => {
+    if (!token.isHanzi) return;
+    setSelectedToken(token);
+    if (isMobile) setShowDrawer(true);
+  }, [isMobile]);
+
+  const cancelLongPress = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    lpStartPos.current = null;
+  };
+
+  // ── Analysis ──────────────────────────────────────────────────────────────
 
   const analyze = useCallback(() => {
     if (!inputText.trim()) return;
@@ -183,49 +184,101 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
   }, [inputText, dictionarySet, lookupMap]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      analyze();
-    }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); analyze(); }
   };
 
-  const handleTokenClick = (token: EnrichedToken) => {
-    if (!token.isHanzi) return;
-    setSelectedToken(token);
-    if (isMobile) setShowDrawer(true);
-  };
+  // ── TTS ───────────────────────────────────────────────────────────────────
 
   const handlePlayAll = () => {
     const fullText = tokens.map((t) => t.text).join("");
     setIsPlaying(true);
-    speak(fullText, rate, () => setIsPlaying(false));
+    speakChinese(fullText, rate, () => setIsPlaying(false));
   };
 
-  const handleStop = () => {
-    window.speechSynthesis.cancel();
-    setIsPlaying(false);
-  };
+  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); };
 
-  const handleReadFromHere = () => {
+  const handleReadFromHere = useCallback(() => {
     if (!selectedToken) return;
     const idx = tokens.indexOf(selectedToken);
-    const fromHere = tokens
-      .slice(idx)
-      .map((t) => t.text)
-      .join("");
+    const fromHere = tokens.slice(idx).map((t) => t.text).join("");
     setIsPlaying(true);
-    speak(fromHere, rate, () => setIsPlaying(false));
+    speakChinese(fromHere, rate, () => setIsPlaying(false));
     if (isMobile) setShowDrawer(false);
-  };
+  }, [selectedToken, tokens, rate, isMobile]);
 
-  const closePanel = () => {
-    setSelectedToken(null);
-    setShowDrawer(false);
-  };
+  const closePanel = () => { setSelectedToken(null); setShowDrawer(false); };
 
-  useEffect(() => {
-    return () => { window.speechSynthesis.cancel(); };
-  }, []);
+  useEffect(() => () => { window.speechSynthesis.cancel(); cancelLongPress(); }, []);
+
+  // ── Token event handlers ─────────────────────────────────────────────────
+  //
+  // Desktop: click-to-open dictionary.
+  //   onPointerDownCapture + onPointerUpCapture (capture phase → fires before
+  //   HoverCharacter's onClick → stopPropagation).
+  //
+  // Mobile: long press (480 ms) → opens dictionary.
+  //   Short tap → HoverCharacter handles it (pinyin toggle).
+  //   Key insight: we need CAPTURE handlers because HoverCharacter calls
+  //   stopPropagation() in both touchStart and touchEnd.
+  //   – onTouchStartCapture: start timer
+  //   – onTouchMoveCapture: cancel timer if finger moved (scroll)
+  //   – onTouchEndCapture:
+  //       if suppressNextTouchEnd set → stop propagation (HoverCharacter
+  //         won't toggle) and reset flag
+  //       else → cancel pending timer (was a short tap; let HoverCharacter fire)
+
+  const makeTokenHandlers = useCallback((token: EnrichedToken) => {
+    if (!token.isHanzi) return {};
+
+    if (isMobile) {
+      return {
+        onTouchStartCapture: (e: React.TouchEvent) => {
+          cancelLongPress();
+          const touch = e.touches[0];
+          lpStartPos.current = { x: touch.clientX, y: touch.clientY };
+          lpTimer.current = setTimeout(() => {
+            lpTimer.current = null;
+            lpStartPos.current = null;
+            suppressNextTouchEnd.current = true;
+            handleTokenClick(token);
+          }, LONG_PRESS_MS);
+        },
+        onTouchMoveCapture: (e: React.TouchEvent) => {
+          if (!lpTimer.current || !lpStartPos.current) return;
+          const t = e.touches[0];
+          const dx = Math.abs(t.clientX - lpStartPos.current.x);
+          const dy = Math.abs(t.clientY - lpStartPos.current.y);
+          if (dx > 8 || dy > 8) cancelLongPress();
+        },
+        onTouchEndCapture: (e: React.TouchEvent) => {
+          if (suppressNextTouchEnd.current) {
+            // Long press already fired — prevent HoverCharacter's pinyin toggle
+            e.stopPropagation();
+            e.preventDefault();
+            suppressNextTouchEnd.current = false;
+          } else {
+            // Short press — cancel the pending timer; HoverCharacter handles it
+            cancelLongPress();
+          }
+        },
+        onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      };
+    }
+
+    // Desktop
+    return {
+      onPointerDownCapture: (e: React.PointerEvent) => {
+        pointerStart.current = { x: e.clientX, y: e.clientY };
+      },
+      onPointerUpCapture: (e: React.PointerEvent) => {
+        if (!pointerStart.current) return;
+        const dx = Math.abs(e.clientX - pointerStart.current.x);
+        const dy = Math.abs(e.clientY - pointerStart.current.y);
+        pointerStart.current = null;
+        if (dx < 12 && dy < 12) handleTokenClick(token);
+      },
+    };
+  }, [isMobile, handleTokenClick]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -234,15 +287,13 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
         <p className="text-gray-400 text-sm">Paste Chinese text to reveal pinyin, look up words, and listen</p>
       </div>
 
-      {/* Input area */}
       {!analyzed ? (
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
           <textarea
-            ref={textareaRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Paste Chinese text here…&#10;&#10;Example: 你好，我叫小明，我是学生。"
+            placeholder={"Paste Chinese text here…\n\nExample: 你好，我叫小明，我是学生。"}
             rows={8}
             className="w-full bg-transparent text-white text-lg placeholder-gray-600 resize-none focus:outline-none leading-relaxed"
           />
@@ -259,7 +310,6 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Text display */}
           <div className="flex-1 min-w-0">
             {/* TTS controls */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 mb-3 flex items-center gap-2 flex-wrap">
@@ -268,9 +318,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
                   onClick={handlePlayAll}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                   Play All
                 </button>
               ) : (
@@ -278,9 +326,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
                   onClick={handleStop}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <rect x="6" y="6" width="12" height="12" />
-                  </svg>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
                   Stop
                 </button>
               )}
@@ -309,7 +355,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
 
             {/* Token rendering */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-              <div className="flex flex-wrap gap-x-0.5 gap-y-4 leading-none">
+              <div className="flex flex-wrap gap-x-0.5 gap-y-5 leading-none">
                 {tokens.map((token, i) => {
                   if (!token.isHanzi) {
                     return (
@@ -321,13 +367,15 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
                   const chars = token.text.split("");
                   const pinyins = token.pinyin ? token.pinyin.split(" ") : [];
                   return (
-                    <button
+                    <div
                       key={i}
-                      onClick={() => handleTokenClick(token)}
-                      className={`inline-flex items-end gap-0.5 rounded transition-colors focus:outline-none ${
+                      {...makeTokenHandlers(token)}
+                      className={`inline-flex items-end gap-0.5 rounded-lg p-0.5 transition-colors select-none ${
                         selectedToken?.wordId === token.wordId
-                          ? "bg-red-600/20 ring-1 ring-red-600/40 rounded-sm"
-                          : "hover:bg-neutral-800/60"
+                          ? "bg-red-600/20 ring-1 ring-red-600/40"
+                          : isMobile
+                          ? ""
+                          : "hover:bg-neutral-800/60 cursor-pointer"
                       }`}
                     >
                       {chars.map((char, ci) => (
@@ -339,10 +387,15 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
                           wordId={token.wordId}
                         />
                       ))}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
+              <p className="text-gray-600 text-xs mt-4">
+                {isMobile
+                  ? "Tap to reveal pinyin · Long press to look up in dictionary"
+                  : "Hover characters for pinyin · Click to look up in dictionary"}
+              </p>
             </div>
           </div>
 
@@ -351,12 +404,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
             <div className="lg:w-72 flex-shrink-0">
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 lg:sticky lg:top-4 min-h-48">
                 {selectedToken ? (
-                  <DictPanel
-                    token={selectedToken}
-                    store={store}
-                    onClose={closePanel}
-                    onReadFromHere={handleReadFromHere}
-                  />
+                  <DictPanel token={selectedToken} store={store} onClose={closePanel} onReadFromHere={handleReadFromHere} />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-48 text-gray-600 text-sm text-center">
                     <span className="text-3xl mb-2">👆</span>
@@ -375,12 +423,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closePanel} />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-neutral-900 border-t border-neutral-800 rounded-t-2xl p-5 pb-8 max-h-[70vh] overflow-y-auto">
             <div className="w-10 h-1 bg-neutral-700 rounded-full mx-auto mb-4" />
-            <DictPanel
-              token={selectedToken}
-              store={store}
-              onClose={closePanel}
-              onReadFromHere={handleReadFromHere}
-            />
+            <DictPanel token={selectedToken} store={store} onClose={closePanel} onReadFromHere={handleReadFromHere} />
           </div>
         </>
       )}

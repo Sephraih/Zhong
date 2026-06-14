@@ -11,9 +11,10 @@ interface VocabCardProps {
   isLearned: boolean;
   onToggleLearned: (wordId: number) => void;
   onAddToDeck?: (word: VocabWord) => void;
+  isInDeck?: boolean;
 }
 
-export function VocabCard({ word, isLearned, onToggleLearned, onAddToDeck }: VocabCardProps) {
+export function VocabCard({ word, isLearned, onToggleLearned, onAddToDeck, isInDeck }: VocabCardProps) {
   const isMobile = useIsMobile();
   const [isFlipped, setIsFlipped] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
@@ -116,11 +117,19 @@ export function VocabCard({ word, isLearned, onToggleLearned, onAddToDeck }: Voc
         </button>
         {onAddToDeck && (
           <button
-            onClick={(e) => { e.stopPropagation(); onAddToDeck(word); }}
-            className="px-3 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-950/30 border-l border-neutral-800 transition-colors flex items-center gap-1"
-            title="Add to deck"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isInDeck) onAddToDeck(word);
+            }}
+            disabled={isInDeck}
+            className={`px-3 py-2.5 text-xs font-semibold border-l border-neutral-800 transition-all flex items-center gap-1 ${
+              isInDeck
+                ? "text-emerald-400 bg-emerald-950/30 cursor-default"
+                : "text-red-400 hover:bg-red-950/30 cursor-pointer"
+            }`}
+            title={isInDeck ? "Already in deck" : "Add to deck"}
           >
-            🎴+
+            {isInDeck ? "✓" : "🎴+"}
           </button>
         )}
       </div>

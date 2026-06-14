@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { VocabWord } from "../data/vocabulary";
 import {
   SYLLABLE_TABLE,
@@ -10,6 +10,7 @@ import {
   type Tone,
 } from "../utils/pinyinChart";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { speakChinese } from "../utils/tts";
 
 interface PinyinModeProps {
   vocabulary: VocabWord[];
@@ -37,21 +38,10 @@ function buildHanziMap(words: VocabWord[]): Map<string, string> {
 }
 
 function speakSyllable(syllable: string, hanziMap: Map<string, string>) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
+  // Speak the example hanzi character (not the tone-marked pinyin text),
+  // because zh-CN TTS reads pinyin as Latin letters without tones.
   const hanzi = hanziMap.get(syllable) ?? syllable;
-  const utter = new SpeechSynthesisUtterance(hanzi);
-  utter.lang = "zh-CN";
-  utter.rate = 0.75;
-
-  // Prefer a zh-CN voice
-  const voices = window.speechSynthesis.getVoices();
-  const zhVoice = voices.find((v) =>
-    v.lang.startsWith("zh") && (v.name.includes("Xiaoxiao") || v.name.includes("Huihui") || v.name.includes("Google"))
-  ) ?? voices.find((v) => v.lang.startsWith("zh"));
-  if (zhVoice) utter.voice = zhVoice;
-
-  window.speechSynthesis.speak(utter);
+  speakChinese(hanzi, 0.75);
 }
 
 export function PinyinMode({ vocabulary }: PinyinModeProps) {

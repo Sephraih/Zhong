@@ -36,7 +36,8 @@ import { SupportPage } from "./components/SupportPage";
 import { AnalyzeMode } from "./components/AnalyzeMode";
 import { CardsDecksMode } from "./components/CardsDecksMode";
 import { PinyinMode } from "./components/PinyinMode";
-import { useCardStore } from "./hooks/useCardStore";
+import { addWordToDeckDirect } from "./hooks/useCardStore";
+import { DeckPickerModal } from "./components/DeckPickerModal";
 
 // Mobile-only compact user button
 function MobileUserButton({
@@ -205,7 +206,6 @@ function AppContent() {
   const { user, accountTier, accessToken } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
-  const cardStore = useCardStore();
 
   // Access rules:
   // - Anonymous: HSK 1 only, top 200 words
@@ -296,8 +296,32 @@ function AppContent() {
   // Track which page the user was on before navigating to legal pages (for Back button)
   const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
 
-  // Browse→Deck context: when user clicks "Add from Browse" inside a deck
-  const [addToDeckContext, setAddToDeckContext] = useState<{ deckId: number; deckTitle: string } | null>(null);
+  // Deck-adding state (mirrors mobile BrowseScreen)
+  const [activeDeck, setActiveDeck] = useState<{ id: number; title: string } | null>(null);
+  const [addedWordIds, setAddedWordIds] = useState<Set<number>>(new Set());
+  const [deckPickWord, setDeckPickWord] = useState<VocabWord | null>(null);
+
+  const handleAddToDeck = useCallback((word: VocabWord) => {
+    if (activeDeck) {
+      const added = addWordToDeckDirect(activeDeck.id, word.id, "hsk", word.hanzi, word.pinyin);
+      if (added) setAddedWordIds((prev) => new Set(prev).add(word.id));
+    } else {
+      setDeckPickWord(word);
+    }
+  }, [activeDeck]);
+
+  const handlePickerSelect = useCallback((deckId: number, deckTitle: string) => {
+    if (!deckPickWord) return;
+    addWordToDeckDirect(deckId, deckPickWord.id, "hsk", deckPickWord.hanzi, deckPickWord.pinyin);
+    setActiveDeck({ id: deckId, title: deckTitle });
+    setAddedWordIds(new Set([deckPickWord.id]));
+    setDeckPickWord(null);
+  }, [deckPickWord]);
+
+  const clearActiveDeck = useCallback(() => {
+    setActiveDeck(null);
+    setAddedWordIds(new Set());
+  }, []);
 
   const navigate = useCallback((mode: ViewMode, subPath?: string) => {
     if (mode === "privacy" || mode === "tos" || mode === "support") {
@@ -998,16 +1022,16 @@ function AppContent() {
         {viewMode === "browse" && (
           <>
             {/* Add-to-deck banner */}
-            {addToDeckContext && (
-              <div className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-red-950/40 border border-red-800/50 rounded-xl">
-                <span className="text-red-300 text-sm">
-                  Adding words to <strong>{addToDeckContext.deckTitle}</strong> — click 🎴+ on any card
+            {activeDeck && (
+              <div className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-red-950/30 border border-red-800/40 rounded-xl">
+                <span className="text-sm text-gray-300">
+                  Adding to deck <strong className="text-red-400">{activeDeck.title}</strong> — tap 🎴+ on any card
                 </span>
                 <button
-                  onClick={() => { setAddToDeckContext(null); navigate("cards"); }}
-                  className="text-xs text-red-400 hover:text-white transition-colors flex-shrink-0"
+                  onClick={clearActiveDeck}
+                  className="flex-shrink-0 px-3 py-1 text-xs font-semibold text-white bg-red-700 hover:bg-red-600 rounded-lg transition-colors"
                 >
-                  ✕ Done
+                  Done
                 </button>
               </div>
             )}
@@ -1176,9 +1200,8 @@ function AppContent() {
                       word={word}
                       isLearned={isLearned(word.id)}
                       onToggleLearned={toggleLearned}
-                      onAddToDeck={addToDeckContext ? (w) => {
-                        cardStore.addWordToDeck(addToDeckContext.deckId, w.id, "hsk", w.hanzi, w.pinyin);
-                      } : undefined}
+                      onAddToDeck={handleAddToDeck}
+                      isInDeck={addedWordIds.has(word.id)}
                     />
                   ))}
                 </div>
@@ -1299,7 +1322,8 @@ function AppContent() {
           <CardsDecksMode
             vocabulary={visibleVocabulary}
             onNavigateToBrowse={(deckId, deckTitle) => {
-              setAddToDeckContext({ deckId, deckTitle });
+              clearActiveDeck();
+              setActiveDeck({ id: deckId, title: deckTitle });
               navigate("browse");
             }}
           />
@@ -1356,6 +1380,14 @@ function AppContent() {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode={authModalMode}
+      />
+
+      {/* Deck picker — shown when user taps 🎴+ with no active deck */}
+      <DeckPickerModal
+        word={deckPickWord}
+        onClose={() => setDeckPickWord(null)}
+        onPickDeck={handlePickerSelect}
+        onGoToDecks={() => navigate("cards")}
       />
 
       {/* Storage consent gate (shown on first visit until user makes a choice) */}
