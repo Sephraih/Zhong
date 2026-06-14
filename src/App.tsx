@@ -33,6 +33,10 @@ import { BlogPage } from "./components/BlogPage";
 import { BlogPost } from "./components/BlogPost";
 import { BLOG_POSTS } from "./data/blogPosts";
 import { SupportPage } from "./components/SupportPage";
+import { AnalyzeMode } from "./components/AnalyzeMode";
+import { CardsDecksMode } from "./components/CardsDecksMode";
+import { PinyinMode } from "./components/PinyinMode";
+import { useCardStore } from "./hooks/useCardStore";
 
 // Mobile-only compact user button
 function MobileUserButton({
@@ -123,7 +127,10 @@ type ViewMode =
   | "tos"
   | "auth-callback"
   | "blog"
-  | "support";
+  | "support"
+  | "analyze"
+  | "cards"
+  | "pinyin";
 
 const VIEW_MODES: ViewMode[] = [
   "home",
@@ -138,6 +145,9 @@ const VIEW_MODES: ViewMode[] = [
   "auth-callback",
   "blog",
   "support",
+  "analyze",
+  "cards",
+  "pinyin",
 ];
 
 function isViewMode(x: string): x is ViewMode {
@@ -195,6 +205,7 @@ function AppContent() {
   const { user, accountTier, accessToken } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
+  const cardStore = useCardStore();
 
   // Access rules:
   // - Anonymous: HSK 1 only, top 200 words
@@ -284,6 +295,9 @@ function AppContent() {
 
   // Track which page the user was on before navigating to legal pages (for Back button)
   const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
+
+  // Browse→Deck context: when user clicks "Add from Browse" inside a deck
+  const [addToDeckContext, setAddToDeckContext] = useState<{ deckId: number; deckTitle: string } | null>(null);
 
   const navigate = useCallback((mode: ViewMode, subPath?: string) => {
     if (mode === "privacy" || mode === "tos" || mode === "support") {
@@ -598,6 +612,21 @@ function AppContent() {
         description: "Get help with HamHao. Browse FAQs or contact our support team.",
         path: "/support",
       },
+      analyze: {
+        title: "Analyze Chinese Text — HamHao",
+        description: "Paste Chinese text to reveal pinyin character by character, listen with TTS, and look up words.",
+        path: "/analyze",
+      },
+      cards: {
+        title: "My Cards & Decks — HamHao",
+        description: "Create custom flashcard decks, manage your vocabulary cards, and export/import your data.",
+        path: "/cards",
+      },
+      pinyin: {
+        title: "Pinyin Builder — HamHao",
+        description: "Interactive pinyin syllable builder. Select initials, finals, and tones to learn pronunciation.",
+        path: "/pinyin",
+      },
     };
 
     const next = map[viewMode];
@@ -672,18 +701,21 @@ function AppContent() {
             </button>
 
             {/* Mode Nav — visible on both mobile and desktop */}
-            <nav className="flex items-center gap-0.5 sm:gap-1">
+            <nav className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
               {[
                 { id: "browse" as ViewMode, label: "Browse", icon: "📚" },
                 { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
                 { id: "sentences" as ViewMode, label: "Sentences", icon: "💬" },
                 { id: "flashcards" as ViewMode, label: "Cards", icon: "🃏" },
                 { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
+                { id: "analyze" as ViewMode, label: "Analyze", icon: "🔍" },
+                { id: "cards" as ViewMode, label: "My Cards", icon: "🎴" },
+                { id: "pinyin" as ViewMode, label: "Pinyin", icon: "🔤" },
               ].map((mode) => (
                 <button
                   key={mode.id}
                   onClick={() => navigate(mode.id)}
-                  className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                  className={`flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
                     viewMode === mode.id
                       ? "bg-red-600 text-white shadow-md shadow-red-900/30"
                       : "text-gray-400 hover:bg-neutral-800 hover:text-white"
@@ -965,6 +997,20 @@ function AppContent() {
 
         {viewMode === "browse" && (
           <>
+            {/* Add-to-deck banner */}
+            {addToDeckContext && (
+              <div className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-red-950/40 border border-red-800/50 rounded-xl">
+                <span className="text-red-300 text-sm">
+                  Adding words to <strong>{addToDeckContext.deckTitle}</strong> — click 🎴+ on any card
+                </span>
+                <button
+                  onClick={() => { setAddToDeckContext(null); navigate("cards"); }}
+                  className="text-xs text-red-400 hover:text-white transition-colors flex-shrink-0"
+                >
+                  ✕ Done
+                </button>
+              </div>
+            )}
             {/* Filters */}
             <div className="mb-8 space-y-4">
               {/* Search */}
@@ -1130,6 +1176,9 @@ function AppContent() {
                       word={word}
                       isLearned={isLearned(word.id)}
                       onToggleLearned={toggleLearned}
+                      onAddToDeck={addToDeckContext ? (w) => {
+                        cardStore.addWordToDeck(addToDeckContext.deckId, w.id, "hsk", w.hanzi, w.pinyin);
+                      } : undefined}
                     />
                   ))}
                 </div>
@@ -1243,6 +1292,20 @@ function AppContent() {
             <SentenceMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
           </div>
         )}
+
+        {viewMode === "analyze" && <AnalyzeMode vocabulary={visibleVocabulary} />}
+
+        {viewMode === "cards" && (
+          <CardsDecksMode
+            vocabulary={visibleVocabulary}
+            onNavigateToBrowse={(deckId, deckTitle) => {
+              setAddToDeckContext({ deckId, deckTitle });
+              navigate("browse");
+            }}
+          />
+        )}
+
+        {viewMode === "pinyin" && <PinyinMode vocabulary={visibleVocabulary} />}
       </main>
 
       {/* Footer */}

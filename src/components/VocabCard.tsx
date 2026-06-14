@@ -10,9 +10,10 @@ interface VocabCardProps {
   word: VocabWord;
   isLearned: boolean;
   onToggleLearned: (wordId: number) => void;
+  onAddToDeck?: (word: VocabWord) => void;
 }
 
-export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) {
+export function VocabCard({ word, isLearned, onToggleLearned, onAddToDeck }: VocabCardProps) {
   const isMobile = useIsMobile();
   const [isFlipped, setIsFlipped] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
@@ -84,13 +85,13 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
       </div>
 
       {/* Learned/Still Learning Toggle */}
-      <div className="border-t border-neutral-800">
+      <div className={`border-t border-neutral-800 ${onAddToDeck ? "flex" : ""}`}>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onToggleLearned(word.id);
           }}
-          className={`w-full px-6 py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 px-6 py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
             isLearned
               ? "text-emerald-400 hover:bg-red-950/30 hover:text-red-400"
               : "text-gray-500 hover:bg-emerald-950/30 hover:text-emerald-400"
@@ -113,6 +114,15 @@ export function VocabCard({ word, isLearned, onToggleLearned }: VocabCardProps) 
             </>
           )}
         </button>
+        {onAddToDeck && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAddToDeck(word); }}
+            className="px-3 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-950/30 border-l border-neutral-800 transition-colors flex items-center gap-1"
+            title="Add to deck"
+          >
+            🎴+
+          </button>
+        )}
       </div>
 
       {/* Examples Section */}
