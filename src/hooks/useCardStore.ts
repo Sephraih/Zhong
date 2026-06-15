@@ -73,6 +73,20 @@ export interface DeckSummary {
   cardCount: number;
 }
 
+export function getHskWordIdsForDeck(deckId: number): Set<number> {
+  try {
+    const raw = storageGetItem(DECKS_KEY);
+    if (!raw) return new Set();
+    const data = JSON.parse(raw) as StoredDecksData;
+    const ids = (data.deckCards ?? [])
+      .filter((dc) => dc.deckId === deckId && dc.cardType === "hsk")
+      .map((dc) => dc.cardId);
+    return new Set(ids);
+  } catch {
+    return new Set();
+  }
+}
+
 export function getDecksFromStorage(): DeckSummary[] {
   try {
     const raw = storageGetItem(DECKS_KEY);

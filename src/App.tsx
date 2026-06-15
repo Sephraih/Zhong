@@ -36,7 +36,7 @@ import { SupportPage } from "./components/SupportPage";
 import { AnalyzeMode } from "./components/AnalyzeMode";
 import { CardsDecksMode } from "./components/CardsDecksMode";
 import { PinyinMode } from "./components/PinyinMode";
-import { addWordToDeckDirect } from "./hooks/useCardStore";
+import { addWordToDeckDirect, getHskWordIdsForDeck } from "./hooks/useCardStore";
 import { DeckPickerModal } from "./components/DeckPickerModal";
 
 // Mobile-only compact user button
@@ -313,8 +313,9 @@ function AppContent() {
   const handlePickerSelect = useCallback((deckId: number, deckTitle: string) => {
     if (!deckPickWord) return;
     addWordToDeckDirect(deckId, deckPickWord.id, "hsk", deckPickWord.hanzi, deckPickWord.pinyin);
+    // Read back from localStorage (includes pre-existing + just-added card)
+    setAddedWordIds(getHskWordIdsForDeck(deckId));
     setActiveDeck({ id: deckId, title: deckTitle });
-    setAddedWordIds(new Set([deckPickWord.id]));
     setDeckPickWord(null);
   }, [deckPickWord]);
 
@@ -1316,14 +1317,14 @@ function AppContent() {
           </div>
         )}
 
-        {viewMode === "analyze" && <AnalyzeMode vocabulary={visibleVocabulary} />}
+        {viewMode === "analyze" && <AnalyzeMode vocabulary={vocabulary} />}
 
         {viewMode === "cards" && (
           <CardsDecksMode
             vocabulary={visibleVocabulary}
             onNavigateToBrowse={(deckId, deckTitle) => {
-              clearActiveDeck();
               setActiveDeck({ id: deckId, title: deckTitle });
+              setAddedWordIds(getHskWordIdsForDeck(deckId));
               navigate("browse");
             }}
           />
