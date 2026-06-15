@@ -12,19 +12,15 @@ function findChineseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice 
   );
 }
 
-/**
- * Speak Chinese text with automatic async voice loading.
- * The 50 ms delay before speak() is intentional: Chrome on Windows has a race
- * condition where calling speak() in the same tick as cancel() silently drops
- * the new utterance. The delay lets the cancellation fully propagate first.
- */
 export function speakChinese(text: string, rate = 0.9, onEnd?: () => void): void {
   if (!("speechSynthesis" in window)) return;
 
-  try { window.speechSynthesis.cancel(); } catch {}
-  if (window.speechSynthesis.paused) {
-    try { window.speechSynthesis.resume(); } catch {}
-  }
+  const ss = window.speechSynthesis;
+
+  // Resume before cancel: Chrome on Windows can get stuck in a paused state;
+  // resuming first unsticks the engine, then cancel clears any queued speech.
+  if (ss.paused) { try { ss.resume(); } catch {} }
+  try { ss.cancel(); } catch {}
 
   const doSpeak = (voice: SpeechSynthesisVoice | undefined) => {
     const utter = new SpeechSynthesisUtterance(text);
@@ -35,32 +31,38 @@ export function speakChinese(text: string, rate = 0.9, onEnd?: () => void): void
     if (voice) utter.voice = voice;
     if (onEnd) {
       utter.onend = onEnd;
-      utter.onerror = onEnd; // ensure UI state cleans up even on failure
+      // "canceled" fires when cancel() hits our own utterance (Chrome race condition).
+      // "interrupted" fires when a newer speak() call replaces this one.
+      // Neither means a real failure — don't reset UI state for them.
+      utter.onerror = (e: SpeechSynthesisErrorEvent) => {
+        if (e.error !== "canceled" && e.error !== "interrupted") onEnd();
+      };
     }
-    // 50 ms delay lets cancel() fully clear before the new utterance starts
+    // 150 ms gives Chrome on Windows enough time to fully process cancel()
+    // before the new utterance is queued; 50 ms was consistently too short.
     setTimeout(() => {
-      try { window.speechSynthesis.speak(utter); } catch {}
-    }, 50);
+      try { ss.speak(utter); } catch {}
+    }, 150);
   };
 
-  let voices = window.speechSynthesis.getVoices();
+  let voices = ss.getVoices();
   if (voices.length > 0) {
     doSpeak(findChineseVoice(voices));
     return;
   }
 
-  // Voices not yet loaded — wait for them
+  // Voices not yet loaded — wait for voiceschanged or fall back after 200 ms
   let done = false;
   const go = () => {
     if (done) return;
     done = true;
-    voices = window.speechSynthesis.getVoices();
+    voices = ss.getVoices();
     doSpeak(findChineseVoice(voices));
   };
 
-  window.speechSynthesis.addEventListener("voiceschanged", go, { once: true });
+  ss.addEventListener("voiceschanged", go, { once: true });
   setTimeout(() => {
-    voices = window.speechSynthesis.getVoices();
+    voices = ss.getVoices();
     if (voices.length > 0 && !done) go();
     else if (!done) { done = true; doSpeak(undefined); }
   }, 200);
