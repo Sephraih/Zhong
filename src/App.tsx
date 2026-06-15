@@ -731,7 +731,7 @@ function AppContent() {
                 { id: "browse" as ViewMode, label: "Browse", icon: "📚" },
                 { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
                 { id: "sentences" as ViewMode, label: "Sentences", icon: "💬" },
-                { id: "flashcards" as ViewMode, label: "Cards", icon: "🃏" },
+                { id: "flashcards" as ViewMode, label: "Flashcards", icon: "🃏" },
                 { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
                 { id: "analyze" as ViewMode, label: "Analyze", icon: "🔍" },
                 { id: "cards" as ViewMode, label: "My Cards", icon: "🎴" },
