@@ -12,58 +12,82 @@ function findChineseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice 
   );
 }
 
-export function speakChinese(text: string, rate = 0.9, onEnd?: () => void): void {
+/**
+ * Speak Chinese text using the Web Speech API.
+ *
+ * onStart fires when the browser confirms speech has begun (utter.onstart).
+ * onEnd   fires when speech finishes naturally or on a real error.
+ *
+ * "canceled" and "interrupted" are NOT forwarded to onEnd because they are
+ * triggered by our own cancel() call or a subsequent speak() replacing this
+ * one — neither is a real failure.
+ *
+ * If the first attempt errors with any other code (e.g. "synthesis-failed" or
+ * "network" from an online Microsoft voice), we automatically retry once
+ * without pinning a specific voice, letting the browser fall back to whatever
+ * it can use. This handles transient cloud-voice failures.
+ */
+export function speakChinese(
+  text: string,
+  rate = 0.9,
+  onEnd?: () => void,
+  onStart?: () => void,
+): void {
   if (!("speechSynthesis" in window)) return;
 
   const ss = window.speechSynthesis;
 
-  // Resume before cancel: Chrome on Windows can get stuck in a paused state;
-  // resuming first unsticks the engine, then cancel clears any queued speech.
+  // Resume before cancel: Chrome on Windows can get stuck in a paused state.
   if (ss.paused) { try { ss.resume(); } catch {} }
   try { ss.cancel(); } catch {}
 
-  const doSpeak = (voice: SpeechSynthesisVoice | undefined) => {
+  const attempt = (voice: SpeechSynthesisVoice | undefined, isRetry: boolean) => {
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "zh-CN";
     utter.rate = voice?.name.includes("Xiaoxiao") ? Math.min(rate, 0.85) : rate;
     utter.pitch = 1.0;
     utter.volume = 1;
     if (voice) utter.voice = voice;
-    if (onEnd) {
-      utter.onend = onEnd;
-      // "canceled" fires when cancel() hits our own utterance (Chrome race condition).
-      // "interrupted" fires when a newer speak() call replaces this one.
-      // Neither means a real failure — don't reset UI state for them.
-      utter.onerror = (e: SpeechSynthesisErrorEvent) => {
-        if (e.error !== "canceled" && e.error !== "interrupted") onEnd();
-      };
-    }
-    // 150 ms gives Chrome on Windows enough time to fully process cancel()
-    // before the new utterance is queued; 50 ms was consistently too short.
-    setTimeout(() => {
-      try { ss.speak(utter); } catch {}
-    }, 150);
+
+    utter.onstart = () => { onStart?.(); };
+    utter.onend  = () => { onEnd?.(); };
+    utter.onerror = (e: SpeechSynthesisErrorEvent) => {
+      console.warn(`[TTS] error="${e.error}" voice="${voice?.name ?? "default"}" retry=${isRetry}`);
+      if (e.error === "canceled" || e.error === "interrupted") return;
+      if (!isRetry) {
+        // First failure: retry without a pinned voice (browser picks its default).
+        console.warn("[TTS] retrying without specific voice…");
+        setTimeout(() => attempt(undefined, true), 100);
+      } else {
+        // Second failure: give up and reset caller state.
+        onEnd?.();
+      }
+    };
+
+    // 150 ms lets Chrome on Windows fully process the preceding cancel() before
+    // the new utterance is queued. Retry uses 100 ms (cancel already settled).
+    setTimeout(() => { try { ss.speak(utter); } catch {} }, isRetry ? 100 : 150);
   };
 
   let voices = ss.getVoices();
   if (voices.length > 0) {
-    doSpeak(findChineseVoice(voices));
+    attempt(findChineseVoice(voices), false);
     return;
   }
 
-  // Voices not yet loaded — wait for voiceschanged or fall back after 200 ms
+  // Voices not yet loaded — wait for voiceschanged or fall back after 200 ms.
   let done = false;
   const go = () => {
     if (done) return;
     done = true;
     voices = ss.getVoices();
-    doSpeak(findChineseVoice(voices));
+    attempt(findChineseVoice(voices), false);
   };
 
   ss.addEventListener("voiceschanged", go, { once: true });
   setTimeout(() => {
     voices = ss.getVoices();
     if (voices.length > 0 && !done) go();
-    else if (!done) { done = true; doSpeak(undefined); }
+    else if (!done) { done = true; attempt(undefined, false); }
   }, 200);
 }

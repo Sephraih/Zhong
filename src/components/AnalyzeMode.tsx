@@ -220,8 +220,9 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
 
   const handlePlayAll = () => {
     const fullText = tokens.map((t) => t.text).join("");
-    setIsPlaying(true);
-    speakChinese(fullText, rate, () => setIsPlaying(false));
+    // setIsPlaying(true) is deferred to onStart so the stop button only
+    // appears after the browser confirms speech has actually begun.
+    speakChinese(fullText, rate, () => setIsPlaying(false), () => setIsPlaying(true));
   };
 
   const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); };
@@ -230,8 +231,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
     if (!selectedToken) return;
     const idx = tokens.findIndex((t) => t.wordId === selectedToken.wordId);
     const fromHere = tokens.slice(idx < 0 ? 0 : idx).map((t) => t.text).join("");
-    setIsPlaying(true);
-    speakChinese(fromHere, rate, () => setIsPlaying(false));
+    speakChinese(fromHere, rate, () => setIsPlaying(false), () => setIsPlaying(true));
     if (isMobile) setShowDrawer(false);
   }, [selectedToken, tokens, rate, isMobile]);
 
