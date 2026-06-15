@@ -36,6 +36,7 @@ import { SupportPage } from "./components/SupportPage";
 import { AnalyzeMode } from "./components/AnalyzeMode";
 import { CardsDecksMode } from "./components/CardsDecksMode";
 import { PinyinMode } from "./components/PinyinMode";
+import { primeVoices } from "./utils/tts";
 import { addWordToDeckDirect, getHskWordIdsForDeck } from "./hooks/useCardStore";
 import { DeckPickerModal } from "./components/DeckPickerModal";
 
@@ -278,6 +279,9 @@ function AppContent() {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
+
+  // Prime TTS voices early so they are cached before the first user click.
+  useEffect(() => { primeVoices(); }, []);
 
   // Detect password-reset redirect from /auth/callback
   useEffect(() => {

@@ -171,6 +171,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
   const [analyzed, setAnalyzed] = useState(_persistedTokens.length > 0);
   const [selectedToken, setSelectedToken] = useState<EnrichedToken | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [rate, setRate] = useState<Rate>(1);
   const [showDrawer, setShowDrawer] = useState(false);
 
@@ -220,18 +221,32 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
 
   const handlePlayAll = () => {
     const fullText = tokens.map((t) => t.text).join("");
-    // setIsPlaying(true) is deferred to onStart so the stop button only
-    // appears after the browser confirms speech has actually begun.
-    speakChinese(fullText, rate, () => setIsPlaying(false), () => setIsPlaying(true));
+    // Build char-index → wordId map for boundary highlighting
+    const charMap: string[] = [];
+    tokens.forEach((t) => { for (let i = 0; i < t.text.length; i++) charMap.push(t.wordId); });
+    speakChinese(
+      fullText, rate,
+      () => { setIsPlaying(false); setPlayingWordId(null); },
+      () => setIsPlaying(true),
+      (ci) => { const id = charMap[ci]; if (id !== undefined) setPlayingWordId(id); },
+    );
   };
 
-  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); };
+  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); setPlayingWordId(null); };
 
   const handleReadFromHere = useCallback(() => {
     if (!selectedToken) return;
     const idx = tokens.findIndex((t) => t.wordId === selectedToken.wordId);
-    const fromHere = tokens.slice(idx < 0 ? 0 : idx).map((t) => t.text).join("");
-    speakChinese(fromHere, rate, () => setIsPlaying(false), () => setIsPlaying(true));
+    const slice = tokens.slice(idx < 0 ? 0 : idx);
+    const fromHere = slice.map((t) => t.text).join("");
+    const charMap: string[] = [];
+    slice.forEach((t) => { for (let i = 0; i < t.text.length; i++) charMap.push(t.wordId); });
+    speakChinese(
+      fromHere, rate,
+      () => { setIsPlaying(false); setPlayingWordId(null); },
+      () => setIsPlaying(true),
+      (ci) => { const id = charMap[ci]; if (id !== undefined) setPlayingWordId(id); },
+    );
     if (isMobile) setShowDrawer(false);
   }, [selectedToken, tokens, rate, isMobile]);
 
@@ -403,7 +418,9 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
                       key={i}
                       {...makeTokenHandlers(token)}
                       className={`inline-flex items-end gap-0.5 rounded-lg p-0.5 transition-colors select-none ${
-                        selectedToken?.wordId === token.wordId
+                        playingWordId === token.wordId
+                          ? "bg-amber-400/25 ring-1 ring-amber-400/50"
+                          : selectedToken?.wordId === token.wordId
                           ? "bg-red-600/20 ring-1 ring-red-600/40"
                           : isMobile
                           ? ""
