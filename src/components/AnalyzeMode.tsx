@@ -6,11 +6,14 @@ import { HoverCharacter } from "./HoverCharacter";
 import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useAuth } from "../contexts/AuthContext";
-import { speakChinese, primeVoices, hasChineseVoice } from "../utils/tts";
+import { speakChinese, primeVoices } from "../utils/tts";
+import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
+import { TtsVoiceWarning } from "./TtsVoiceWarning";
 
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
   onPremiumRequired: () => void;
+  onNavigateToSupport?: () => void;
 }
 
 let _persistedText = "";
@@ -156,7 +159,7 @@ function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHer
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps) {
+export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport }: AnalyzeModeProps) {
   const store = useCardStore();
   const isMobile = useIsMobile();
   const { user, accountTier } = useAuth();
@@ -175,7 +178,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [rate, setRate] = useState<Rate>(1);
   const [showDrawer, setShowDrawer] = useState(false);
-  const [noChineseVoice, setNoChineseVoice] = useState(false);
+  const noChineseVoice = useTtsVoiceCheck();
 
   // ── Interaction state ─────────────────────────────────────────────────────
   // Desktop: pointer position for click-vs-drag detection
@@ -221,56 +224,58 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
 
   // ── TTS ───────────────────────────────────────────────────────────────────
 
-  const handlePlayAll = () => {
-    const fullText = tokens.map((t) => t.text).join("");
-    // Build char-index → wordId map for boundary highlighting
-    const charMap: string[] = [];
-    tokens.forEach((t) => { for (let i = 0; i < t.text.length; i++) charMap.push(t.wordId); });
-    speakChinese(
-      fullText, rate,
-      () => { setIsPlaying(false); setPlayingWordId(null); },
-      () => setIsPlaying(true),
-      (ci) => { const id = charMap[ci]; if (id !== undefined) setPlayingWordId(id); },
-    );
-  };
+  // Tracks word position when paused so Resume can restart from the same token.
+  const pausedAtRef = useRef<string | null>(null);
 
-  const handlePause = () => { window.speechSynthesis.pause(); setIsPaused(true); };
-  const handleResume = () => { window.speechSynthesis.resume(); setIsPaused(false); };
-  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); setIsPaused(false); setPlayingWordId(null); };;
-
-  const handleReadFromHere = useCallback(() => {
-    if (!selectedToken) return;
-    const idx = tokens.findIndex((t) => t.wordId === selectedToken.wordId);
+  // Speak from a given wordId (or from the beginning if null).
+  const speakFrom = useCallback((startWordId: string | null) => {
+    const idx = startWordId ? tokens.findIndex((t) => t.wordId === startWordId) : -1;
     const slice = tokens.slice(idx < 0 ? 0 : idx);
-    const fromHere = slice.map((t) => t.text).join("");
     const charMap: string[] = [];
     slice.forEach((t) => { for (let i = 0; i < t.text.length; i++) charMap.push(t.wordId); });
     speakChinese(
-      fromHere, rate,
+      slice.map((t) => t.text).join(""), rate,
       () => { setIsPlaying(false); setPlayingWordId(null); },
       () => setIsPlaying(true),
       (ci) => { const id = charMap[ci]; if (id !== undefined) setPlayingWordId(id); },
     );
+  }, [tokens, rate]);
+
+  const handlePlayAll = () => speakFrom(null);
+
+  const handlePause = () => {
+    // cancel() stops audio immediately; pause() waits for the current audio
+    // chunk to drain which feels slow. We record the last highlighted word
+    // so Resume can restart from the same position.
+    pausedAtRef.current = playingWordId;
+    window.speechSynthesis.cancel();
+    setIsPaused(true);
+  };
+
+  const handleResume = () => {
+    setIsPaused(false);
+    speakFrom(pausedAtRef.current);
+    pausedAtRef.current = null;
+  };
+
+  const handleStop = () => {
+    pausedAtRef.current = null;
+    window.speechSynthesis.cancel();
+    setIsPlaying(false);
+    setIsPaused(false);
+    setPlayingWordId(null);
+  };
+
+  const handleReadFromHere = useCallback(() => {
+    if (!selectedToken) return;
+    speakFrom(selectedToken.wordId);
     if (isMobile) setShowDrawer(false);
-  }, [selectedToken, tokens, rate, isMobile]);
+  }, [selectedToken, speakFrom, isMobile]);
 
   const closePanel = () => { setSelectedToken(null); setShowDrawer(false); };
 
   useEffect(() => {
     primeVoices();
-
-    const checkVoice = () => {
-      const result = hasChineseVoice();
-      if (result === false) setNoChineseVoice(true);
-    };
-    // Voices may load asynchronously — check once they're available
-    if (hasChineseVoice() === null) {
-      window.speechSynthesis.addEventListener("voiceschanged", checkVoice, { once: true });
-      setTimeout(checkVoice, 1000); // final fallback
-    } else {
-      checkVoice();
-    }
-
     return () => { window.speechSynthesis.cancel(); cancelLongPress(); };
   }, []);
 
@@ -376,11 +381,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1 min-w-0">
             {/* TTS controls */}
-            {noChineseVoice && (
-              <div className="bg-amber-950/50 border border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-amber-300 text-xs">
-                No Chinese TTS voice detected. On Windows: Settings → Time &amp; language → Speech → Add voices → Chinese (Simplified).
-              </div>
-            )}
+            {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} />}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 mb-3 flex items-center gap-2 flex-wrap">
               {!isPlaying ? (
                 <button

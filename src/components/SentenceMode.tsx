@@ -5,10 +5,13 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
+import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
+import { TtsVoiceWarning } from "./TtsVoiceWarning";
 
 interface SentenceModeProps {
   allWords: VocabWord[];
   onLockedLevelClick?: () => void;
+  onNavigateToSupport?: () => void;
 }
 
 interface SessionSentence {
@@ -96,8 +99,9 @@ function getLockedHskButtonClasses(level: HskLevel): string {
 
 type SentenceDirection = "zh-en" | "en-zh";
 
-export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps) {
+export function SentenceMode({ allWords, onLockedLevelClick, onNavigateToSupport }: SentenceModeProps) {
   const isMobile = useIsMobile();
+  const noChineseVoice = useTtsVoiceCheck();
 
   const [sessionSentences, setSessionSentences] = useState<SessionSentence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -601,6 +605,7 @@ export function SentenceMode({ allWords, onLockedLevelClick }: SentenceModeProps
 
   return (
     <div className="max-w-lg mx-auto">
+      {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} className="mb-4" />}
       <HskFilterButtons />
 
       {/* Progress header */}

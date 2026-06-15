@@ -7,6 +7,8 @@ import type { LearnedState } from "../hooks/useLearnedState";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useCardStore } from "../hooks/useCardStore";
+import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
+import { TtsVoiceWarning } from "./TtsVoiceWarning";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
@@ -15,6 +17,7 @@ interface FlashcardModeProps {
   learnedState: LearnedState;
   wordStatusFilter: FlashcardFilter;
   onLockedLevelClick?: () => void;
+  onNavigateToSupport?: () => void;
 }
 
 interface FlashcardItem {
@@ -73,9 +76,10 @@ function hskWordToItem(w: VocabWord): FlashcardItem {
 
 const ADD_COUNTS = [5, 10, 20, 50] as const;
 
-export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick, onNavigateToSupport }: FlashcardModeProps) {
   const isMobile = useIsMobile();
   const store = useCardStore();
+  const noChineseVoice = useTtsVoiceCheck();
 
   const { toggleLearned, isLearned, learnedCount } = learnedState;
 
@@ -402,6 +406,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
 
   return (
     <div className="max-w-lg mx-auto">
+      {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} className="mb-4" />}
       <SessionPanel />
 
       {/* Top bar */}

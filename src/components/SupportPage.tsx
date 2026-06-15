@@ -1,32 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 interface SupportPageProps {
   onBack: () => void;
+  initialOpenFaqSlug?: string;
 }
 
-const FAQ_ITEMS = [
+const FAQ_ITEMS: { slug: string; q: string; a: string }[] = [
   {
+    slug: "reset-password",
     q: "How do I reset my password?",
     a: 'Open the login screen and click "Forgot password?" — you\'ll receive a reset link by email. If you\'re already logged in, go to Profile → Change Password.',
   },
   {
+    slug: "free-plan",
     q: "What's included in the free plan?",
     a: "Free accounts get full access to the HSK 1 vocabulary list, flashcards, sentence practice, and quiz mode. Premium unlocks HSK 2–6 and any levels added in the future.",
   },
   {
+    slug: "upgrade-premium",
     q: "How do I upgrade to Premium?",
     a: "Open your Profile (top-right corner) and click Upgrade to Premium. Payment is a one-time purchase — not a subscription.",
   },
   {
+    slug: "platforms",
     q: "What platforms is HamHao available on?",
     a: "HamHao is available on the web at hamhao.com, on iOS via the App Store, and on Android via Google Play. The mobile versions are still in development, but you can send us an email if you would like to become a tester / get early access to the app on either platforms.",
   },
   {
+    slug: "export-data",
     q: "I want to know what data you are storing of me - How do I export or delete my data?",
     a: "Go to Profile → scroll to Your Data. You can export a full copy of your account data or permanently delete your account from there.",
   },
   {
+    slug: "tts-voice",
+    q: "The pronunciation (audio) feature isn't working / I hear no sound",
+    a: "HamHao uses your device's built-in text-to-speech (TTS) engine to read Chinese text aloud. On Windows, the built-in voices only cover English by default — you need to install a Chinese voice pack separately. To do this: open Windows Settings → Time & language → Speech → Manage voices → Add voices, then search for and install \"Chinese (Simplified, China)\". Once installed, restart your browser and the audio should work. On macOS and iOS, Chinese voices are included by default. On Android, they are typically pre-installed as well but can be added via Settings → General management → Language and input → Text-to-speech.",
+  },
+  {
+    slug: "billing",
     q: "I have a billing issue — how do I get help?",
     a: "Use the contact form below or email support@hamhao.com directly. Please include your account email and a short description of the issue.",
   },
@@ -34,10 +46,22 @@ const FAQ_ITEMS = [
 
 type Platform = "Web" | "iOS" | "Android";
 
-export function SupportPage({ onBack }: SupportPageProps) {
+export function SupportPage({ onBack, initialOpenFaqSlug }: SupportPageProps) {
   const { user } = useAuth();
 
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(() => {
+    if (!initialOpenFaqSlug) return null;
+    const idx = FAQ_ITEMS.findIndex((f) => f.slug === initialOpenFaqSlug);
+    return idx >= 0 ? idx : null;
+  });
+  const faqRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the open FAQ item into view when arriving via a deep link
+  useEffect(() => {
+    if (initialOpenFaqSlug && faqRef.current) {
+      setTimeout(() => faqRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+    }
+  }, [initialOpenFaqSlug]);
 
   const [email, setEmail] = useState(user?.email ?? "");
   const [platform, setPlatform] = useState<Platform>("Web");
@@ -75,7 +99,11 @@ export function SupportPage({ onBack }: SupportPageProps) {
         <h2 className="text-xl font-bold text-white mb-6">Frequently Asked Questions</h2>
         <div className="space-y-2">
           {FAQ_ITEMS.map((item, i) => (
-            <div key={i} className="border border-neutral-800 rounded-xl overflow-hidden">
+            <div
+              key={i}
+              ref={item.slug === initialOpenFaqSlug ? faqRef : undefined}
+              className="border border-neutral-800 rounded-xl overflow-hidden"
+            >
               <button
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-neutral-800/50 transition-colors"

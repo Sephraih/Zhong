@@ -11,9 +11,12 @@ import {
 } from "../utils/pinyinChart";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
 import { speakChinese } from "../utils/tts";
+import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
+import { TtsVoiceWarning } from "./TtsVoiceWarning";
 
 interface PinyinModeProps {
   vocabulary: VocabWord[];
+  onNavigateToSupport?: () => void;
 }
 
 const INITIAL_DISPLAY: Record<string, string> = { "": "zero" };
@@ -44,8 +47,9 @@ function speakSyllable(syllable: string, hanziMap: Map<string, string>) {
   speakChinese(hanzi, 0.75);
 }
 
-export function PinyinMode({ vocabulary }: PinyinModeProps) {
+export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps) {
   const hanziMap = useMemo(() => buildHanziMap(vocabulary), [vocabulary]);
+  const noChineseVoice = useTtsVoiceCheck();
 
   const [selectedInitial, setSelectedInitial] = useState<string>("b");
   const [selectedFinal, setSelectedFinal] = useState<string>("a");
@@ -93,6 +97,8 @@ export function PinyinMode({ vocabulary }: PinyinModeProps) {
         <h2 className="text-2xl font-bold text-white mb-2">🔤 Pinyin Builder</h2>
         <p className="text-gray-400">Select an initial, final, and tone to build a syllable</p>
       </div>
+
+      {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} className="mb-4" />}
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Pickers */}

@@ -6,12 +6,15 @@ import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
+import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
+import { TtsVoiceWarning } from "./TtsVoiceWarning";
 
 interface PracticeModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
   /** Called when the user taps a locked HSK level button (should open login or profile) */
   onLockedLevelClick?: () => void;
+  onNavigateToSupport?: () => void;
 }
 
 // Multi-select: empty array = no selection
@@ -104,8 +107,9 @@ function getLockedHskButtonClasses(level: number): string {
   }
 }
 
-export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: PracticeModeProps) {
+export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNavigateToSupport }: PracticeModeProps) {
   const isMobile = useIsMobile();
+  const noChineseVoice = useTtsVoiceCheck();
 
   const accessibleLevels = useMemo(() => {
     return [1, 2, 3, 4, 5, 6].filter((l) => allWords.some((w) => w.hskLevel === l));
@@ -530,6 +534,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick }: Pra
 
   return (
     <div className="mx-auto max-w-6xl">
+      {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} className="mb-4" />}
       <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.3fr_0.85fr] gap-4 items-start">
         <div className="hidden lg:block" />
 

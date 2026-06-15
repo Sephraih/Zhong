@@ -300,6 +300,14 @@ function AppContent() {
   // Track which page the user was on before navigating to legal pages (for Back button)
   const [legalReturnMode, setLegalReturnMode] = useState<ViewMode>("home");
 
+  // Pending FAQ slug to auto-open when navigating to the support page
+  const [supportFaqSlug, setSupportFaqSlug] = useState<string | null>(null);
+
+  const navigateToSupportFaq = useCallback((slug: string) => {
+    setSupportFaqSlug(slug);
+    navigate("support");
+  }, [navigate]);
+
   // Deck-adding state (mirrors mobile BrowseScreen)
   const [activeDeck, setActiveDeck] = useState<{ id: number; title: string } | null>(null);
   const [addedWordIds, setAddedWordIds] = useState<Set<number>>(new Set());
@@ -1015,7 +1023,12 @@ function AppContent() {
 
         {viewMode === "privacy" && <PrivacyPage onBack={() => navigate(legalReturnMode)} />}
         {viewMode === "tos" && <TosPage onBack={() => navigate(legalReturnMode)} />}
-        {viewMode === "support" && <SupportPage onBack={() => navigate(legalReturnMode)} />}
+        {viewMode === "support" && (
+          <SupportPage
+            onBack={() => { setSupportFaqSlug(null); navigate(legalReturnMode); }}
+            initialOpenFaqSlug={supportFaqSlug ?? undefined}
+          />
+        )}
         {viewMode === "auth-callback" && <AuthCallbackPage />}
 
         {viewMode === "blog" && (
@@ -1251,6 +1264,7 @@ function AppContent() {
               allWords={visibleVocabulary}
               learnedState={learnedState}
               onLockedLevelClick={handleLockedLevelClick}
+              onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
             />
           </div>
         )}
@@ -1295,6 +1309,7 @@ function AppContent() {
               learnedState={learnedState}
               wordStatusFilter={flashcardStatusFilter}
               onLockedLevelClick={handleLockedLevelClick}
+              onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
             />
           </div>
         )}
@@ -1317,7 +1332,11 @@ function AppContent() {
               <p className="text-gray-400">Practice reading and understanding example sentences</p>
             </div>
 
-            <SentenceMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
+            <SentenceMode
+              allWords={visibleVocabulary}
+              onLockedLevelClick={handleLockedLevelClick}
+              onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
+            />
           </div>
         )}
 
@@ -1325,6 +1344,7 @@ function AppContent() {
           <AnalyzeMode
             vocabulary={vocabulary}
             onPremiumRequired={() => navigate("profile")}
+            onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
           />
         )}
 
@@ -1339,7 +1359,12 @@ function AppContent() {
           />
         )}
 
-        {viewMode === "pinyin" && <PinyinMode vocabulary={vocabulary} />}
+        {viewMode === "pinyin" && (
+          <PinyinMode
+            vocabulary={vocabulary}
+            onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
+          />
+        )}
       </main>
 
       {/* Footer */}
