@@ -11,9 +11,10 @@ interface ProfilePageProps {
   learnedCount: number;
   stillLearningCount: number;
   onBack: () => void;
+  onOpenAuth?: () => void;
 }
 
-export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack }: ProfilePageProps) {
+export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack, onOpenAuth }: ProfilePageProps) {
   const { user, accountTier, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
 
   const [premiumPrice, setPremiumPrice] = useState<string>("$9.99");
@@ -89,7 +90,13 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
       <div className="max-w-3xl mx-auto text-center py-20">
         <div className="text-5xl mb-4">🔒</div>
         <h2 className="text-2xl font-bold text-white mb-2">Sign in to view your profile</h2>
-        <p className="text-gray-400">Your progress and subscription details will appear here.</p>
+        <p className="text-gray-400 mb-6">Your progress and subscription details will appear here.</p>
+        <button
+          onClick={onOpenAuth}
+          className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors"
+        >
+          Sign in or create an account
+        </button>
       </div>
     );
   }

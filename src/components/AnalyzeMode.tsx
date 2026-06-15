@@ -13,6 +13,7 @@ import { TtsVoiceWarning } from "./TtsVoiceWarning";
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
   onPremiumRequired: () => void;
+  onSignIn?: () => void;
   onNavigateToSupport?: () => void;
 }
 
@@ -42,9 +43,10 @@ interface DictPanelProps {
   onClose: () => void;
   onReadFromHere: () => void;
   onPremiumRequired: () => void;
+  onSignIn?: () => void;
 }
 
-function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHere, onPremiumRequired }: DictPanelProps) {
+function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHere, onPremiumRequired, onSignIn }: DictPanelProps) {
   const [savedCard, setSavedCard] = useState(false);
   useEffect(() => { setSavedCard(false); }, [token?.text]);
 
@@ -143,7 +145,7 @@ function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHer
           </button>
         ) : !isLoggedIn ? (
           <button
-            onClick={onPremiumRequired}
+            onClick={onSignIn}
             className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-gray-400 text-sm font-semibold rounded-xl transition-colors border border-neutral-700"
           >
             Sign in to save cards
@@ -163,7 +165,7 @@ function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHer
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport }: AnalyzeModeProps) {
+export function AnalyzeMode({ vocabulary, onPremiumRequired, onSignIn, onNavigateToSupport }: AnalyzeModeProps) {
   const store = useCardStore();
   const isMobile = useIsMobile();
   const { user, accountTier } = useAuth();
@@ -520,7 +522,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
             <div className="lg:w-72 flex-shrink-0">
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 lg:sticky lg:top-4 min-h-48">
                 {selectedToken ? (
-                  <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} />
+                  <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} onSignIn={onSignIn} />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-48 text-gray-600 text-sm text-center">
                     <span className="text-3xl mb-2">👆</span>
@@ -539,7 +541,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closePanel} />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-neutral-900 border-t border-neutral-800 rounded-t-2xl p-5 pb-8 max-h-[70vh] overflow-y-auto">
             <div className="w-10 h-1 bg-neutral-700 rounded-full mx-auto mb-4" />
-            <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} />
+            <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} onSignIn={onSignIn} />
           </div>
         </>
       )}

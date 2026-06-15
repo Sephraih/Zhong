@@ -311,13 +311,17 @@ function AppContent() {
   const [deckPickWord, setDeckPickWord] = useState<VocabWord | null>(null);
 
   const handleAddToDeck = useCallback((word: VocabWord) => {
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
     if (activeDeck) {
       const added = addWordToDeckDirect(activeDeck.id, word.id, "hsk", word.hanzi, word.pinyin);
       if (added) setAddedWordIds((prev) => new Set(prev).add(word.id));
     } else {
       setDeckPickWord(word);
     }
-  }, [activeDeck]);
+  }, [activeDeck, user]);
 
   const handlePickerSelect = useCallback((deckId: number, deckTitle: string) => {
     if (!deckPickWord) return;
@@ -1020,6 +1024,7 @@ function AppContent() {
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
             onBack={() => navigate("browse")}
+            onOpenAuth={() => openAuthModal("login")}
           />
         )}
 
@@ -1312,6 +1317,7 @@ function AppContent() {
               wordStatusFilter={flashcardStatusFilter}
               onLockedLevelClick={handleLockedLevelClick}
               onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
+              onOpenAuth={() => openAuthModal("login")}
             />
           </div>
         )}
@@ -1346,6 +1352,7 @@ function AppContent() {
           <AnalyzeMode
             vocabulary={vocabulary}
             onPremiumRequired={() => navigate("profile")}
+            onSignIn={() => openAuthModal("login")}
             onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
           />
         )}
@@ -1358,6 +1365,7 @@ function AppContent() {
               setAddedWordIds(getHskWordIdsForDeck(deckId));
               navigate("browse");
             }}
+            onOpenAuth={() => openAuthModal("login")}
           />
         )}
 

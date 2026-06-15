@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 interface CardsDecksProps {
   vocabulary: VocabWord[];
   onNavigateToBrowse: (deckId: number, deckTitle: string) => void;
+  onOpenAuth?: () => void;
 }
 
 // ── Card Form ─────────────────────────────────────────────────────────────────
@@ -337,7 +338,7 @@ function DeckPanel({ deck, deckCards, vocabulary, customCards, onRemoveWord, onA
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function CardsDecksMode({ vocabulary, onNavigateToBrowse }: CardsDecksProps) {
+export function CardsDecksMode({ vocabulary, onNavigateToBrowse, onOpenAuth }: CardsDecksProps) {
   const { user } = useAuth();
   const store = useCardStore();
   const [tab, setTab] = useState<"cards" | "decks">("cards");
@@ -453,12 +454,16 @@ export function CardsDecksMode({ vocabulary, onNavigateToBrowse }: CardsDecksPro
       <div className="max-w-lg mx-auto text-center py-16 px-4">
         <p className="text-5xl mb-5">🎴</p>
         <h2 className="text-2xl font-bold text-white mb-3">Sign in to use My Cards & Decks</h2>
-        <p className="text-gray-400 mb-2">
+        <p className="text-gray-400 mb-5">
           Create custom flashcards and organise them into decks that sync with Flashcard mode.
         </p>
-        <p className="text-gray-500 text-sm">
-          Sign in or create a free account — your cards are saved to your browser and exported as a JSON file for backup.
-        </p>
+        <button
+          onClick={onOpenAuth}
+          className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors"
+        >
+          Sign in or create an account
+        </button>
+        <p className="text-gray-600 text-xs mt-4">Your cards are stored in your browser and can be exported as a JSON backup.</p>
       </div>
     );
   }

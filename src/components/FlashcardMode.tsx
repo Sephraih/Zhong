@@ -19,6 +19,7 @@ interface FlashcardModeProps {
   wordStatusFilter: FlashcardFilter;
   onLockedLevelClick?: () => void;
   onNavigateToSupport?: () => void;
+  onOpenAuth?: () => void;
 }
 
 interface FlashcardItem {
@@ -77,7 +78,7 @@ function hskWordToItem(w: VocabWord): FlashcardItem {
 
 const ADD_COUNTS = [5, 10, 20, 50] as const;
 
-export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick, onNavigateToSupport }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick, onNavigateToSupport, onOpenAuth }: FlashcardModeProps) {
   const isMobile = useIsMobile();
   const store = useCardStore();
   const noChineseVoice = useTtsVoiceCheck();
@@ -295,10 +296,16 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         <div className="border-t border-neutral-800 p-4 space-y-5">
           {/* Decks section */}
           {!isLoggedIn ? (
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-800/50 border border-neutral-700/60">
+            <button
+              onClick={onOpenAuth}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-800/50 border border-neutral-700/60 hover:border-neutral-600 hover:bg-neutral-800 transition-colors text-left"
+            >
               <span className="text-lg">🎴</span>
-              <p className="text-gray-500 text-sm">Sign in to use your own cards & decks</p>
-            </div>
+              <span className="text-gray-400 text-sm">Sign in to use your own cards & decks</span>
+              <svg className="w-4 h-4 text-gray-600 ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           ) : store.decks.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">My Decks</p>

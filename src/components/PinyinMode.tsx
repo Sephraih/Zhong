@@ -49,21 +49,38 @@ function buildHanziMap(words: VocabWord[]): Map<string, string> {
     }
   }
 
-  // Pass 2 — multi-char words. Store only the slice up to and including
-  // the target character so TTS reads as few syllables as possible while
-  // still getting enough preceding context for polyphonic disambiguation.
-  // e.g. 行 at i=1 in 银行 → stores "银行" (reads "háng" correctly)
-  //      爸 at i=0 in 爸爸 → stores "爸"    (reads "bà", not "bàba")
+  // Pass 2 — fill gaps from multi-char words, storing just the single
+  // character. This avoids multi-syllable playback at the cost of polyphonic
+  // accuracy for characters that only exist in compound words.
+  // Level-9 vocabulary entries are specifically added to cover any gaps
+  // so that each pinyin syllable maps to a single verified character.
   for (const word of words) {
     if (word.hanzi.length > 1) {
       const chars = word.hanzi.split("");
       for (let i = 0; i < chars.length; i++) {
         const syllable = extractPinyinForChar(word.pinyin, i, chars.length);
         if (syllable && !map.has(syllable)) {
-          map.set(syllable, word.hanzi.slice(0, i + 1));
+          map.set(syllable, chars[i]);
         }
       }
     }
+  }
+
+  // Dev-mode coverage check: log which SYLLABLE_TABLE entries have no mapping.
+  // Open browser console on /pinyin to see gaps that need level-9 vocab entries.
+  if (import.meta.env.DEV) {
+    const stripTone = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const coveredBases = new Set<string>();
+    for (const key of map.keys()) coveredBases.add(stripTone(key));
+    const missing: string[] = [];
+    for (const [initial, finals] of Object.entries(SYLLABLE_TABLE)) {
+      for (const fin of finals) {
+        const base = initial === "" ? fin : initial + fin;
+        if (!coveredBases.has(base)) missing.push(base);
+      }
+    }
+    if (missing.length) console.log("[PinyinMode] syllables with no vocab mapping:", missing.join(", "));
+    else console.log("[PinyinMode] all syllables covered ✓");
   }
 
   return map;
