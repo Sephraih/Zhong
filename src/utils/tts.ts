@@ -25,6 +25,18 @@ export function primeVoices(): void {
 }
 
 /**
+ * Returns true if at least one Chinese-capable voice is loaded.
+ * Returns false if voices are loaded but none match Chinese.
+ * Returns null if voices haven't loaded yet.
+ */
+export function hasChineseVoice(): boolean | null {
+  if (!("speechSynthesis" in window)) return false;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) return null;
+  return !!findChineseVoice(voices);
+}
+
+/**
  * Speak Chinese text using the Web Speech API.
  *
  * onStart    – fires when the browser confirms playback has begun

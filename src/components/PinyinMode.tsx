@@ -73,8 +73,6 @@ export function PinyinMode({ vocabulary }: PinyinModeProps) {
     [selectedInitial, selectedFinal, selectedTone]
   );
 
-  const exampleHanzi = hanziMap.get(syllable);
-
   const handlePlay = useCallback(() => {
     speakSyllable(syllable, hanziMap);
   }, [syllable, hanziMap]);
@@ -84,11 +82,9 @@ export function PinyinMode({ vocabulary }: PinyinModeProps) {
     setSelectedInitial(initial);
     setSelectedFinal(final);
     setSelectedTone(tone);
-    // Speak after state settles
-    setTimeout(() => {
-      const s = buildSyllable(initial, final, tone);
-      speakSyllable(s, hanziMap);
-    }, 50);
+    // Build syllable from the new values (don't wait for state to settle)
+    // so speak() runs synchronously within the click gesture — required by Firefox.
+    speakSyllable(buildSyllable(initial, final, tone), hanziMap);
   }, [hanziMap]);
 
   return (
@@ -169,11 +165,6 @@ export function PinyinMode({ vocabulary }: PinyinModeProps) {
             <p className="text-8xl font-bold text-red-400 font-mono tracking-widest mb-2">
               {syllable}
             </p>
-            {exampleHanzi ? (
-              <p className="text-6xl text-white mt-4">{exampleHanzi}</p>
-            ) : (
-              <p className="text-gray-600 text-sm mt-4">No example character found</p>
-            )}
             <p className="text-gray-500 text-sm mt-3">
               {selectedInitial === "" ? "zero initial" : `initial: ${selectedInitial}`}
               {" · "}

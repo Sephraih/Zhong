@@ -6,7 +6,7 @@ import { HoverCharacter } from "./HoverCharacter";
 import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useAuth } from "../contexts/AuthContext";
-import { speakChinese, primeVoices } from "../utils/tts";
+import { speakChinese, primeVoices, hasChineseVoice } from "../utils/tts";
 
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
@@ -171,9 +171,11 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
   const [analyzed, setAnalyzed] = useState(_persistedTokens.length > 0);
   const [selectedToken, setSelectedToken] = useState<EnrichedToken | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [rate, setRate] = useState<Rate>(1);
   const [showDrawer, setShowDrawer] = useState(false);
+  const [noChineseVoice, setNoChineseVoice] = useState(false);
 
   // ── Interaction state ─────────────────────────────────────────────────────
   // Desktop: pointer position for click-vs-drag detection
@@ -232,7 +234,9 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
     );
   };
 
-  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); setPlayingWordId(null); };
+  const handlePause = () => { window.speechSynthesis.pause(); setIsPaused(true); };
+  const handleResume = () => { window.speechSynthesis.resume(); setIsPaused(false); };
+  const handleStop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); setIsPaused(false); setPlayingWordId(null); };;
 
   const handleReadFromHere = useCallback(() => {
     if (!selectedToken) return;
@@ -253,7 +257,20 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
   const closePanel = () => { setSelectedToken(null); setShowDrawer(false); };
 
   useEffect(() => {
-    primeVoices(); // cache voices before first user interaction (critical for Firefox)
+    primeVoices();
+
+    const checkVoice = () => {
+      const result = hasChineseVoice();
+      if (result === false) setNoChineseVoice(true);
+    };
+    // Voices may load asynchronously — check once they're available
+    if (hasChineseVoice() === null) {
+      window.speechSynthesis.addEventListener("voiceschanged", checkVoice, { once: true });
+      setTimeout(checkVoice, 1000); // final fallback
+    } else {
+      checkVoice();
+    }
+
     return () => { window.speechSynthesis.cancel(); cancelLongPress(); };
   }, []);
 
@@ -359,6 +376,11 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1 min-w-0">
             {/* TTS controls */}
+            {noChineseVoice && (
+              <div className="bg-amber-950/50 border border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-amber-300 text-xs">
+                No Chinese TTS voice detected. On Windows: Settings → Time &amp; language → Speech → Add voices → Chinese (Simplified).
+              </div>
+            )}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 mb-3 flex items-center gap-2 flex-wrap">
               {!isPlaying ? (
                 <button
@@ -368,14 +390,40 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                   Play All
                 </button>
+              ) : isPaused ? (
+                <>
+                  <button
+                    onClick={handleResume}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    Resume
+                  </button>
+                  <button
+                    onClick={handleStop}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
+                    Stop
+                  </button>
+                </>
               ) : (
-                <button
-                  onClick={handleStop}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
-                  Stop
-                </button>
+                <>
+                  <button
+                    onClick={handlePause}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="5" y="5" width="4" height="14" /><rect x="15" y="5" width="4" height="14" /></svg>
+                    Pause
+                  </button>
+                  <button
+                    onClick={handleStop}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
+                    Stop
+                  </button>
+                </>
               )}
               <div className="flex gap-1">
                 {RATES.map((r) => (

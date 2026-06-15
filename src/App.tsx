@@ -1339,7 +1339,7 @@ function AppContent() {
           />
         )}
 
-        {viewMode === "pinyin" && <PinyinMode vocabulary={visibleVocabulary} />}
+        {viewMode === "pinyin" && <PinyinMode vocabulary={vocabulary} />}
       </main>
 
       {/* Footer */}
