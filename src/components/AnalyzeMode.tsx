@@ -6,7 +6,7 @@ import { HoverCharacter } from "./HoverCharacter";
 import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useAuth } from "../contexts/AuthContext";
-import { speakChinese } from "../utils/tts";
+import { speakChinese, primeVoices } from "../utils/tts";
 
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
@@ -237,7 +237,10 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps)
 
   const closePanel = () => { setSelectedToken(null); setShowDrawer(false); };
 
-  useEffect(() => () => { window.speechSynthesis.cancel(); cancelLongPress(); }, []);
+  useEffect(() => {
+    primeVoices(); // cache voices before first user interaction (critical for Firefox)
+    return () => { window.speechSynthesis.cancel(); cancelLongPress(); };
+  }, []);
 
   // ── Token event handlers ─────────────────────────────────────────────────
   //

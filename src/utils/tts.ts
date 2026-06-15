@@ -13,24 +13,43 @@ function findChineseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice 
 }
 
 /**
+ * Call this once at app mount (no user gesture needed) so voices are already
+ * cached by the time the user clicks Play. Critical for Firefox on Windows.
+ */
+export function primeVoices(): void {
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", () => {
+      window.speechSynthesis.getVoices(); // cache on event too
+    }, { once: true });
+  }
+}
+
+/**
  * Speak Chinese text using the Web Speech API.
  *
- * onStart fires when the browser confirms playback has begun (utter.onstart).
- * onEnd   fires when playback finishes naturally or on a non-recoverable error.
+ * onStart – fires when the browser confirms playback has begun (utter.onstart)
+ * onEnd   – fires when playback finishes naturally or on non-recoverable error
  *
- * Design notes:
- * – Always call resume() before cancel() so Chrome/Edge un-sticks itself after
- *   natural playback ends (their engine can silently refuse new speak() calls
- *   until resume() is called, even when paused===false).
- * – "canceled"/"interrupted" onerror codes are swallowed; they are triggered
- *   by our own cancel() and never indicate a real failure.
- * – On first failure with any other error code, we retry once without a pinned
- *   voice (browser picks its own default) to recover from transient cloud-voice
- *   errors (Microsoft Xiaoxiao Online requires Azure connectivity).
- * – Delay before speak() is 10 ms on Chrome/Edge (just enough to break the
- *   synchronous cancel→speak frame) and 50 ms on Firefox.
- * – Voice loading uses both the voiceschanged event and a 50 ms poll, since
- *   Firefox can be slow to expose voices via getVoices() after the event fires.
+ * Browser differences handled here:
+ *
+ * Chrome/Edge
+ *   • resume() before cancel() resets the engine after natural completion
+ *     (Chrome silently drops new speak() calls after onend without this).
+ *   • 10 ms delay breaks the synchronous cancel→speak frame that caused
+ *     "canceled" errors.
+ *   • Leading   (NBSP) gives the audio pipeline one frame to initialise
+ *     before the first real syllable, preventing the leading-character cutoff.
+ *   • Silent-drop watchdog: if onstart hasn't fired 700 ms after speak(),
+ *     the utterance was quietly dropped — retry with the browser default voice.
+ *
+ * Firefox
+ *   • speak() called inside setTimeout() breaks Firefox's per-call user-gesture
+ *     requirement; requestAnimationFrame() stays within the gesture context.
+ *   • Firefox does not have the cancel→speak race condition, so cancel() is
+ *     skipped before the first attempt to avoid interfering with its pipeline.
+ *   • Voices load asynchronously; primeVoices() should be called at mount so
+ *     they are cached by the time the user clicks Play.
  */
 export function speakChinese(
   text: string,
@@ -41,52 +60,73 @@ export function speakChinese(
   if (!("speechSynthesis" in window)) return;
 
   const ss = window.speechSynthesis;
-  const isFirefox = navigator.userAgent.includes("Firefox");
+  const isFirefox = /Firefox\//.test(navigator.userAgent);
 
-  // Always resume first, even if paused===false. Chrome/Edge can get into a
-  // state after natural playback where new speak() calls are silently dropped;
-  // resume() forces the engine back to a ready state.
-  try { ss.resume(); } catch {}
-  try { ss.cancel(); } catch {}
+  // Chrome/Edge: resume() un-sticks the engine after natural playback ends,
+  // then cancel() clears any leftover queue.
+  // Firefox: skip both — they can interfere with Firefox's own pipeline init.
+  if (!isFirefox) {
+    try { ss.resume(); } catch {}
+    try { ss.cancel(); } catch {}
+  }
+
+  let retried = false;
 
   const attempt = (voice: SpeechSynthesisVoice | undefined, isRetry: boolean) => {
-    const utter = new SpeechSynthesisUtterance(text);
+    // Prepend NBSP on Chrome/Edge: gives the audio subsystem one animation frame
+    // to initialise before the first real character, preventing the leading-char
+    // cutoff. Omit on Firefox where it is unnecessary.
+    const utter = new SpeechSynthesisUtterance((isFirefox ? "" : " ") + text);
     utter.lang = "zh-CN";
     utter.rate = voice?.name.includes("Xiaoxiao") ? Math.min(rate, 0.85) : rate;
     utter.pitch = 1.0;
     utter.volume = 1;
     if (voice) utter.voice = voice;
 
-    utter.onstart = () => { onStart?.(); };
+    let started = false;
+    utter.onstart = () => { started = true; onStart?.(); };
     utter.onend   = () => { onEnd?.(); };
     utter.onerror = (e: SpeechSynthesisErrorEvent) => {
       console.warn(`[TTS] error="${e.error}" voice="${voice?.name ?? "default"}" retry=${isRetry}`);
       if (e.error === "canceled" || e.error === "interrupted") return;
-      if (!isRetry) {
-        // Retry without a pinned voice; cancel first to reset engine state.
-        setTimeout(() => {
-          try { ss.resume(); } catch {}
-          try { ss.cancel(); } catch {}
-          attempt(undefined, true);
-        }, 100);
-      } else {
-        onEnd?.(); // Both attempts failed — reset caller state.
-      }
+      doRetry();
     };
 
-    // 10 ms on Chrome/Edge: just enough to break the cancel→speak sync frame.
-    // 50 ms on Firefox: Firefox's synthesis pipeline needs a bit more runway.
-    const delay = isRetry ? 50 : (isFirefox ? 50 : 10);
-    setTimeout(() => { try { ss.speak(utter); } catch {} }, delay);
+    const doSpeak = () => { try { ss.speak(utter); } catch {} };
+
+    if (isFirefox) {
+      // requestAnimationFrame keeps us within Firefox's user-gesture activation.
+      // On retry (no longer in gesture context), fall back to a short setTimeout.
+      if (isRetry) setTimeout(doSpeak, 50); else requestAnimationFrame(doSpeak);
+    } else {
+      // 10 ms separates cancel() from speak() without noticeable latency.
+      // Retry gets 50 ms to let the cancel() in doRetry() settle first.
+      setTimeout(doSpeak, isRetry ? 50 : 10);
+    }
+
+    // Chrome/Edge silent-drop watchdog: if onstart never fires within 700 ms
+    // the utterance was quietly discarded — retry once with the default voice.
+    if (!isRetry) {
+      setTimeout(() => { if (!started) doRetry(); }, 700);
+    }
+  };
+
+  const doRetry = () => {
+    if (retried) return; // at most one retry per speakChinese() call
+    retried = true;
+    setTimeout(() => {
+      try { ss.cancel(); } catch {}
+      attempt(undefined, true);
+    }, 80);
   };
 
   const go = (voices: SpeechSynthesisVoice[]) => attempt(findChineseVoice(voices), false);
 
-  let voices = ss.getVoices();
+  const voices = ss.getVoices();
   if (voices.length > 0) { go(voices); return; }
 
-  // Voices not yet loaded. Poll every 50 ms (Firefox can expose voices slowly
-  // even after voiceschanged fires) and fall back to no-voice after ~1 s.
+  // Voices not yet loaded (first page load, especially Firefox).
+  // Poll every 50 ms for up to 1 s; voiceschanged fires first on most browsers.
   let done = false;
   const finish = () => {
     if (done) return;
@@ -99,11 +139,7 @@ export function speakChinese(
 
   let ticks = 0;
   const pollId = setInterval(() => {
-    voices = ss.getVoices();
-    if (voices.length > 0) { finish(); return; }
-    if (++ticks >= 20) { // 1 second of polling
-      clearInterval(pollId);
-      if (!done) { done = true; attempt(undefined, false); }
-    }
+    if (ss.getVoices().length > 0) { finish(); return; }
+    if (++ticks >= 20) { clearInterval(pollId); if (!done) { done = true; attempt(undefined, false); } }
   }, 50);
 }
