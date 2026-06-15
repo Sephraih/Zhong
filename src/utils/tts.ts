@@ -14,14 +14,17 @@ function findChineseVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice 
 
 /**
  * Speak Chinese text with automatic async voice loading.
- * Uses the same robust pattern as SpeakerButton to handle browsers where
- * getVoices() returns empty on first call.
+ * The 50 ms delay before speak() is intentional: Chrome on Windows has a race
+ * condition where calling speak() in the same tick as cancel() silently drops
+ * the new utterance. The delay lets the cancellation fully propagate first.
  */
 export function speakChinese(text: string, rate = 0.9, onEnd?: () => void): void {
   if (!("speechSynthesis" in window)) return;
 
   try { window.speechSynthesis.cancel(); } catch {}
-  if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  if (window.speechSynthesis.paused) {
+    try { window.speechSynthesis.resume(); } catch {}
+  }
 
   const doSpeak = (voice: SpeechSynthesisVoice | undefined) => {
     const utter = new SpeechSynthesisUtterance(text);
@@ -30,8 +33,14 @@ export function speakChinese(text: string, rate = 0.9, onEnd?: () => void): void
     utter.pitch = 1.0;
     utter.volume = 1;
     if (voice) utter.voice = voice;
-    if (onEnd) utter.onend = onEnd;
-    try { window.speechSynthesis.speak(utter); } catch {}
+    if (onEnd) {
+      utter.onend = onEnd;
+      utter.onerror = onEnd; // ensure UI state cleans up even on failure
+    }
+    // 50 ms delay lets cancel() fully clear before the new utterance starts
+    setTimeout(() => {
+      try { window.speechSynthesis.speak(utter); } catch {}
+    }, 50);
   };
 
   let voices = window.speechSynthesis.getVoices();

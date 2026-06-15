@@ -1022,11 +1022,11 @@ function AppContent() {
 
         {viewMode === "browse" && (
           <>
-            {/* Add-to-deck banner */}
+            {/* Add-to-deck banner — sticky below the header so it stays visible while scrolling */}
             {activeDeck && (
-              <div className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-red-950/30 border border-red-800/40 rounded-xl">
-                <span className="text-sm text-gray-300">
-                  Adding to deck <strong className="text-red-400">{activeDeck.title}</strong> — tap 🎴+ on any card
+              <div className="sticky top-16 z-40 mb-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-red-950/60 border-y border-red-800/50 backdrop-blur-md flex items-center justify-between gap-3">
+                <span className="text-sm text-gray-200">
+                  Adding to deck <strong className="text-red-300">{activeDeck.title}</strong> — tap 🎴+ on any card
                 </span>
                 <button
                   onClick={clearActiveDeck}
@@ -1317,7 +1317,12 @@ function AppContent() {
           </div>
         )}
 
-        {viewMode === "analyze" && <AnalyzeMode vocabulary={vocabulary} />}
+        {viewMode === "analyze" && (
+          <AnalyzeMode
+            vocabulary={vocabulary}
+            onPremiumRequired={() => navigate("profile")}
+          />
+        )}
 
         {viewMode === "cards" && (
           <CardsDecksMode

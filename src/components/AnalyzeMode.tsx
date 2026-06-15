@@ -5,10 +5,12 @@ import { segmentText, type Token } from "../utils/segment";
 import { HoverCharacter } from "./HoverCharacter";
 import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useAuth } from "../contexts/AuthContext";
 import { speakChinese } from "../utils/tts";
 
 interface AnalyzeModeProps {
   vocabulary: VocabWord[];
+  onPremiumRequired: () => void;
 }
 
 let _persistedText = "";
@@ -28,11 +30,14 @@ const LONG_PRESS_MS = 480;
 interface DictPanelProps {
   token: EnrichedToken | null;
   store: ReturnType<typeof useCardStore>;
+  isPremium: boolean;
+  isLoggedIn: boolean;
   onClose: () => void;
   onReadFromHere: () => void;
+  onPremiumRequired: () => void;
 }
 
-function DictPanel({ token, store, onClose, onReadFromHere }: DictPanelProps) {
+function DictPanel({ token, store, isPremium, isLoggedIn, onClose, onReadFromHere, onPremiumRequired }: DictPanelProps) {
   const [savedCard, setSavedCard] = useState(false);
   useEffect(() => { setSavedCard(false); }, [token?.text]);
 
@@ -48,7 +53,14 @@ function DictPanel({ token, store, onClose, onReadFromHere }: DictPanelProps) {
     6: "bg-red-900/60 text-red-300 border-red-700/40",
   };
 
+  // HSK 2+ words require premium; non-HSK words are always saveable
+  const requiresPremium = word && word.hskLevel > 1 && !isPremium;
+
   const handleAddToCards = () => {
+    if (requiresPremium) {
+      onPremiumRequired();
+      return;
+    }
     const draft: Omit<CustomCard, "id" | "createdAt"> = {
       hanzi: token.text,
       pinyin: token.pinyin,
@@ -115,6 +127,20 @@ function DictPanel({ token, store, onClose, onReadFromHere }: DictPanelProps) {
         </button>
         {savedCard ? (
           <div className="w-full py-2 text-center text-emerald-400 text-sm font-medium">✓ Saved to My Cards</div>
+        ) : requiresPremium ? (
+          <button
+            onClick={onPremiumRequired}
+            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 border border-yellow-700/40 text-yellow-400 text-sm font-semibold rounded-xl transition-colors"
+          >
+            🔒 Unlock Premium to add
+          </button>
+        ) : !isLoggedIn ? (
+          <button
+            onClick={onPremiumRequired}
+            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-gray-400 text-sm font-semibold rounded-xl transition-colors border border-neutral-700"
+          >
+            Sign in to save cards
+          </button>
         ) : (
           <button
             onClick={handleAddToCards}
@@ -130,9 +156,12 @@ function DictPanel({ token, store, onClose, onReadFromHere }: DictPanelProps) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
+export function AnalyzeMode({ vocabulary, onPremiumRequired }: AnalyzeModeProps) {
   const store = useCardStore();
   const isMobile = useIsMobile();
+  const { user, accountTier } = useAuth();
+  const isLoggedIn = !!user;
+  const isPremium = accountTier === "premium";
 
   const dictionarySet = useMemo(() => buildDictionarySet(vocabulary), [vocabulary]);
   const lookupMap = useMemo(() => buildLookupMap(vocabulary), [vocabulary]);
@@ -199,8 +228,8 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
 
   const handleReadFromHere = useCallback(() => {
     if (!selectedToken) return;
-    const idx = tokens.indexOf(selectedToken);
-    const fromHere = tokens.slice(idx).map((t) => t.text).join("");
+    const idx = tokens.findIndex((t) => t.wordId === selectedToken.wordId);
+    const fromHere = tokens.slice(idx < 0 ? 0 : idx).map((t) => t.text).join("");
     setIsPlaying(true);
     speakChinese(fromHere, rate, () => setIsPlaying(false));
     if (isMobile) setShowDrawer(false);
@@ -404,7 +433,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
             <div className="lg:w-72 flex-shrink-0">
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 lg:sticky lg:top-4 min-h-48">
                 {selectedToken ? (
-                  <DictPanel token={selectedToken} store={store} onClose={closePanel} onReadFromHere={handleReadFromHere} />
+                  <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-48 text-gray-600 text-sm text-center">
                     <span className="text-3xl mb-2">👆</span>
@@ -423,7 +452,7 @@ export function AnalyzeMode({ vocabulary }: AnalyzeModeProps) {
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closePanel} />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-neutral-900 border-t border-neutral-800 rounded-t-2xl p-5 pb-8 max-h-[70vh] overflow-y-auto">
             <div className="w-10 h-1 bg-neutral-700 rounded-full mx-auto mb-4" />
-            <DictPanel token={selectedToken} store={store} onClose={closePanel} onReadFromHere={handleReadFromHere} />
+            <DictPanel token={selectedToken} store={store} isPremium={isPremium} isLoggedIn={isLoggedIn} onClose={closePanel} onReadFromHere={handleReadFromHere} onPremiumRequired={onPremiumRequired} />
           </div>
         </>
       )}

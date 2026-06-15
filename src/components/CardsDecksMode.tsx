@@ -252,10 +252,11 @@ function DeckPanel({ deck, deckCards, vocabulary, customCards, onRemoveWord, onA
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+      {/* Header — always visible */}
       <div className="p-4 flex items-start justify-between gap-3">
-        <button onClick={() => setExpanded((e) => !e)} className="flex-1 text-left">
-          <p className="text-white font-semibold">{deck.title}</p>
-          {deck.description && <p className="text-gray-500 text-sm mt-0.5">{deck.description}</p>}
+        <button onClick={() => setExpanded((e) => !e)} className="flex-1 text-left min-w-0">
+          <p className="text-white font-semibold truncate">{deck.title}</p>
+          {deck.description && <p className="text-gray-500 text-sm mt-0.5 truncate">{deck.description}</p>}
           <p className="text-gray-600 text-xs mt-1">{deckCards.length} card{deckCards.length !== 1 ? "s" : ""}</p>
         </button>
         <div className="flex gap-1.5 flex-shrink-0">
@@ -264,10 +265,35 @@ function DeckPanel({ deck, deckCards, vocabulary, customCards, onRemoveWord, onA
             onClick={() => setExpanded((e) => !e)}
             className="px-2 py-1 text-xs text-gray-500 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-lg border border-neutral-700 transition-colors"
           >
-            {expanded ? "Hide" : "Show"} cards
+            {expanded ? "Hide" : "Show"}
+          </button>
+          {/* Delete button always visible */}
+          <button
+            onClick={() => setShowDeleteConfirm((v) => !v)}
+            className={`px-2 py-1 text-xs rounded-lg border transition-colors ${
+              showDeleteConfirm
+                ? "bg-red-950/50 border-red-700/50 text-red-400"
+                : "text-gray-500 hover:text-red-400 bg-neutral-800 hover:bg-red-950/30 border-neutral-700"
+            }`}
+            title="Delete deck"
+          >
+            🗑
           </button>
         </div>
       </div>
+
+      {/* Delete confirmation — shown below header, above cards */}
+      {showDeleteConfirm && (
+        <div className="px-4 pb-3">
+          <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-3 flex items-center justify-between gap-3">
+            <span className="text-red-300 text-sm">Delete "{deck.title}"? This cannot be undone.</span>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={onDelete} className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-lg transition-colors">Delete</button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-gray-300 text-xs font-semibold rounded-lg transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="border-t border-neutral-800">
@@ -287,28 +313,20 @@ function DeckPanel({ deck, deckCards, vocabulary, customCards, onRemoveWord, onA
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${dc.cardType === "custom" ? "text-purple-400 border-purple-800/40 bg-purple-950/30" : "text-blue-400 border-blue-800/40 bg-blue-950/30"}`}>
                       {dc.cardType === "custom" ? "Custom" : "HSK"}
                     </span>
-                    <button onClick={() => onRemoveWord(dc.cardId, dc.cardType)} className="text-gray-600 hover:text-red-400 transition-colors text-sm">×</button>
+                    <button onClick={() => onRemoveWord(dc.cardId, dc.cardType)} className="text-gray-600 hover:text-red-400 transition-colors text-sm flex-shrink-0">×</button>
                   </div>
                 );
               })}
             </div>
           )}
 
-          <div className="border-t border-neutral-800 p-3 flex gap-2">
+          <div className="border-t border-neutral-800 p-3">
             <button
               onClick={onAddFromBrowse}
-              className="flex-1 py-2 text-sm font-medium text-gray-400 hover:text-white bg-neutral-800/60 hover:bg-neutral-800 rounded-xl border border-neutral-700 transition-colors"
+              className="w-full py-2 text-sm font-medium text-gray-400 hover:text-white bg-neutral-800/60 hover:bg-neutral-800 rounded-xl border border-neutral-700 transition-colors"
             >
               🗂＋ Add from Browse
             </button>
-            {!showDeleteConfirm ? (
-              <button onClick={() => setShowDeleteConfirm(true)} className="px-3 py-2 text-gray-600 hover:text-red-400 bg-neutral-800/60 rounded-xl border border-neutral-700 transition-colors text-sm">🗑</button>
-            ) : (
-              <div className="flex gap-1.5">
-                <button onClick={onDelete} className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold">Delete</button>
-                <button onClick={() => setShowDeleteConfirm(false)} className="px-2 py-1 text-xs bg-neutral-700 text-gray-300 rounded-lg">Cancel</button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -545,12 +563,18 @@ export function CardsDecksMode({ vocabulary, onNavigateToBrowse }: CardsDecksPro
           )}
 
           {!showNewDeckForm && (
-            <button
-              onClick={() => setShowNewDeckForm(true)}
-              className="w-full py-3 border-2 border-dashed border-neutral-700 hover:border-red-800/60 text-gray-500 hover:text-gray-300 rounded-2xl text-sm font-medium transition-colors"
-            >
-              + New Deck
-            </button>
+            store.decks.length >= 5 ? (
+              <div className="w-full py-3 border-2 border-dashed border-neutral-800 text-gray-600 rounded-2xl text-sm font-medium text-center">
+                Deck limit reached (5/5)
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewDeckForm(true)}
+                className="w-full py-3 border-2 border-dashed border-neutral-700 hover:border-red-800/60 text-gray-500 hover:text-gray-300 rounded-2xl text-sm font-medium transition-colors"
+              >
+                + New Deck
+              </button>
+            )
           )}
 
           {store.decks.length === 0 && !showNewDeckForm && (
