@@ -303,11 +303,6 @@ function AppContent() {
   // Pending FAQ slug to auto-open when navigating to the support page
   const [supportFaqSlug, setSupportFaqSlug] = useState<string | null>(null);
 
-  const navigateToSupportFaq = useCallback((slug: string) => {
-    setSupportFaqSlug(slug);
-    navigate("support");
-  }, [navigate]);
-
   // Deck-adding state (mirrors mobile BrowseScreen)
   const [activeDeck, setActiveDeck] = useState<{ id: number; title: string } | null>(null);
   const [addedWordIds, setAddedWordIds] = useState<Set<number>>(new Set());
@@ -364,6 +359,11 @@ function AppContent() {
       });
     }
   }, [isMobile, viewMode]);
+
+  const navigateToSupportFaq = useCallback((slug: string) => {
+    setSupportFaqSlug(slug);
+    navigate("support");
+  }, [navigate]);
 
   const handleLockedLevelClick = useCallback(() => {
     // If level isn't accessible, guide the user appropriately.
