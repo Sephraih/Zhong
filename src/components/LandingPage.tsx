@@ -29,10 +29,10 @@ const DESKTOP_BG_ASSET = Object.values(desktopBgExact)[0] ?? null;
 const MOBILE_BG_ASSET = Object.values(mobileBgExact)[0] ?? null;
 
 interface LandingPageProps {
-  onSelectMode: (mode: "browse" | "practice" | "sentences" | "flashcards" | "quiz") => void;
+  onSelectMode: (mode: "browse" | "practice" | "sentences" | "flashcards" | "quiz" | "analyze" | "cards" | "pinyin") => void;
 }
 
-type ModeId = "browse" | "practice" | "sentences" | "flashcards" | "quiz";
+type ModeId = "browse" | "practice" | "sentences" | "flashcards" | "quiz" | "analyze" | "cards" | "pinyin";
 
 type SectionId = "hero" | ModeId | "footer";
 
@@ -570,6 +570,208 @@ function SentencesPreview() {
   );
 }
 
+function AnalyzePreview() {
+  const [analyzed, setAnalyzed] = useState(false);
+  const [selected, setSelected] = useState(false);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setAnalyzed(true), 900);
+    const t2 = setTimeout(() => setSelected(true), 1900);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  const tokens: { chars: { c: string; p: string }[] }[] = [
+    { chars: [{ c: "今", p: "jīn" }, { c: "天", p: "tiān" }] },
+    { chars: [{ c: "天", p: "tiān" }, { c: "气", p: "qì" }] },
+    { chars: [{ c: "很", p: "hěn" }] },
+    { chars: [{ c: "好", p: "hǎo" }] },
+  ];
+
+  return (
+    <PreviewFrame title="Analyze · Text">
+      <div className="p-4 space-y-3">
+        <div className="bg-neutral-950 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-gray-300 font-sans">
+          今天天气很好，我们去公园吧。
+        </div>
+
+        <div className={`transition-all duration-500 ${analyzed ? "opacity-100" : "opacity-0"}`}>
+          <div className="flex flex-wrap items-end gap-1.5 p-3 bg-neutral-950/50 rounded-xl border border-neutral-800 min-h-[60px]">
+            {tokens.map((tok, ti) => (
+              <span
+                key={ti}
+                className={`inline-flex items-end gap-0.5 px-1 py-0.5 rounded-lg transition-colors cursor-pointer ${
+                  selected && ti === 1 ? "bg-violet-900/50 border border-violet-700/50" : "hover:bg-neutral-800"
+                }`}
+              >
+                {tok.chars.map((x, i) => (
+                  <HoverCharacter key={i} char={x.c} pinyin={x.p} size="lg" wordId={`ap-${ti}-${i}`} />
+                ))}
+              </span>
+            ))}
+            <span className="text-gray-500 text-xl self-end leading-none mb-1">，</span>
+            {[
+              [{ c: "我", p: "wǒ" }, { c: "们", p: "men" }],
+              [{ c: "去", p: "qù" }],
+              [{ c: "公", p: "gōng" }, { c: "园", p: "yuán" }],
+            ].map((tok, ti) => (
+              <span key={`b${ti}`} className="inline-flex items-end gap-0.5 px-1 py-0.5 rounded-lg hover:bg-neutral-800 cursor-pointer">
+                {tok.map((x, i) => (
+                  <HoverCharacter key={i} char={x.c} pinyin={x.p} size="lg" wordId={`ap-b${ti}-${i}`} />
+                ))}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className={`transition-all duration-500 ${selected ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
+          <div className="bg-neutral-900 border border-violet-800/40 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-2xl font-bold text-white">天气</span>
+              <span className="text-red-400 text-sm">tiān qì</span>
+              <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] bg-blue-950/60 text-blue-400 border border-blue-800/40">HSK 2</span>
+            </div>
+            <p className="text-gray-300 text-sm mb-2">weather</p>
+            <button className="w-full py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg">+ Add to My Cards</button>
+          </div>
+        </div>
+      </div>
+    </PreviewFrame>
+  );
+}
+
+const TONE_MARKS: Record<string, string[]> = {
+  a: ["ā", "á", "ǎ", "à", "a"],
+  o: ["ō", "ó", "ǒ", "ò", "o"],
+  e: ["ē", "é", "ě", "è", "e"],
+  i: ["ī", "í", "ǐ", "ì", "i"],
+  u: ["ū", "ú", "ǔ", "ù", "u"],
+};
+
+const PINYIN_SEQUENCE = [
+  { ini: "b", fin: "a", tone: 1 },
+  { ini: "b", fin: "a", tone: 2 },
+  { ini: "m", fin: "a", tone: 3 },
+  { ini: "h", fin: "a", tone: 4 },
+  { ini: "d", fin: "i", tone: 1 },
+  { ini: "t", fin: "i", tone: 2 },
+];
+
+function PinyinPreview() {
+  const [idx, setIdx] = useState(0);
+  const { ini, fin, tone } = PINYIN_SEQUENCE[idx];
+  const syllable = `${ini}${(TONE_MARKS[fin] ?? [fin, fin, fin, fin, fin])[tone - 1]}`;
+
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % PINYIN_SEQUENCE.length), 1200);
+    return () => clearInterval(t);
+  }, []);
+
+  const INITIALS = ["b", "p", "m", "f", "d", "t"];
+  const FINALS = ["a", "o", "e", "i", "u"];
+  const TONES = [1, 2, 3, 4, 5];
+
+  return (
+    <PreviewFrame title="Pinyin · Syllable Builder">
+      <div className="p-4 space-y-3">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-2xl py-5 text-center">
+          <p className="text-5xl font-bold text-white tracking-tight">{syllable}</p>
+          <p className="text-gray-600 text-xs mt-2">▶ Play · 🔀 Random</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1.5 text-center">Initial</p>
+            <div className="space-y-1">
+              {INITIALS.map((v) => (
+                <div key={v} className={`py-1.5 rounded-lg text-center text-sm font-mono transition-colors ${ini === v ? "bg-red-600 text-white font-bold" : "bg-neutral-800/80 text-gray-400"}`}>{v}</div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1.5 text-center">Final</p>
+            <div className="space-y-1">
+              {FINALS.map((v) => (
+                <div key={v} className={`py-1.5 rounded-lg text-center text-sm font-mono transition-colors ${fin === v ? "bg-red-600 text-white font-bold" : "bg-neutral-800/80 text-gray-400"}`}>{v}</div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1.5 text-center">Tone</p>
+            <div className="space-y-1">
+              {TONES.map((v) => (
+                <div key={v} className={`py-1.5 rounded-lg text-center text-sm transition-colors ${tone === v ? "bg-red-600 text-white font-bold" : "bg-neutral-800/80 text-gray-400"}`}>{v}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </PreviewFrame>
+  );
+}
+
+function MyCardsPreview() {
+  const [tab, setTab] = useState<"cards" | "decks">("cards");
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setTab("decks"), 1800);
+    const t2 = setTimeout(() => setTab("cards"), 3400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  const cards = [
+    { hanzi: "电脑", pinyin: "diàn nǎo", english: "computer", learned: true },
+    { hanzi: "手机", pinyin: "shǒu jī", english: "mobile phone", learned: false },
+    { hanzi: "学习", pinyin: "xué xí", english: "to study", learned: true },
+  ];
+  const decks = [
+    { title: "HSK 2 Review", count: 24 },
+    { title: "Daily Words", count: 12 },
+  ];
+
+  return (
+    <PreviewFrame title="My Cards · Collections">
+      <div className="p-4 space-y-3">
+        <div className="flex gap-1 bg-neutral-950 rounded-xl p-1">
+          {(["cards", "decks"] as const).map((t) => (
+            <button key={t} className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize ${tab === t ? "bg-neutral-800 text-white" : "text-gray-500"}`}>
+              My {t === "cards" ? "Cards" : "Decks"}
+            </button>
+          ))}
+        </div>
+
+        {tab === "cards" ? (
+          <div className="space-y-1.5">
+            {cards.map((card, i) => (
+              <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 flex items-center gap-3">
+                <span className="text-white font-semibold text-lg">{card.hanzi}</span>
+                <span className="text-red-400 text-xs">{card.pinyin}</span>
+                <span className="text-gray-500 text-xs flex-1 truncate">{card.english}</span>
+                {card.learned && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">✓</span>
+                )}
+              </div>
+            ))}
+            <div className="py-2 border-2 border-dashed border-neutral-700 text-gray-600 rounded-xl text-xs font-medium text-center">+ New Card</div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {decks.map((deck, i) => (
+              <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-white font-semibold text-sm">{deck.title}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{deck.count} cards</p>
+                </div>
+                <span className="text-gray-600 text-[11px] px-2 py-1 bg-neutral-800 rounded-lg">Show</span>
+              </div>
+            ))}
+            <div className="py-2 border-2 border-dashed border-neutral-700 text-gray-600 rounded-xl text-xs font-medium text-center">+ New Deck</div>
+          </div>
+        )}
+      </div>
+    </PreviewFrame>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SectionConfig {
@@ -585,6 +787,9 @@ const SECTIONS: SectionConfig[] = [
   { id: "sentences", label: "Sentences", color: "bg-teal-500" },
   { id: "flashcards", label: "Flashcards", color: "bg-blue-500" },
   { id: "quiz", label: "Quiz", color: "bg-yellow-500" },
+  { id: "analyze", label: "Analyze", color: "bg-violet-500" },
+  { id: "cards", label: "My Cards", color: "bg-rose-500" },
+  { id: "pinyin", label: "Pinyin", color: "bg-cyan-500" },
   { id: "footer", label: "Start", color: "bg-gray-400" },
 ];
 
@@ -646,9 +851,9 @@ function ModeSectionDesktop({
   swap: boolean;
 }) {
   const accentText =
-    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : id === "quiz" ? "text-yellow-400" : id === "analyze" ? "text-violet-400" : id === "cards" ? "text-rose-400" : "text-cyan-400";
   const bulletDot =
-    id === "browse" ? "bg-red-500/60" : id === "practice" ? "bg-orange-500/60" : id === "sentences" ? "bg-teal-500/60" : id === "flashcards" ? "bg-blue-500/60" : "bg-yellow-500/60";
+    id === "browse" ? "bg-red-500/60" : id === "practice" ? "bg-orange-500/60" : id === "sentences" ? "bg-teal-500/60" : id === "flashcards" ? "bg-blue-500/60" : id === "quiz" ? "bg-yellow-500/60" : id === "analyze" ? "bg-violet-500/60" : id === "cards" ? "bg-rose-500/60" : "bg-cyan-500/60";
   const btn =
     id === "browse"
       ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
@@ -658,7 +863,13 @@ function ModeSectionDesktop({
       ? "bg-teal-600 hover:bg-teal-700 shadow-teal-900/30"
       : id === "flashcards"
       ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
-      : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
+      : id === "quiz"
+      ? "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30"
+      : id === "analyze"
+      ? "bg-violet-600 hover:bg-violet-700 shadow-violet-900/30"
+      : id === "cards"
+      ? "bg-rose-600 hover:bg-rose-700 shadow-rose-900/30"
+      : "bg-cyan-600 hover:bg-cyan-700 shadow-cyan-900/30";
 
   return (
     <section className="snap-center min-h-[calc(100dvh-4rem)] flex items-center relative overflow-hidden pb-[max(1.25rem,env(safe-area-inset-bottom))]">
@@ -751,7 +962,7 @@ function ModeSectionMobile({
   onSelectMode: (id: ModeId) => void;
 }) {
   const accentText =
-    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : "text-yellow-400";
+    id === "browse" ? "text-red-400" : id === "practice" ? "text-orange-400" : id === "sentences" ? "text-teal-400" : id === "flashcards" ? "text-blue-400" : id === "quiz" ? "text-yellow-400" : id === "analyze" ? "text-violet-400" : id === "cards" ? "text-rose-400" : "text-cyan-400";
   const btn =
     id === "browse"
       ? "bg-red-600 hover:bg-red-700 shadow-red-900/30"
@@ -761,7 +972,13 @@ function ModeSectionMobile({
       ? "bg-teal-600 hover:bg-teal-700 shadow-teal-900/30"
       : id === "flashcards"
       ? "bg-blue-600 hover:bg-blue-700 shadow-blue-900/30"
-      : "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30";
+      : id === "quiz"
+      ? "bg-yellow-600 hover:bg-yellow-700 shadow-yellow-900/30"
+      : id === "analyze"
+      ? "bg-violet-600 hover:bg-violet-700 shadow-violet-900/30"
+      : id === "cards"
+      ? "bg-rose-600 hover:bg-rose-700 shadow-rose-900/30"
+      : "bg-cyan-600 hover:bg-cyan-700 shadow-cyan-900/30";
 
   return (
     <section id={id} className="relative overflow-hidden py-14">
@@ -1130,6 +1347,51 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       ],
       Preview: QuizPreview,
     },
+    {
+      id: "analyze" as ModeId,
+      icon: "🔍",
+      title: "Analyze",
+      subtitle: "Paste any text. Understand it.",
+      description:
+        "Drop in any Chinese text and instantly see per-character pinyin, segmented words, and full definitions with a single tap.",
+      bullets: [
+        "Automatic word segmentation (HSK vocabulary)",
+        "Tap any word to open the dictionary panel",
+        "TTS playback for the full passage or from any word",
+        "Add unknown words directly to your card collection",
+      ],
+      Preview: AnalyzePreview,
+    },
+    {
+      id: "cards" as ModeId,
+      icon: "🎴",
+      title: "My Cards",
+      subtitle: "Your personal vocabulary.",
+      description:
+        "Create custom flashcards, organise them into decks, and study exactly the words you need — no account required.",
+      bullets: [
+        "Create cards with hanzi, pinyin, and English",
+        "Group cards into up to 5 custom decks",
+        "Add HSK words directly from Browse mode",
+        "Export & import your collection as JSON",
+      ],
+      Preview: MyCardsPreview,
+    },
+    {
+      id: "pinyin" as ModeId,
+      icon: "🔤",
+      title: "Pinyin",
+      subtitle: "Master every syllable.",
+      description:
+        "Explore every valid Mandarin syllable combination interactively. Pick an initial, final, and tone to hear exactly how it sounds.",
+      bullets: [
+        "All valid initial + final combinations",
+        "All four tones plus neutral tone",
+        "Instant audio playback for each syllable",
+        "Example characters shown for each combination",
+      ],
+      Preview: PinyinPreview,
+    },
   ];
 
   const hero = (
@@ -1264,13 +1526,16 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
         <h2 className="text-4xl sm:text-5xl font-black text-white">Ready to start?</h2>
         <p className="mt-4 text-gray-400">Pick a mode and begin your first session. Progress is saved locally.</p>
 
-        <div className="mt-10 grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
             { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
             { id: "sentences" as ModeId, icon: "💬", label: "Sentences", cls: "border-teal-900/40 hover:border-teal-700/60 hover:bg-teal-950/20" },
-            { id: "flashcards" as ModeId, icon: "🃏", label: "Cards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
+            { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
             { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
+            { id: "analyze" as ModeId, icon: "🔍", label: "Analyze", cls: "border-violet-900/40 hover:border-violet-700/60 hover:bg-violet-950/20" },
+            { id: "cards" as ModeId, icon: "🎴", label: "My Cards", cls: "border-rose-900/40 hover:border-rose-700/60 hover:bg-rose-950/20" },
+            { id: "pinyin" as ModeId, icon: "🔤", label: "Pinyin", cls: "border-cyan-900/40 hover:border-cyan-700/60 hover:bg-cyan-950/20" },
           ].map((m) => (
             <button
               key={m.id}
