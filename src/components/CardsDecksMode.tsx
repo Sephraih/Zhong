@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { useCardStore, type CustomCard, type Deck, type DeckCard } from "../hooks/useCardStore";
 import type { VocabWord } from "../data/vocabulary";
 import { buildLookupMap } from "../utils/analyzeUtils";
+import { useAuth } from "../contexts/AuthContext";
 
 interface CardsDecksProps {
   vocabulary: VocabWord[];
@@ -337,6 +338,7 @@ function DeckPanel({ deck, deckCards, vocabulary, customCards, onRemoveWord, onA
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function CardsDecksMode({ vocabulary, onNavigateToBrowse }: CardsDecksProps) {
+  const { user } = useAuth();
   const store = useCardStore();
   const [tab, setTab] = useState<"cards" | "decks">("cards");
   const [searchQuery, setSearchQuery] = useState("");
@@ -445,6 +447,21 @@ export function CardsDecksMode({ vocabulary, onNavigateToBrowse }: CardsDecksPro
     : newCardForDeckIds;
 
   const showForm = showNewCardForm || editingCard !== null;
+
+  if (!user) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-16 px-4">
+        <p className="text-5xl mb-5">🎴</p>
+        <h2 className="text-2xl font-bold text-white mb-3">Sign in to use My Cards & Decks</h2>
+        <p className="text-gray-400 mb-2">
+          Create custom flashcards and organise them into decks that sync with Flashcard mode.
+        </p>
+        <p className="text-gray-500 text-sm">
+          Sign in or create a free account — your cards are saved to your browser and exported as a JSON file for backup.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">

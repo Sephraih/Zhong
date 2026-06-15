@@ -18,6 +18,10 @@ interface AnalyzeModeProps {
 
 let _persistedText = "";
 let _persistedTokens: EnrichedToken[] = [];
+const ANALYZE_STORAGE_KEY = "hamhao_analyze_text";
+function readSavedText(): string {
+  try { return localStorage.getItem(ANALYZE_STORAGE_KEY) ?? ""; } catch { return ""; }
+}
 
 interface EnrichedToken extends Token {
   wordId: string;
@@ -169,7 +173,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
   const dictionarySet = useMemo(() => buildDictionarySet(vocabulary), [vocabulary]);
   const lookupMap = useMemo(() => buildLookupMap(vocabulary), [vocabulary]);
 
-  const [inputText, setInputText] = useState(_persistedText);
+  const [inputText, setInputText] = useState(() => _persistedText || readSavedText());
   const [tokens, setTokens] = useState<EnrichedToken[]>(_persistedTokens);
   const [analyzed, setAnalyzed] = useState(_persistedTokens.length > 0);
   const [selectedToken, setSelectedToken] = useState<EnrichedToken | null>(null);
@@ -215,6 +219,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
     setAnalyzed(true);
     _persistedText = inputText;
     _persistedTokens = result;
+    try { localStorage.setItem(ANALYZE_STORAGE_KEY, inputText); } catch {}
   }, [inputText, dictionarySet, lookupMap]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -280,8 +285,27 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
   const closePanel = () => { setSelectedToken(null); setShowDrawer(false); };
 
   useEffect(() => {
+    // Auto-analyze persisted text from localStorage on first load
+    // (module-level _persistedTokens survive navigation but not page refresh)
+    const savedText = readSavedText();
+    if (!_persistedTokens.length && savedText && vocabulary.length > 0) {
+      const raw = segmentText(savedText, dictionarySet);
+      const enriched = enrichTokens(raw, lookupMap);
+      const result: EnrichedToken[] = enriched.map((t, idx) => ({
+        ...t,
+        wordId: `${idx}_${t.text}`,
+        vocabMatches: t.isHanzi ? (lookupMap.get(t.text) ?? []) : [],
+      }));
+      if (result.length > 0) {
+        setTokens(result);
+        setAnalyzed(true);
+        _persistedText = savedText;
+        _persistedTokens = result;
+      }
+    }
     primeVoices();
     return () => { window.speechSynthesis.cancel(); cancelLongPress(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Token event handlers ─────────────────────────────────────────────────
@@ -435,7 +459,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
               </select>
               <div className="ml-auto">
                 <button
-                  onClick={() => { setAnalyzed(false); setSelectedToken(null); _persistedTokens = []; }}
+                  onClick={() => { setAnalyzed(false); setSelectedToken(null); _persistedTokens = []; try { localStorage.removeItem(ANALYZE_STORAGE_KEY); } catch {} }}
                   className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
                 >
                   ← Edit text

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
@@ -9,6 +9,7 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { useCardStore } from "../hooks/useCardStore";
 import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
+import { useAuth } from "../contexts/AuthContext";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
@@ -80,6 +81,8 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   const isMobile = useIsMobile();
   const store = useCardStore();
   const noChineseVoice = useTtsVoiceCheck();
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
 
   const { toggleLearned, isLearned, learnedCount } = learnedState;
 
@@ -104,7 +107,8 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   const [isFlipped, setIsFlipped] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
-  const [shuffleSeed, setShuffleSeed] = useState(0);
+  // Stable pre-computed key order so toggling Learned doesn't re-randomise
+  const [shuffledKeys, setShuffledKeys] = useState<string[]>([]);
 
   const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
 
@@ -195,17 +199,16 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
         item.source === "hsk" ? isLearned(item.id) : (store.cards.find((c) => c.id === item.id)?.learned ?? false)
       );
     }
-    if (isShuffled) {
-      const arr = [...items];
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
+    if (isShuffled && shuffledKeys.length > 0) {
+      const keyOrder = new Map(shuffledKeys.map((key, i) => [key, i]));
+      return [...items].sort((a, b) => {
+        const ai = keyOrder.get(a.key) ?? Infinity;
+        const bi = keyOrder.get(b.key) ?? Infinity;
+        return ai - bi;
+      });
     }
     return items;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionItems, wordStatusFilter, isLearned, isShuffled, shuffleSeed, store.cards]);
+  }, [sessionItems, wordStatusFilter, isLearned, isShuffled, shuffledKeys, store.cards]);
 
   const currentItem = displayItems[currentIndex];
 
@@ -241,17 +244,28 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   }, [currentItem, toggleLearned, store]);
 
   const handleShuffle = () => {
+    const arr = [...sessionItems].sort(() => Math.random() - 0.5);
+    setShuffledKeys(arr.map((item) => item.key));
     setIsShuffled(true);
-    setShuffleSeed((s) => s + 1);
     setCurrentIndex(0);
     setIsFlipped(false);
   };
 
   const handleReset = () => {
     setIsShuffled(false);
+    setShuffledKeys([]);
     setCurrentIndex(0);
     setIsFlipped(false);
   };
+
+  const handleRemoveFromSession = useCallback(() => {
+    if (!currentItem) return;
+    const keyToRemove = currentItem.key;
+    const newLength = displayItems.length - 1;
+    setSessionItems((prev) => prev.filter((item) => item.key !== keyToRemove));
+    setCurrentIndex((prev) => (newLength > 0 ? Math.min(prev, newLength - 1) : 0));
+    setIsFlipped(false);
+  }, [currentItem, displayItems.length]);
 
   const currentIsLearned = currentItem
     ? currentItem.source === "hsk"
@@ -280,7 +294,12 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
       {setupOpen && (
         <div className="border-t border-neutral-800 p-4 space-y-5">
           {/* Decks section */}
-          {store.decks.length > 0 && (
+          {!isLoggedIn ? (
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-neutral-800/50 border border-neutral-700/60">
+              <span className="text-lg">🎴</span>
+              <p className="text-gray-500 text-sm">Sign in to use your own cards & decks</p>
+            </div>
+          ) : store.decks.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">My Decks</p>
               <div className="flex flex-wrap gap-2">
@@ -560,30 +579,38 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
           </svg>
         </button>
 
-        <button
-          onClick={handleToggleLearned}
-          className={`flex-1 py-4 rounded-xl font-semibold transition-all border flex items-center justify-center gap-2 ${
-            currentIsLearned
-              ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/60 hover:bg-red-950/30 hover:text-red-400 hover:border-red-800/60"
-              : "bg-neutral-900 text-gray-400 border-neutral-800 hover:bg-emerald-950/30 hover:text-emerald-400 hover:border-emerald-800/60"
-          }`}
-        >
-          {currentIsLearned ? (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Learned ✓
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Mark Learned
-            </>
-          )}
-        </button>
+        <div className="flex-1 flex flex-col gap-2">
+          <button
+            onClick={handleToggleLearned}
+            className={`w-full py-3 rounded-xl font-semibold transition-all border flex items-center justify-center gap-2 ${
+              currentIsLearned
+                ? "bg-emerald-950/40 text-emerald-400 border-emerald-800/60 hover:bg-red-950/30 hover:text-red-400 hover:border-red-800/60"
+                : "bg-neutral-900 text-gray-400 border-neutral-800 hover:bg-emerald-950/30 hover:text-emerald-400 hover:border-emerald-800/60"
+            }`}
+          >
+            {currentIsLearned ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Learned ✓
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Mark Learned
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleRemoveFromSession}
+            className="w-full py-2 rounded-xl text-xs font-medium text-gray-600 hover:text-red-400 border border-neutral-800 hover:border-red-900/50 transition-all"
+          >
+            Remove from session
+          </button>
+        </div>
 
         <button
           onClick={goNext}

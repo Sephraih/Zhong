@@ -49,14 +49,18 @@ function buildHanziMap(words: VocabWord[]): Map<string, string> {
     }
   }
 
-  // Pass 2 — multi-char words, store the whole word for TTS context
+  // Pass 2 — multi-char words. Store only the slice up to and including
+  // the target character so TTS reads as few syllables as possible while
+  // still getting enough preceding context for polyphonic disambiguation.
+  // e.g. 行 at i=1 in 银行 → stores "银行" (reads "háng" correctly)
+  //      爸 at i=0 in 爸爸 → stores "爸"    (reads "bà", not "bàba")
   for (const word of words) {
     if (word.hanzi.length > 1) {
       const chars = word.hanzi.split("");
       for (let i = 0; i < chars.length; i++) {
         const syllable = extractPinyinForChar(word.pinyin, i, chars.length);
         if (syllable && !map.has(syllable)) {
-          map.set(syllable, word.hanzi);
+          map.set(syllable, word.hanzi.slice(0, i + 1));
         }
       }
     }
