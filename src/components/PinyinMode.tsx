@@ -6,7 +6,6 @@ import {
   TONES,
   TONE_DISPLAY,
   buildSyllable,
-  randomSyllable,
   type Tone,
 } from "../utils/pinyinChart";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
@@ -19,23 +18,10 @@ interface PinyinModeProps {
   onNavigateToSupport?: () => void;
 }
 
-const INITIAL_DISPLAY: Record<string, string> = { "": "zero" };
-
 function getInitialLabel(initial: string) {
   return initial === "" ? "∅" : initial;
 }
 
-// Build syllable → TTS target map from vocabulary.
-//
-// Single-char words are stored as-is: their pronunciation is already verified
-// by the vocabulary entry.
-//
-// For multi-char words we store the FULL WORD rather than the extracted
-// character, so the TTS engine gets enough context to disambiguate polyphonic
-// characters (e.g. 行 reads as "xíng" alone but "háng" inside 银行).
-//
-// Single-char entries take priority so they are never overwritten by a
-// multi-char entry with the same syllable.
 function buildHanziMap(words: VocabWord[]): Map<string, string> {
   const map = new Map<string, string>();
 
@@ -49,11 +35,9 @@ function buildHanziMap(words: VocabWord[]): Map<string, string> {
     }
   }
 
-  // Pass 2 — fill gaps from multi-char words, storing just the single
-  // character. This avoids multi-syllable playback at the cost of polyphonic
-  // accuracy for characters that only exist in compound words.
-  // Level-9 vocabulary entries are specifically added to cover any gaps
-  // so that each pinyin syllable maps to a single verified character.
+  // Pass 2 — fill gaps from multi-char words using just the single character.
+  // Level-9 vocabulary entries cover specific gaps so each pinyin syllable has
+  // a verified single-character TTS target.
   for (const word of words) {
     if (word.hanzi.length > 1) {
       const chars = word.hanzi.split("");
@@ -66,31 +50,24 @@ function buildHanziMap(words: VocabWord[]): Map<string, string> {
     }
   }
 
-  // Dev-mode coverage check: log which SYLLABLE_TABLE entries have no mapping.
-  // Open browser console on /pinyin to see gaps that need level-9 vocab entries.
-  if (import.meta.env.DEV) {
-    const stripTone = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
-    const coveredBases = new Set<string>();
-    for (const key of map.keys()) coveredBases.add(stripTone(key));
-    const missing: string[] = [];
-    for (const [initial, finals] of Object.entries(SYLLABLE_TABLE)) {
-      for (const fin of finals) {
-        const base = initial === "" ? fin : initial + fin;
-        if (!coveredBases.has(base)) missing.push(base);
-      }
-    }
-    if (missing.length) console.log("[PinyinMode] syllables with no vocab mapping:", missing.join(", "));
-    else console.log("[PinyinMode] all syllables covered ✓");
-  }
-
   return map;
 }
 
 function speakSyllable(syllable: string, hanziMap: Map<string, string>) {
-  // Speak the example hanzi character (not the tone-marked pinyin text),
-  // because zh-CN TTS reads pinyin as Latin letters without tones.
   const hanzi = hanziMap.get(syllable) ?? syllable;
   speakChinese(hanzi, 0.75);
+}
+
+// First tone (1–4) that has a hanzi entry for the given initial+final, or null.
+function firstAvailableTone(
+  initial: string,
+  final: string,
+  hanziMap: Map<string, string>
+): Tone | null {
+  for (const t of [1, 2, 3, 4] as Tone[]) {
+    if (hanziMap.has(buildSyllable(initial, final, t))) return t;
+  }
+  return null;
 }
 
 export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps) {
@@ -103,20 +80,43 @@ export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps)
 
   const finals = useMemo(() => SYLLABLE_TABLE[selectedInitial] ?? [], [selectedInitial]);
 
+  // All syllable-tone combos that have a hanzi entry — used by Random.
+  const availableSyllables = useMemo(() => {
+    const list: { initial: string; final: string; tone: Tone }[] = [];
+    for (const [init, fins] of Object.entries(SYLLABLE_TABLE)) {
+      for (const fin of fins) {
+        for (const t of [1, 2, 3, 4] as Tone[]) {
+          if (hanziMap.has(buildSyllable(init, fin, t))) {
+            list.push({ initial: init, final: fin, tone: t });
+          }
+        }
+      }
+    }
+    return list;
+  }, [hanziMap]);
+
   const handleInitialSelect = useCallback(
     (initial: string) => {
       setSelectedInitial(initial);
       const newFinals = SYLLABLE_TABLE[initial] ?? [];
-      setSelectedFinal(newFinals[0] ?? "");
-      setSelectedTone(1);
+      // Pick first final that has at least one valid tone
+      const fin =
+        newFinals.find((f) => firstAvailableTone(initial, f, hanziMap) !== null) ??
+        newFinals[0] ??
+        "";
+      setSelectedFinal(fin);
+      setSelectedTone(firstAvailableTone(initial, fin, hanziMap) ?? 1);
     },
-    []
+    [hanziMap]
   );
 
-  const handleFinalSelect = useCallback((final: string) => {
-    setSelectedFinal(final);
-    setSelectedTone(1);
-  }, []);
+  const handleFinalSelect = useCallback(
+    (final: string) => {
+      setSelectedFinal(final);
+      setSelectedTone(firstAvailableTone(selectedInitial, final, hanziMap) ?? 1);
+    },
+    [selectedInitial, hanziMap]
+  );
 
   const syllable = useMemo(
     () => buildSyllable(selectedInitial, selectedFinal, selectedTone),
@@ -128,14 +128,13 @@ export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps)
   }, [syllable, hanziMap]);
 
   const handleRandom = useCallback(() => {
-    const { initial, final, tone } = randomSyllable();
-    setSelectedInitial(initial);
-    setSelectedFinal(final);
-    setSelectedTone(tone);
-    // Build syllable from the new values (don't wait for state to settle)
-    // so speak() runs synchronously within the click gesture — required by Firefox.
-    speakSyllable(buildSyllable(initial, final, tone), hanziMap);
-  }, [hanziMap]);
+    if (availableSyllables.length === 0) return;
+    const pick = availableSyllables[Math.floor(Math.random() * availableSyllables.length)];
+    setSelectedInitial(pick.initial);
+    setSelectedFinal(pick.final);
+    setSelectedTone(pick.tone);
+    speakSyllable(buildSyllable(pick.initial, pick.final, pick.tone), hanziMap);
+  }, [availableSyllables, hanziMap]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -174,19 +173,26 @@ export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps)
           <div className="flex-1 bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Final</p>
             <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-              {finals.map((final) => (
-                <button
-                  key={final}
-                  onClick={() => handleFinalSelect(final)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-mono font-medium transition-all border ${
-                    selectedFinal === final
-                      ? "bg-red-600 border-red-500 text-white"
-                      : "bg-neutral-800 border-neutral-700 text-gray-300 hover:border-neutral-600 hover:text-white"
-                  }`}
-                >
-                  {final}
-                </button>
-              ))}
+              {finals.map((final) => {
+                const available = firstAvailableTone(selectedInitial, final, hanziMap) !== null;
+                return (
+                  <button
+                    key={final}
+                    onClick={() => handleFinalSelect(final)}
+                    disabled={!available}
+                    title={available ? undefined : "No standard Mandarin syllable"}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-mono font-medium transition-all border ${
+                      selectedFinal === final
+                        ? "bg-red-600 border-red-500 text-white"
+                        : available
+                          ? "bg-neutral-800 border-neutral-700 text-gray-300 hover:border-neutral-600 hover:text-white"
+                          : "bg-neutral-800/40 border-neutral-800 text-gray-600 cursor-not-allowed opacity-40"
+                    }`}
+                  >
+                    {final}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -194,19 +200,26 @@ export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps)
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tone</p>
             <div className="flex gap-2">
-              {TONES.map((tone, i) => (
-                <button
-                  key={tone}
-                  onClick={() => setSelectedTone(tone)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${
-                    selectedTone === tone
-                      ? "bg-red-600 border-red-500 text-white"
-                      : "bg-neutral-800 border-neutral-700 text-gray-300 hover:border-neutral-600 hover:text-white"
-                  }`}
-                >
-                  {TONE_DISPLAY[i]}
-                </button>
-              ))}
+              {TONES.map((tone, i) => {
+                const available = hanziMap.has(buildSyllable(selectedInitial, selectedFinal, tone));
+                return (
+                  <button
+                    key={tone}
+                    onClick={() => available && setSelectedTone(tone)}
+                    disabled={!available}
+                    title={available ? undefined : "No standard Mandarin syllable"}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all border ${
+                      selectedTone === tone
+                        ? "bg-red-600 border-red-500 text-white"
+                        : available
+                          ? "bg-neutral-800 border-neutral-700 text-gray-300 hover:border-neutral-600 hover:text-white"
+                          : "bg-neutral-800/40 border-neutral-800 text-gray-600 cursor-not-allowed opacity-40"
+                    }`}
+                  >
+                    {TONE_DISPLAY[i]}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
