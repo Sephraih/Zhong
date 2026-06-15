@@ -24,7 +24,7 @@ interface EnrichedToken extends Token {
   vocabMatches: VocabWord[];
 }
 
-const RATES = [0.75, 1, 1.25] as const;
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 type Rate = (typeof RATES)[number];
 const LONG_PRESS_MS = 480;
 
@@ -173,8 +173,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
   const [tokens, setTokens] = useState<EnrichedToken[]>(_persistedTokens);
   const [analyzed, setAnalyzed] = useState(_persistedTokens.length > 0);
   const [selectedToken, setSelectedToken] = useState<EnrichedToken | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [playState, setPlayState] = useState<"idle" | "playing" | "paused">("idle");
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [rate, setRate] = useState<Rate>(1);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -235,13 +234,17 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
     slice.forEach((t) => { for (let i = 0; i < t.text.length; i++) charMap.push(t.wordId); });
     speakChinese(
       slice.map((t) => t.text).join(""), rate,
-      () => { setIsPlaying(false); setPlayingWordId(null); },
-      () => setIsPlaying(true),
+      () => { setPlayState("idle"); setPlayingWordId(null); },
+      () => setPlayState("playing"),
       (ci) => { const id = charMap[ci]; if (id !== undefined) setPlayingWordId(id); },
     );
   }, [tokens, rate]);
 
-  const handlePlayAll = () => speakFrom(null);
+  const handlePlayAll = () => {
+    pausedAtRef.current = null;
+    setPlayState("playing");
+    speakFrom(null);
+  };
 
   const handlePause = () => {
     // cancel() stops audio immediately; pause() waits for the current audio
@@ -249,25 +252,27 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
     // so Resume can restart from the same position.
     pausedAtRef.current = playingWordId;
     window.speechSynthesis.cancel();
-    setIsPaused(true);
+    setPlayState("paused");
   };
 
   const handleResume = () => {
-    setIsPaused(false);
-    speakFrom(pausedAtRef.current);
+    const resumeFrom = pausedAtRef.current;
     pausedAtRef.current = null;
+    setPlayState("playing");
+    speakFrom(resumeFrom);
   };
 
   const handleStop = () => {
     pausedAtRef.current = null;
     window.speechSynthesis.cancel();
-    setIsPlaying(false);
-    setIsPaused(false);
+    setPlayState("idle");
     setPlayingWordId(null);
   };
 
   const handleReadFromHere = useCallback(() => {
     if (!selectedToken) return;
+    pausedAtRef.current = null;
+    setPlayState("playing");
     speakFrom(selectedToken.wordId);
     if (isMobile) setShowDrawer(false);
   }, [selectedToken, speakFrom, isMobile]);
@@ -383,7 +388,7 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
             {/* TTS controls */}
             {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} />}
             <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 mb-3 flex items-center gap-2 flex-wrap">
-              {!isPlaying ? (
+              {playState === "idle" && (
                 <button
                   onClick={handlePlayAll}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
@@ -391,54 +396,43 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onNavigateToSupport
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                   Play All
                 </button>
-              ) : isPaused ? (
-                <>
-                  <button
-                    onClick={handleResume}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    Resume
-                  </button>
-                  <button
-                    onClick={handleStop}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
-                    Stop
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handlePause}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="5" y="5" width="4" height="14" /><rect x="15" y="5" width="4" height="14" /></svg>
-                    Pause
-                  </button>
-                  <button
-                    onClick={handleStop}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
-                    Stop
-                  </button>
-                </>
               )}
-              <div className="flex gap-1">
+              {playState === "playing" && (
+                <button
+                  onClick={handlePause}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="5" y="5" width="4" height="14" /><rect x="15" y="5" width="4" height="14" /></svg>
+                  Pause
+                </button>
+              )}
+              {playState === "paused" && (
+                <button
+                  onClick={handleResume}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  Resume
+                </button>
+              )}
+              {playState !== "idle" && (
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" /></svg>
+                  Stop
+                </button>
+              )}
+              <select
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value) as Rate)}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-neutral-800 border-neutral-700 text-white focus:outline-none focus:ring-1 focus:ring-red-600/40 cursor-pointer"
+              >
                 {RATES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRate(r)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                      rate === r ? "bg-neutral-700 border-neutral-600 text-white" : "bg-transparent border-neutral-800 text-gray-500 hover:text-gray-300"
-                    }`}
-                  >
-                    {r}×
-                  </button>
+                  <option key={r} value={r}>{r}×</option>
                 ))}
-              </div>
+              </select>
               <div className="ml-auto">
                 <button
                   onClick={() => { setAnalyzed(false); setSelectedToken(null); _persistedTokens = []; }}

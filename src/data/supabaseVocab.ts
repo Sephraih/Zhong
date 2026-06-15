@@ -4,7 +4,7 @@ import { FALLBACK_DATA } from "./fallbackData";
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "hanyu_supabase_vocab_cache_mv_v3"; // bumped version for HSK 5+6
+const CACHE_KEY = "hanyu_supabase_vocab_cache_mv_v4"; // v4: include level 9 supplementary entries
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export interface CachedVocab {
@@ -165,7 +165,7 @@ function getCategory(wordType: string | null, english: string, hskLevel: number)
 
 export function buildFallbackVocabulary(): VocabWord[] {
   return FALLBACK_DATA.map((item, index) => {
-    const hskLevel = (item.hsk_level >= 1 && item.hsk_level <= 6 ? item.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6;
+    const hskLevel = ([1, 2, 3, 4, 5, 6, 9].includes(item.hsk_level) ? item.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6 | 9;
     const examples = item.examples.slice(0, 3).map((ex) => ({
       chinese: ex.chinese,
       pinyinWords: buildPinyinWords(ex.chinese, ex.pinyin),
@@ -264,7 +264,7 @@ export async function fetchVocabularyFromSupabase(
       const { data, error } = await supabase
         .from("hsk_words_with_examples")
         .select("word_id, hanzi, pinyin, english, hsk_level, word_type, examples")
-        .in("hsk_level", [1, 2, 3, 4, 5, 6])
+        .in("hsk_level", [1, 2, 3, 4, 5, 6, 9])
         .order("hsk_level", { ascending: true })
         .order("word_id", { ascending: true })
         .range(from, to);
@@ -285,7 +285,7 @@ export async function fetchVocabularyFromSupabase(
     }
 
     const words: VocabWord[] = rows.map((row) => {
-      const hskLevel = (row.hsk_level >= 1 && row.hsk_level <= 6 ? row.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6;
+      const hskLevel = ([1, 2, 3, 4, 5, 6, 9].includes(row.hsk_level) ? row.hsk_level : 1) as 1 | 2 | 3 | 4 | 5 | 6 | 9;
       const rawExamples = Array.isArray(row.examples) ? row.examples : [];
       const examples = rawExamples.slice(0, 3).map((ex) => ({
         chinese: ex.hanzi,

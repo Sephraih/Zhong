@@ -25,18 +25,43 @@ function getInitialLabel(initial: string) {
   return initial === "" ? "∅" : initial;
 }
 
-// Build syllable → example hanzi map from vocabulary
+// Build syllable → TTS target map from vocabulary.
+//
+// Single-char words are stored as-is: their pronunciation is already verified
+// by the vocabulary entry.
+//
+// For multi-char words we store the FULL WORD rather than the extracted
+// character, so the TTS engine gets enough context to disambiguate polyphonic
+// characters (e.g. 行 reads as "xíng" alone but "háng" inside 银行).
+//
+// Single-char entries take priority so they are never overwritten by a
+// multi-char entry with the same syllable.
 function buildHanziMap(words: VocabWord[]): Map<string, string> {
   const map = new Map<string, string>();
+
+  // Pass 1 — single-char words (highest confidence)
   for (const word of words) {
-    const chars = word.hanzi.split("");
-    for (let i = 0; i < chars.length; i++) {
-      const syllable = extractPinyinForChar(word.pinyin, i, chars.length);
+    if (word.hanzi.length === 1) {
+      const syllable = extractPinyinForChar(word.pinyin, 0, 1);
       if (syllable && !map.has(syllable)) {
-        map.set(syllable, chars[i]);
+        map.set(syllable, word.hanzi);
       }
     }
   }
+
+  // Pass 2 — multi-char words, store the whole word for TTS context
+  for (const word of words) {
+    if (word.hanzi.length > 1) {
+      const chars = word.hanzi.split("");
+      for (let i = 0; i < chars.length; i++) {
+        const syllable = extractPinyinForChar(word.pinyin, i, chars.length);
+        if (syllable && !map.has(syllable)) {
+          map.set(syllable, word.hanzi);
+        }
+      }
+    }
+  }
+
   return map;
 }
 

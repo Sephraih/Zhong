@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 interface SupportPageProps {
@@ -6,7 +6,7 @@ interface SupportPageProps {
   initialOpenFaqSlug?: string;
 }
 
-const FAQ_ITEMS: { slug: string; q: string; a: string }[] = [
+const FAQ_ITEMS: { slug: string; q: string; a: string; content?: ReactNode }[] = [
   {
     slug: "reset-password",
     q: "How do I reset my password?",
@@ -35,7 +35,54 @@ const FAQ_ITEMS: { slug: string; q: string; a: string }[] = [
   {
     slug: "tts-voice",
     q: "The pronunciation (audio) feature isn't working / I hear no sound",
-    a: "HamHao uses your device's built-in text-to-speech (TTS) engine to read Chinese text aloud. On Windows, the built-in voices only cover English by default — you need to install a Chinese voice pack separately. To do this: open Windows Settings → Time & language → Speech → Manage voices → Add voices, then search for and install \"Chinese (Simplified, China)\". Once installed, restart your browser and the audio should work. On macOS and iOS, Chinese voices are included by default. On Android, they are typically pre-installed as well but can be added via Settings → General management → Language and input → Text-to-speech.",
+    a: "",
+    content: (
+      <div className="pt-3 space-y-4 text-sm text-gray-400 leading-relaxed">
+        <p>
+          HamHao uses your device's built-in text-to-speech (TTS) engine to read Chinese text
+          aloud. On Windows, only English voices are installed by default — you need to add a
+          Chinese voice pack. There are two ways to do this:
+        </p>
+
+        <div className="bg-neutral-800/60 rounded-xl p-4 space-y-2">
+          <p className="text-gray-200 font-medium">Option 1 — Speech Settings</p>
+          <p>
+            Open <span className="text-gray-200">Settings → Time &amp; language → Speech → Manage voices → Add voices</span>,
+            then search for and install <span className="text-gray-200">Chinese (Simplified, China)</span>.
+          </p>
+        </div>
+
+        <div className="bg-neutral-800/60 rounded-xl p-4 space-y-2">
+          <p className="text-gray-200 font-medium">Option 2 — Language &amp; Region <span className="text-gray-500 font-normal">(if Option 1 didn't work)</span></p>
+          <p>
+            Open <span className="text-gray-200">Settings → Time &amp; language → Language &amp; region → Preferred languages → Add a language</span>,
+            then search for and install <span className="text-gray-200">Chinese (Simplified, Mainland China)</span>.
+          </p>
+          <p>Once the language pack is installed, the Chinese TTS voice becomes available automatically.</p>
+        </div>
+
+        <p>After installing via either method, restart your browser and the audio should work.</p>
+
+        <div className="border-t border-neutral-700/60 pt-4 space-y-3">
+          <div>
+            <p className="text-gray-200 font-medium mb-1">macOS &amp; iOS</p>
+            <p>
+              Chinese voices are included by default. If audio isn't working, go to{" "}
+              <span className="text-gray-200">System Settings → Accessibility → Spoken Content → System Voice</span>{" "}
+              and confirm a Chinese voice is available.
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-200 font-medium mb-1">Android</p>
+            <p>
+              Chinese TTS is typically pre-installed. If it's missing, go to{" "}
+              <span className="text-gray-200">Settings → General management → Language and input → Text-to-speech</span>{" "}
+              and install the Google TTS Chinese language data.
+            </p>
+          </div>
+        </div>
+      </div>
+    ),
   },
   {
     slug: "billing",
@@ -120,7 +167,7 @@ export function SupportPage({ onBack, initialOpenFaqSlug }: SupportPageProps) {
               </button>
               {openFaq === i && (
                 <div className="px-5 pb-4 text-gray-400 text-sm leading-relaxed border-t border-neutral-800/60">
-                  <p className="pt-3">{item.a}</p>
+                  {item.content ?? <p className="pt-3">{item.a}</p>}
                 </div>
               )}
             </div>

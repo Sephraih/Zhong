@@ -240,16 +240,18 @@ function AppContent() {
   // Apply access control to the vocabulary actually shown in the UI.
   // We keep the fetched vocabulary intact, but derive a "visible" list.
   const visibleVocabulary = useMemo(() => {
+    // Level 9 is supplementary (TTS disambiguation only) — never shown in UI
+    const uiVocab = vocabulary.filter((w) => w.hskLevel !== 9);
     // Anonymous: only HSK 1, top 200
     if (!accessInfo.isLoggedIn) {
-      return vocabulary.filter((w) => w.hskLevel === 1).slice(0, 200);
+      return uiVocab.filter((w) => w.hskLevel === 1).slice(0, 200);
     }
-    // Premium: everything we have
+    // Premium: everything we have (levels 1–6)
     if (accessInfo.accountTier === "premium") {
-      return vocabulary;
+      return uiVocab;
     }
     // Free logged-in: HSK 1 only
-    return vocabulary.filter((w) => w.hskLevel === 1);
+    return uiVocab.filter((w) => w.hskLevel === 1);
   }, [vocabulary, accessInfo]);
 
   const hasAccessToLevel = useCallback(
