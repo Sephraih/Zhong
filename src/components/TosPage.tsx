@@ -73,32 +73,43 @@ export function TosPage({ onBack }: TosPageProps) {
 
         <h3 className="text-lg font-semibold text-white mt-6 mb-3">Pricing:</h3>
         <ul className="list-disc pl-6 text-gray-300 space-y-2 mb-4">
-          <li>Additional HSK levels and Premium access are available through one-time purchases.</li>
-          <li>Payment is processed securely by Stripe. We do not store your payment card details.</li>
-          <li>Prices are listed on the Service and may change with notice.</li>
-          <li>All purchases grant permanent access to the purchased content.</li>
+          <li>Additional HSK levels and Premium access are available through one-time purchases. All purchases grant permanent access to the purchased content.</li>
+          <li>
+            <strong>In-app purchases (iOS/Android):</strong> processed by Apple (App Store) or
+            Google (Google Play) under their respective payment terms. We do not handle
+            payment directly for in-app purchases.
+          </li>
+          <li>
+            <strong>Web purchases (hamhao.com):</strong> processed securely by Stripe. We do
+            not store your payment card details. Prices are listed on the Service and may
+            change with notice.
+          </li>
         </ul>
 
         <h3 className="text-lg font-semibold text-white mt-6 mb-3">Refunds:</h3>
         <ul className="list-disc pl-6 text-gray-300 space-y-2 mb-4">
           <li>
-            If you are unsatisfied with the Service, you may request a full
-            refund within <strong>7 days</strong> of your purchase by contacting us at{" "}
+            <strong>In-app purchases (iOS/Android):</strong> refund requests must be submitted
+            directly to Apple or Google through their standard refund process. We are unable
+            to process refunds for in-app purchases directly.
+          </li>
+          <li>
+            <strong>Web purchases (hamhao.com):</strong> if you are unsatisfied, you may
+            request a full refund within <strong>7 days</strong> of your purchase by contacting{" "}
             <a href="mailto:support@hamhao.com" className="text-red-400 hover:text-red-300">
               support@hamhao.com
-            </a>.
+            </a>. After the 7-day period, refunds are at our discretion and typically
+            processed within 5–10 business days.
           </li>
-          <li>After the 7-day period, refunds are provided at our discretion.</li>
-          <li>Refund requests are typically processed within 5–10 business days.</li>
         </ul>
 
-        <h3 className="text-lg font-semibold text-white mt-6 mb-3">EU right of withdrawal:</h3>
+        <h3 className="text-lg font-semibold text-white mt-6 mb-3">EU right of withdrawal (web purchases):</h3>
         <p className="text-gray-300">
-          If you are in the EU/EEA, you have a 14-day right of withdrawal
-          from the date of purchase. By using the premium features
-          immediately upon purchase, you acknowledge and agree that you
-          waive this right of withdrawal once the digital content has been
-          accessed.
+          If you are in the EU/EEA and purchased via hamhao.com, you have a 14-day right
+          of withdrawal from the date of purchase. By using the premium features immediately
+          upon purchase, you acknowledge and agree that you waive this right once the digital
+          content has been accessed. For in-app purchases, Apple's and Google's own terms
+          govern withdrawal rights.
         </p>
 
         <hr className="border-neutral-700 my-8" />

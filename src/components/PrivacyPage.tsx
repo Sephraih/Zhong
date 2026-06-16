@@ -46,8 +46,10 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
             an account
           </li>
           <li>
-            <strong>Payment information:</strong> processed securely by Stripe; we do not
-            store your credit card number, only a reference to your Stripe customer ID
+            <strong>Payment information:</strong> web purchases are processed by Stripe; we
+            do not store your credit card number, only a reference to your Stripe customer ID.
+            In-app purchases (iOS/Android) are processed directly by Apple or Google — we do
+            not receive your payment details for these transactions.
           </li>
         </ul>
 
@@ -107,10 +109,28 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
               </tr>
               <tr>
                 <td className="py-2 pr-4">Stripe</td>
-                <td className="py-2 pr-4">Payment processing</td>
+                <td className="py-2 pr-4">Payment processing (web)</td>
                 <td className="py-2">
                   <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300">
                     stripe.com/privacy
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4">Apple App Store</td>
+                <td className="py-2 pr-4">In-app purchases (iOS)</td>
+                <td className="py-2">
+                  <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300">
+                    apple.com/legal/privacy
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4">Google Play</td>
+                <td className="py-2 pr-4">In-app purchases (Android)</td>
+                <td className="py-2">
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300">
+                    policies.google.com/privacy
                   </a>
                 </td>
               </tr>
