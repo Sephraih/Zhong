@@ -68,8 +68,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { user } = authResult;
 
-  // Verify current password for sensitive actions
-  if (['change-email', 'change-password', 'delete-account'].includes(action)) {
+  // Verify current password for sensitive actions (skipped for OAuth users on delete)
+  const isOAuthUser = ['apple', 'google'].includes(user.app_metadata?.provider ?? '') ||
+    (user.identities ?? []).some((id: any) => ['apple', 'google'].includes(id.provider));
+  const requiresPassword = ['change-email', 'change-password'].includes(action) ||
+    (action === 'delete-account' && !isOAuthUser);
+
+  if (requiresPassword) {
     if (!currentPassword) {
       return res.status(400).json({ error: 'Current password is required' });
     }
