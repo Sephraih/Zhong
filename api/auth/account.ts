@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { action, currentPassword, newEmail, newPassword } = req.body || {};
+  const { action, currentPassword, newPassword } = req.body || {};
 
   if (!action) {
     return res.status(400).json({ error: 'Action is required' });
@@ -68,11 +68,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { user } = authResult;
 
-  // Verify current password for sensitive actions (skipped for OAuth users on delete)
-  const isOAuthUser = ['apple', 'google'].includes(user.app_metadata?.provider ?? '') ||
-    (user.identities ?? []).some((id: any) => ['apple', 'google'].includes(id.provider));
-  const requiresPassword = ['change-email', 'change-password'].includes(action) ||
-    (action === 'delete-account' && !isOAuthUser);
+  // Verify current password for sensitive actions. For delete-account, the question isn't
+  // "did they sign in via Apple/Google" but "does this account currently have a password at
+  // all" — an OAuth account that pre-existed before the identity was attached, or that has
+  // completed the "Get Web Access" link flow, has a real web account/password that deletion
+  // would also destroy, so it's gated the same as a plain email/password account.
+  const oauthIdentity = (user.identities ?? []).find((id: any) => ['apple', 'google'].includes(id.provider));
+  const isOAuthUser = !!oauthIdentity || ['apple', 'google'].includes(user.app_metadata?.provider ?? '');
+
+  let requiresPassword = action === 'change-password';
+  if (action === 'delete-account') {
+    if (!isOAuthUser) {
+      requiresPassword = true;
+    } else {
+      const accountCreatedMs = new Date(user.created_at).getTime();
+      const identityCreatedMs = oauthIdentity?.created_at
+        ? new Date(oauthIdentity.created_at).getTime()
+        : accountCreatedMs;
+      const isPreExisting = accountCreatedMs < identityCreatedMs - 60_000;
+      if (isPreExisting) {
+        requiresPassword = true;
+      } else {
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('web_linked')
+          .eq('id', user.id)
+          .single();
+        requiresPassword = profile?.web_linked === true;
+      }
+    }
+  }
 
   if (requiresPassword) {
     if (!currentPassword) {
@@ -92,52 +117,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     switch (action) {
-      case 'change-email': {
-        if (!newEmail) {
-          return res.status(400).json({ error: 'New email is required' });
-        }
-
-        // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(newEmail)) {
-          return res.status(400).json({ error: 'Invalid email format' });
-        }
-
-        // Check if same as current
-        if (newEmail.toLowerCase() === user.email?.toLowerCase()) {
-          return res.status(400).json({ error: 'New email must be different from current email' });
-        }
-
-        // Check if email is already in use
-        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const emailInUse = existingUsers?.users?.some(
-          u => u.email?.toLowerCase() === newEmail.toLowerCase() && u.id !== user.id
-        );
-        if (emailInUse) {
-          return res.status(400).json({ error: 'This email is already in use' });
-        }
-
-        // Admin-driven, immediate change — current-password check above is the only proof of
-        // identity; there's no email-sending integration in this codebase to verify ownership of
-        // the new address first (generateLink only produces a link, it never delivers one).
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-          email: newEmail,
-        });
-
-        if (updateError) {
-          console.error('Error updating email:', updateError);
-          return res.status(400).json({
-            error: updateError.message || 'Failed to update email'
-          });
-        }
-
-        console.log('Email updated for user:', user.id);
-
-        return res.json({
-          success: true,
-          message: 'Email updated.',
-        });
-      }
+      // change-email is handled client-side now (see Zhong/src/contexts/AuthContext.tsx and
+      // mobile/contexts/AuthContext.tsx) — it goes through supabase.auth.updateUser() on the
+      // user's own session so Supabase's built-in secure email change confirmation actually
+      // fires, which this admin-driven endpoint has no way to trigger.
 
       case 'change-password': {
         if (!newPassword) {

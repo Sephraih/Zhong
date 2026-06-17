@@ -509,15 +509,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Goes through the Supabase client SDK directly (not our backend) on purpose: signInWithPassword
+  // first both verifies the current password and gives Supabase a session to act on, and
+  // updateUser({email}) from that session triggers Supabase's own built-in secure email change
+  // confirmation (the same mechanism signup confirmation uses) — sent to the new address
+  // automatically, no custom email-sending integration needed. The address doesn't actually
+  // change until that link is clicked.
   const changeEmail = async (currentPassword: string, newEmail: string) => {
     if (getCachedIsSandboxed()) {
       setError("Email change unavailable in preview mode");
       return;
     }
-
-    const token = safeLocalStorageGet("hanyu_auth_token");
-    if (!token) {
+    if (!user?.email) {
       setError("Please sign in to change your email");
+      return;
+    }
+    if (!supabase) {
+      setError("Email change is currently unavailable");
       return;
     }
 
@@ -525,22 +533,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await apiFetch(`/api/auth/account`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action: "change-email", currentPassword, newEmail }),
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
       });
+      if (signInErr) throw new Error("Current password is incorrect");
 
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to change email");
-      }
+      const { error: updateErr } = await supabase.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      );
+      if (updateErr) throw new Error(updateErr.message);
 
-      // Refresh user data
-      await fetchUser(token);
+      await supabase.auth.signOut().catch(() => {});
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to change email";
       setError(message);
