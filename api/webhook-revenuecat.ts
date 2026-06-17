@@ -99,17 +99,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (type) {
       case 'INITIAL_PURCHASE':
       case 'NON_RENEWING_PURCHASE': {
-        // Best-effort audit record
-        await supabase.from('purchases').insert({
-          user_id: userId,
-          product_type: 'premium',
-          hsk_level: null,
-          stripe_session_id: `revenuecat:${transactionId ?? 'unknown'}`,
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).then(({ error }) => { if (error) console.warn('⚠️ [RC] purchases insert warning:', error.message); });
+        // Best-effort audit record — skip if a webhook retry already inserted this transaction.
+        const sessionId = `revenuecat:${transactionId ?? 'unknown'}`;
+        const { data: existing } = await supabase
+          .from('purchases')
+          .select('id')
+          .eq('stripe_session_id', sessionId)
+          .maybeSingle();
+        if (!existing) {
+          await supabase.from('purchases').insert({
+            user_id: userId,
+            product_type: 'premium',
+            hsk_level: null,
+            stripe_session_id: sessionId,
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).then(({ error }) => { if (error) console.warn('⚠️ [RC] purchases insert warning:', error.message); });
+        }
 
         await setUserPremium(supabase, userId);
         break;
