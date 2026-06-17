@@ -347,11 +347,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                     try {
                       setEmailBusy(true);
                       await changeEmail(emailPassword, newEmail);
-                      setEmailSuccess(
-                        "A confirmation link has been sent to your new email address. " +
-                        "Please click the link to complete the change. Your current email " +
-                        "will remain active until you confirm."
-                      );
+                      setEmailSuccess("Email updated.");
                       setNewEmail("");
                       setEmailPassword("");
                     } catch (err) {

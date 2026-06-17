@@ -48,8 +48,9 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
           <li>
             <strong>Payment information:</strong> web purchases are processed by Stripe; we
             do not store your credit card number, only a reference to your Stripe customer ID.
-            In-app purchases (iOS/Android) are processed directly by Apple or Google — we do
-            not receive your payment details for these transactions.
+            In-app purchases (iOS/Android) are processed directly by Apple or Google and managed
+            via our subscription platform RevenueCat — we do not receive your payment details
+            for these transactions.
           </li>
         </ul>
 
@@ -113,6 +114,15 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
                 <td className="py-2">
                   <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300">
                     stripe.com/privacy
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4">RevenueCat</td>
+                <td className="py-2 pr-4">In-app purchase management (iOS/Android)</td>
+                <td className="py-2">
+                  <a href="https://www.revenuecat.com/privacy/" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300">
+                    revenuecat.com/privacy
                   </a>
                 </td>
               </tr>
@@ -254,7 +264,7 @@ export function PrivacyPage({ onBack }: PrivacyPageProps) {
         <ul className="list-disc pl-6 text-gray-300 space-y-2 mb-4">
           <li>All connections use HTTPS/TLS encryption</li>
           <li>Passwords are hashed using bcrypt (handled by Supabase Auth)</li>
-          <li>Payment data is handled entirely by Stripe (PCI-DSS compliant)</li>
+          <li>Web payment data is handled entirely by Stripe (PCI-DSS compliant); in-app payment data is handled entirely by Apple/Google and RevenueCat</li>
           <li>Database access is protected by Row Level Security policies</li>
           <li>Secret keys are stored in server-side environment variables only</li>
         </ul>

@@ -117,34 +117,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'This email is already in use' });
         }
 
-        // Determine the redirect URL for email confirmation
-        const baseUrl = process.env.FRONTEND_URL || 'https://hamhao.com';
-        const redirectTo = `${baseUrl}/auth/callback`;
-
-        // Generate a confirmation link for the email change
-        // This will send a confirmation email to the NEW email address
-        const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'email_change_new',
-          email: user.email!,
-          newEmail: newEmail,
-          options: {
-            redirectTo: redirectTo,
-          },
+        // Admin-driven, immediate change — current-password check above is the only proof of
+        // identity; there's no email-sending integration in this codebase to verify ownership of
+        // the new address first (generateLink only produces a link, it never delivers one).
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+          email: newEmail,
         });
 
-        if (linkError) {
-          console.error('Error generating email change link:', linkError);
-          return res.status(400).json({ 
-            error: linkError.message || 'Failed to initiate email change' 
+        if (updateError) {
+          console.error('Error updating email:', updateError);
+          return res.status(400).json({
+            error: updateError.message || 'Failed to update email'
           });
         }
 
-        console.log('Email change initiated for user:', user.id);
-        
-        return res.json({ 
-          success: true, 
-          message: 'A confirmation link has been sent to your new email address. Please click the link to confirm the change. Your current email will remain active until you confirm.',
-          requiresConfirmation: true,
+        console.log('Email updated for user:', user.id);
+
+        return res.json({
+          success: true,
+          message: 'Email updated.',
         });
       }
 
