@@ -65,19 +65,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     app_user_id: userId,
     product_id: productId,
     transaction_id: transactionId,
-  } = event as Record<string, string>;
+    transferred_to: transferredTo,
+  } = event as Record<string, unknown> as { type: string; app_user_id?: string; product_id?: string; transaction_id?: string; transferred_to?: string[] };
 
   console.log(`📩 [RC] Event: ${type}, user: ${userId}, product: ${productId}`);
+
+  const supabase = getSupabaseClient();
+
+  // Transfers merge an anonymous user's entitlement into a newly identified app_user_id
+  // (e.g. Purchases.logIn after an anonymous purchase) and carry no product_id, so they
+  // must bypass the product_id gate below.
+  if (type === 'TRANSFER') {
+    const targetUserId = transferredTo?.[0] ?? userId;
+    if (!targetUserId) return res.status(400).json({ error: 'Missing transfer target' });
+    try {
+      await setUserPremium(supabase, targetUserId);
+      return res.status(200).json({ received: true });
+    } catch (err) {
+      console.error('❌ [RC] Webhook error:', err);
+      return res.status(500).json({ error: 'Internal error' });
+    }
+  }
 
   if (!userId) return res.status(400).json({ error: 'Missing app_user_id' });
 
   const PREMIUM_PRODUCT_IDS = ['premium', 'hamhao_premium'];
-  if (!PREMIUM_PRODUCT_IDS.includes(productId)) {
+  if (!productId || !PREMIUM_PRODUCT_IDS.includes(productId)) {
     console.warn(`⚠️ [RC] Unrecognised product_id: ${productId} — ignoring`);
     return res.status(200).json({ received: true });
   }
-
-  const supabase = getSupabaseClient();
 
   try {
     switch (type) {
