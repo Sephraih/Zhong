@@ -68,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (accountCreatedMs < identityCreatedMs - PRE_EXISTING_ACCOUNT_THRESHOLD_MS) {
       return res.status(409).json({
         error: 'This account already has web access. Sign in at hamhao.com with your existing email and password.',
+        code: 'PRE_EXISTING_ACCOUNT',
       });
     }
   }
