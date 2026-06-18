@@ -33,6 +33,10 @@ function parseParams() {
     type: get("type"),
     // Email change confirmation may include these
     newEmail: get("new_email"),
+    // Present when a provider's OAuth consent screen was cancelled/denied, or on other OAuth
+    // failures — Supabase/the provider append these instead of a code.
+    error: get("error"),
+    errorDescription: get("error_description"),
   };
 }
 
@@ -41,22 +45,42 @@ export function AuthCallbackPage() {
   const [message, setMessage] = useState<string>("Processing your request…");
   const [isEmailChange, setIsEmailChange] = useState(false);
   const [isPasswordReset, setIsPasswordReset] = useState(false);
+  const [isOAuthFlow, setIsOAuthFlow] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       try {
-        const { code, accessToken, tokenHash, type } = parseParams();
+        const { code, accessToken, tokenHash, type, error: oauthError, errorDescription } = parseParams();
 
-        // Determine flow type
+        // Determine flow type. A plain `code` (or an `error`) with neither `type` nor `tokenHash`
+        // is what an OAuth (Apple/Google) return looks like — email confirm/recovery/email-change
+        // always carry a `type`.
         const isEmailChangeFlow = type === "email_change" || type === "email";
         const isRecoveryFlow = type === "recovery";
+        const isOAuthFlowLocal = !type && !tokenHash;
         setIsEmailChange(isEmailChangeFlow);
         setIsPasswordReset(isRecoveryFlow);
+        setIsOAuthFlow(isOAuthFlowLocal);
+
+        // The provider's consent screen was cancelled/denied, or some other OAuth failure —
+        // there's nothing to exchange, show this directly instead of falling through to the
+        // generic "missing code" message below.
+        if (oauthError) {
+          setStatus("error");
+          setMessage(
+            errorDescription
+              ? decodeURIComponent(errorDescription.replace(/\+/g, " "))
+              : "Sign-in was cancelled."
+          );
+          return;
+        }
 
         if (isRecoveryFlow) {
           setMessage("Verifying your reset link…");
         } else if (isEmailChangeFlow) {
           setMessage("Confirming your new email address…");
+        } else if (isOAuthFlowLocal) {
+          setMessage("Signing you in…");
         } else {
           setMessage("Confirming your email…");
         }
@@ -180,7 +204,7 @@ export function AuthCallbackPage() {
 
         sessionStorage.setItem("hamhao_email_confirmed", "1");
         setStatus("done");
-        setMessage("Email confirmed! Redirecting to your profile…");
+        setMessage(isOAuthFlowLocal ? "Signed in! Redirecting to your profile…" : "Email confirmed! Redirecting to your profile…");
         setTimeout(() => window.location.assign("/profile"), 800);
       } catch (e) {
         setStatus("error");
@@ -194,10 +218,10 @@ export function AuthCallbackPage() {
   return (
     <div className="max-w-xl mx-auto py-20 text-center">
       <div className="text-5xl mb-4">
-        {status === "error" ? "⚠️" : status === "done" ? "✅" : "📧"}
+        {status === "error" ? "⚠️" : status === "done" ? "✅" : isOAuthFlow ? "🔐" : "📧"}
       </div>
       <h2 className="text-2xl font-bold text-white mb-2">
-        {isPasswordReset ? "Password Reset" : isEmailChange ? "Email Change Confirmation" : "Email Confirmation"}
+        {isPasswordReset ? "Password Reset" : isEmailChange ? "Email Change Confirmation" : isOAuthFlow ? "Sign In" : "Email Confirmation"}
       </h2>
       <p className="text-gray-400 mb-8">{message}</p>
 

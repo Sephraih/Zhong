@@ -21,8 +21,12 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [formHint, setFormHint] = useState<string | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"apple" | "google" | null>(null);
 
-  const { login, signup, sendPasswordResetEmail, setNewPassword, refreshAuth, error, clearError } = useAuth();
+  const {
+    login, signup, signInWithApple, signInWithGoogle,
+    sendPasswordResetEmail, setNewPassword, refreshAuth, error, clearError,
+  } = useAuth();
 
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
   const turnstileEnabled = Boolean(turnstileSiteKey);
@@ -86,6 +90,19 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
       // Error is handled by context
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOAuth = async (provider: "apple" | "google") => {
+    clearError();
+    setFormHint(null);
+    setOauthLoading(provider);
+    try {
+      await (provider === "apple" ? signInWithApple() : signInWithGoogle());
+      // On success this never resolves before the browser navigates away.
+    } catch {
+      // Error is handled by context
+      setOauthLoading(null);
     }
   };
 
@@ -159,6 +176,41 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
             <div className="mb-4 p-3 bg-neutral-950/60 border border-neutral-800 rounded-lg text-gray-300 text-sm">
               {formHint}
             </div>
+          )}
+
+          {(mode === "login" || mode === "signup") && (
+            <>
+              <div className="space-y-3 mb-5">
+                <button
+                  type="button"
+                  onClick={() => handleOAuth("apple")}
+                  disabled={oauthLoading !== null}
+                  className="w-full py-3 flex items-center justify-center gap-2 bg-black hover:bg-neutral-800 disabled:opacity-60 text-white border border-neutral-700 rounded-xl font-semibold transition-all"
+                >
+                  {oauthLoading === "apple" ? "Redirecting…" : "Continue with Apple"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOAuth("google")}
+                  disabled={oauthLoading !== null}
+                  className="w-full py-3 flex items-center justify-center gap-2 bg-white hover:bg-gray-100 disabled:opacity-60 text-neutral-900 border border-neutral-300 rounded-xl font-semibold transition-all"
+                >
+                  {oauthLoading === "google" ? (
+                    "Redirecting…"
+                  ) : (
+                    <>
+                      <span className="font-bold" style={{ color: "#4285F4" }}>G</span>
+                      Continue with Google
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 h-px bg-neutral-800" />
+                <span className="text-xs text-gray-500">or continue with email</span>
+                <div className="flex-1 h-px bg-neutral-800" />
+              </div>
+            </>
           )}
 
           <div className="space-y-4">

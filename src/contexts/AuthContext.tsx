@@ -36,6 +36,8 @@ interface AuthContextType {
     password: string,
     consent?: { acceptTos: boolean; acceptPrivacy: boolean; captchaToken?: string | null }
   ) => Promise<void>;
+  signInWithApple: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   purchasePremium: () => Promise<void>;
   changeEmail: (currentPassword: string, newEmail: string) => Promise<void>;
@@ -332,6 +334,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
+
+  // Redirect-based OAuth (signInWithOAuth) rather than this app's own /api/auth endpoints —
+  // Supabase handles the whole provider round-trip itself and returns the user to
+  // /auth/callback, which already knows how to pick up the resulting session (same mechanism
+  // used for email-confirm/password-reset links). This either errors synchronously (bad
+  // config, no network) or navigates away immediately; there's no "success" state to set here.
+  const signInWithOAuthProvider = async (provider: "apple" | "google") => {
+    if (getCachedIsSandboxed()) {
+      setError("Sign-in unavailable in preview mode");
+      return;
+    }
+    if (!supabase) {
+      setError("Sign-in is currently unavailable");
+      return;
+    }
+    setError(null);
+    const { error: e } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (e) {
+      setError(e.message);
+      throw e;
+    }
+  };
+
+  const signInWithApple = () => signInWithOAuthProvider("apple");
+  const signInWithGoogle = () => signInWithOAuthProvider("google");
 
   const purchasePremium = async () => {
     if (getCachedIsSandboxed()) {
@@ -664,6 +694,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accountTier,
         login,
         signup,
+        signInWithApple,
+        signInWithGoogle,
         logout,
         purchasePremium,
         changeEmail,
