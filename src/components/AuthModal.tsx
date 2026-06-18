@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { TurnstileWidget } from "./TurnstileWidget";
 
@@ -30,6 +30,20 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
 
   const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
   const turnstileEnabled = Boolean(turnstileSiteKey);
+
+  // signInWithOAuth navigates the whole page away; if the user hits Back, the browser
+  // can restore this page from its back/forward cache with oauthLoading still set from
+  // before the redirect, leaving both buttons stuck disabled. Reset on bfcache restore
+  // (pageshow) and as a backstop whenever the modal is reopened.
+  useEffect(() => {
+    const resetOAuthLoading = () => setOauthLoading(null);
+    window.addEventListener("pageshow", resetOAuthLoading);
+    return () => window.removeEventListener("pageshow", resetOAuthLoading);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) setOauthLoading(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
