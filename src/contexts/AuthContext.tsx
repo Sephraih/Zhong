@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { storageGetItem, storageRemoveItem, storageSetItem } from "../utils/storageConsent";
 import { getCachedIsSandboxed } from "../utils/environment";
 import { supabase } from "../supabaseClient";
@@ -100,22 +100,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The app's own /api/auth/me only ever sees the access token, which Supabase expires after a
   // fixed lifetime (1h by default) — without this, every session would silently sign itself out
   // once that elapses, regardless of how recently the user actually interacted with the app.
-  const tryRefreshSession = async (): Promise<string | null> => {
-    if (!supabase) return null;
+  //
+  // refreshPromiseRef de-dupes concurrent callers (e.g. the visibility/focus listeners below firing
+  // close to the initial mount fetch): Supabase refresh tokens are single-use/rotating, so two
+  // simultaneous refreshSession() calls with the same stored token would race — only one succeeds,
+  // and the loser's failure path would otherwise clear a session the winner just correctly restored.
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+  const tryRefreshSession = (): Promise<string | null> => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+    if (!supabase) return Promise.resolve(null);
     const refreshToken = storageGetItem("hanyu_refresh_token");
-    if (!refreshToken) return null;
-    try {
-      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-      if (error || !data.session?.access_token) return null;
-      setAccessToken(data.session.access_token);
-      storageSetItem("hanyu_auth_token", data.session.access_token);
-      if (data.session.refresh_token) {
-        storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+    if (!refreshToken) return Promise.resolve(null);
+
+    const promise = (async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+        if (error || !data.session?.access_token) return null;
+        setAccessToken(data.session.access_token);
+        storageSetItem("hanyu_auth_token", data.session.access_token);
+        if (data.session.refresh_token) {
+          storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+        }
+        return data.session.access_token;
+      } catch {
+        return null;
+      } finally {
+        refreshPromiseRef.current = null;
       }
-      return data.session.access_token;
-    } catch {
-      return null;
-    }
+    })();
+    refreshPromiseRef.current = promise;
+    return promise;
   };
 
   const fetchUser = useCallback(async (token: string, isRetry = false): Promise<any> => {
@@ -232,15 +246,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Skip in sandbox mode
     if (getCachedIsSandboxed()) return;
 
+    // Read storage first, not the closed-over accessToken — this effect only runs once (deps
+    // are just [fetchUser], which never changes), so accessToken here is frozen at whatever it
+    // was on mount. Storage is always current since every token write goes through it.
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        const token = accessToken || storageGetItem("hanyu_auth_token");
+        const token = storageGetItem("hanyu_auth_token") || accessToken;
         if (token) fetchUser(token);
       }
     };
 
     const handleFocus = () => {
-      const token = accessToken || storageGetItem("hanyu_auth_token");
+      const token = storageGetItem("hanyu_auth_token") || accessToken;
       if (token) fetchUser(token);
     };
 
