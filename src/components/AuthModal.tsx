@@ -205,6 +205,17 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
                   )}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 text-center mb-5">
+                By continuing, you agree to our{" "}
+                <a className="text-red-400 hover:underline" href="/tos" target="_blank" rel="noreferrer">
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a className="text-red-400 hover:underline" href="/privacy" target="_blank" rel="noreferrer">
+                  Privacy Policy
+                </a>
+                .
+              </p>
               <div className="flex items-center gap-3 mb-5">
                 <div className="flex-1 h-px bg-neutral-800" />
                 <span className="text-xs text-gray-500">or continue with email</span>

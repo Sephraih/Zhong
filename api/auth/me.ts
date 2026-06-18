@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get profile with account_tier
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_tier, is_premium, stripe_customer_id, email')
+      .select('account_tier, is_premium, stripe_customer_id, email, tos_accepted_at, privacy_accepted_at')
       .eq('id', user.id)
       .single();
 
@@ -63,6 +63,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await supabase
         .from('profiles')
         .update({ email: user.email })
+        .eq('id', user.id);
+    }
+
+    // Backfill consent timestamps for accounts created via OAuth (Apple/Google), which
+    // bypass /api/auth/signup.ts entirely — Supabase creates the auth.users row directly.
+    // The OAuth buttons show a "by continuing you agree to..." disclaimer, so the first
+    // authenticated request after sign-in is treated as the acceptance moment.
+    if (profile && (!profile.tos_accepted_at || !profile.privacy_accepted_at)) {
+      const now = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({
+          tos_accepted_at: profile.tos_accepted_at || now,
+          privacy_accepted_at: profile.privacy_accepted_at || now,
+        })
         .eq('id', user.id);
     }
 
