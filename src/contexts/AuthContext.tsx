@@ -97,7 +97,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearError = () => setError(null);
 
-  const fetchUser = useCallback(async (token: string) => {
+  // The app's own /api/auth/me only ever sees the access token, which Supabase expires after a
+  // fixed lifetime (1h by default) — without this, every session would silently sign itself out
+  // once that elapses, regardless of how recently the user actually interacted with the app.
+  const tryRefreshSession = async (): Promise<string | null> => {
+    if (!supabase) return null;
+    const refreshToken = storageGetItem("hanyu_refresh_token");
+    if (!refreshToken) return null;
+    try {
+      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+      if (error || !data.session?.access_token) return null;
+      setAccessToken(data.session.access_token);
+      storageSetItem("hanyu_auth_token", data.session.access_token);
+      if (data.session.refresh_token) {
+        storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+      }
+      return data.session.access_token;
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchUser = useCallback(async (token: string, isRetry = false): Promise<any> => {
     // Skip in sandbox mode
     if (getCachedIsSandboxed()) return null;
 
@@ -121,17 +142,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn("Auth /me response not JSON, keeping current state");
           return null;
         }
-        
+
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
         console.log("Auth refreshed. Tier:", data.account_tier);
         return data;
       } else if (response.status === 401) {
-        // Only clear auth on explicit 401 Unauthorized
-        // This means the token is invalid/expired
-        console.log("Auth token invalid (401), clearing auth state");
+        // The access token may simply be expired — try a silent refresh before signing out.
+        if (!isRetry) {
+          const newToken = await tryRefreshSession();
+          if (newToken) return fetchUser(newToken, true);
+        }
+        console.log("Auth token invalid (401) and refresh failed, clearing auth state");
         setAccessToken(null);
         storageRemoveItem("hanyu_auth_token");
+        storageRemoveItem("hanyu_refresh_token");
         setUser(null);
         setAccountTier('free');
       } else {
@@ -261,6 +286,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session?.access_token) {
         setAccessToken(data.session.access_token);
         storageSetItem("hanyu_auth_token", data.session.access_token);
+        if (data.session.refresh_token) {
+          storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+        }
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
       }
@@ -320,9 +348,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(null);
         setAccountTier('free');
         storageRemoveItem("hanyu_auth_token");
+        storageRemoveItem("hanyu_refresh_token");
       } else if (data.session?.access_token) {
         setAccessToken(data.session.access_token);
         storageSetItem("hanyu_auth_token", data.session.access_token);
+        if (data.session.refresh_token) {
+          storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+        }
         setUser(data.user);
         setAccountTier('free');
       }
@@ -427,6 +459,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setAccessToken(null);
     storageRemoveItem("hanyu_auth_token");
+    storageRemoveItem("hanyu_refresh_token");
     setUser(null);
     setAccountTier('free');
 
@@ -482,6 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear local auth + state
       setAccessToken(null);
       storageRemoveItem("hanyu_auth_token");
+      storageRemoveItem("hanyu_refresh_token");
       setUser(null);
       setAccountTier('free');
     } catch (err) {

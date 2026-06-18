@@ -89,6 +89,7 @@ export function AuthCallbackPage() {
         if (accessToken) {
           // Clear old token first to prevent conflicts
           storageRemoveItem("hanyu_auth_token");
+          storageRemoveItem("hanyu_refresh_token");
           await new Promise(resolve => setTimeout(resolve, 50));
           storageSetItem("hanyu_auth_token", accessToken);
 
@@ -134,8 +135,12 @@ export function AuthCallbackPage() {
 
           // Clear old token first to prevent conflicts
           storageRemoveItem("hanyu_auth_token");
+          storageRemoveItem("hanyu_refresh_token");
           await new Promise(resolve => setTimeout(resolve, 50));
           storageSetItem("hanyu_auth_token", data.session.access_token);
+          if (data.session.refresh_token) {
+            storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+          }
 
           if (isRecoveryFlow) {
             setStatus("done");
@@ -192,8 +197,12 @@ export function AuthCallbackPage() {
 
         // Clear old token first to prevent conflicts
         storageRemoveItem("hanyu_auth_token");
+        storageRemoveItem("hanyu_refresh_token");
         await new Promise(resolve => setTimeout(resolve, 50));
         storageSetItem("hanyu_auth_token", data.session.access_token);
+        if (data.session.refresh_token) {
+          storageSetItem("hanyu_refresh_token", data.session.refresh_token);
+        }
 
         if (isRecoveryFlow) {
           setStatus("done");
