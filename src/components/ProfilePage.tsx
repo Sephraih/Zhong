@@ -15,7 +15,7 @@ interface ProfilePageProps {
 }
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack, onOpenAuth }: ProfilePageProps) {
-  const { user, accountTier, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
+  const { user, isLoading, accountTier, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
 
   const [premiumPrice, setPremiumPrice] = useState<string>("$9.99");
 
@@ -84,6 +84,14 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     load();
     return () => { cancelled = true; };
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-3xl mx-auto text-center py-20">
+        <div className="w-8 h-8 mx-auto border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
