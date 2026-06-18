@@ -37,6 +37,10 @@ function parseParams() {
     // failures — Supabase/the provider append these instead of a code.
     error: get("error"),
     errorDescription: get("error_description"),
+    // Secure email change requires confirming from both the old and new address. Clicking the
+    // first link doesn't carry a code/token at all — Supabase appends this informational message
+    // instead, telling the user a second confirmation (in the other inbox) is still needed.
+    message: get("message"),
   };
 }
 
@@ -50,7 +54,7 @@ export function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       try {
-        const { code, accessToken, tokenHash, type, error: oauthError, errorDescription } = parseParams();
+        const { code, accessToken, tokenHash, type, error: oauthError, errorDescription, message: infoMessage } = parseParams();
 
         // Determine flow type. A plain `code` (or an `error`) with neither `type` nor `tokenHash`
         // is what an OAuth (Apple/Google) return looks like — email confirm/recovery/email-change
@@ -72,6 +76,16 @@ export function AuthCallbackPage() {
               ? decodeURIComponent(errorDescription.replace(/\+/g, " "))
               : "Sign-in was cancelled."
           );
+          return;
+        }
+
+        // No code/token here at all — this is Supabase's own informational redirect, not a
+        // failure. Secure email change needs confirmation from both addresses; this is what
+        // clicking the *first* link looks like.
+        if (infoMessage && !code && !tokenHash && !accessToken) {
+          setIsEmailChange(true);
+          setStatus("done");
+          setMessage("First confirmation received — check your other email address for one more link to finish changing your email.");
           return;
         }
 
