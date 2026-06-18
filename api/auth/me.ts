@@ -51,11 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get profile with account_tier
-    const { data: profile } = await supabase
+    const { data: profile, error: profileErr } = await supabase
       .from('profiles')
       .select('account_tier, is_premium, stripe_customer_id, email, tos_accepted_at, privacy_accepted_at')
       .eq('id', user.id)
       .single();
+    if (profileErr) {
+      console.error(`/api/auth/me profile query failed for user ${user.id}:`, profileErr.code, profileErr.message);
+    }
 
     // Sync email to profiles table if it doesn't match (e.g., after email change)
     if (profile && user.email && profile.email !== user.email) {
@@ -93,6 +96,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (authPremium && accountTier === 'free') {
       accountTier = 'premium';
     }
+
+    console.log(`/api/auth/me user=${user.id} profile.account_tier=${profile?.account_tier} profile.is_premium=${profile?.is_premium} app_metadata=${JSON.stringify(user.app_metadata)} -> resolved=${accountTier}`);
 
     res.json({
       user,
