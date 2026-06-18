@@ -70,9 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Verify current password for sensitive actions. For delete-account, the question isn't
   // "did they sign in via Apple/Google" but "does this account currently have a password at
-  // all" — an OAuth account that pre-existed before the identity was attached, or that has
-  // completed the "Get Web Access" link flow, has a real web account/password that deletion
-  // would also destroy, so it's gated the same as a plain email/password account.
+  // all" — an OAuth account that pre-existed before the identity was attached has a real web
+  // account/password that deletion would also destroy, so it's gated the same as a plain
+  // email/password account. A fresh OAuth-only account never has a password to verify.
   const oauthIdentity = (user.identities ?? []).find((id: any) => ['apple', 'google'].includes(id.provider));
   const isOAuthUser = !!oauthIdentity || ['apple', 'google'].includes(user.app_metadata?.provider ?? '');
 
@@ -85,17 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const identityCreatedMs = oauthIdentity?.created_at
         ? new Date(oauthIdentity.created_at).getTime()
         : accountCreatedMs;
-      const isPreExisting = accountCreatedMs < identityCreatedMs - 60_000;
-      if (isPreExisting) {
-        requiresPassword = true;
-      } else {
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('web_linked')
-          .eq('id', user.id)
-          .single();
-        requiresPassword = profile?.web_linked === true;
-      }
+      requiresPassword = accountCreatedMs < identityCreatedMs - 60_000;
     }
   }
 
