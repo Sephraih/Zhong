@@ -200,7 +200,10 @@ export function FlashcardMode({ allWords, learnedState, accessibleLevels, lockRe
 
   useEffect(() => {
     if (sessionItems.length === 0) {
-      removeStoredSession();
+      // Only clear a session that was actually restored — on mount, sessionItems starts at []
+      // for one render before the restore effect above populates it; wiping storage here would
+      // race ahead of that restore and erase the very session it just read.
+      if (hasRestoredRef.current) removeStoredSession();
       return;
     }
     saveSession(sessionItems, activeDeckIds, currentIndex, isShuffled, shuffledKeys);
