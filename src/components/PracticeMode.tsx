@@ -10,6 +10,7 @@ import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
 import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
 import { HskLevelButtons } from "./HskLevelButtons";
+import { usePersistedState } from "../hooks/usePersistedState";
 
 interface PracticeModeProps {
   allWords: VocabWord[];
@@ -34,7 +35,6 @@ interface StoredSession {
   cycleCount: number;
   infoMinimized?: boolean;
   progress?: Record<number, number>;
-  direction?: PracticeDirection;
 }
 
 const STORAGE_KEY = "hanyu-practice-session";
@@ -115,7 +115,7 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
   const [infoMinimized, setInfoMinimized] = useState(false);
-  const [direction, setDirection] = useState<PracticeDirection>("zh-en");
+  const [direction, setDirection] = usePersistedState<PracticeDirection>("hanyu-direction-practice", "zh-en");
 
   // Animation state
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -168,8 +168,7 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
     words: SessionWord[],
     index: number,
     cycle: number,
-    minimized: boolean,
-    dir: PracticeDirection
+    minimized: boolean
   ) => {
     try {
       const progress: Record<number, number> = {};
@@ -180,7 +179,6 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
         cycleCount: cycle,
         infoMinimized: minimized,
         progress,
-        direction: dir,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch { /* ignore */ }
@@ -237,7 +235,7 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
     setIsFlipped(false);
     setIsFinished(false);
     setCycleCount(0);
-    saveSession(finalSession, 0, 0, infoMinimized, direction);
+    saveSession(finalSession, 0, 0, infoMinimized);
   };
 
   // One-time restore on mount, once both word data and the persisted level selection are
@@ -254,7 +252,6 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
     const stored = loadSession();
     if (stored && stored.ids.length > 0) {
       setInfoMinimized(Boolean(stored.infoMinimized));
-      setDirection(stored.direction ?? "zh-en");
 
       const pool = filterWordsByLevels(allWords, levelSelection.selectedLevels);
       const storedWords = stored.ids
@@ -290,9 +287,9 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
 
   useEffect(() => {
     if (sessionWords.length > 0 && !isFinished) {
-      saveSession(sessionWords, currentIndex, cycleCount, infoMinimized, direction);
+      saveSession(sessionWords, currentIndex, cycleCount, infoMinimized);
     }
-  }, [sessionWords, currentIndex, cycleCount, isFinished, infoMinimized, direction]);
+  }, [sessionWords, currentIndex, cycleCount, isFinished, infoMinimized]);
 
   const advanceToNext = (words: SessionWord[], fromIndex: number) => {
     if (words.length === 0) {
@@ -576,7 +573,7 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
                     onClick={() => {
                       const next = !infoMinimized;
                       setInfoMinimized(next);
-                      saveSession(sessionWords, currentIndex, cycleCount, next, direction);
+                      saveSession(sessionWords, currentIndex, cycleCount, next);
                     }}
                     className={`w-8 h-8 sm:w-10 sm:h-10 inline-flex items-center justify-center rounded-lg sm:rounded-xl border transition-all text-sm font-bold ${
                       infoMinimized

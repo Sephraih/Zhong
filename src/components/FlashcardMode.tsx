@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { getHskBadgeClasses } from "../utils/hskColors";
@@ -6,19 +6,21 @@ import type { VocabWord } from "../data/vocabulary";
 import type { LearnedState } from "../hooks/useLearnedState";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { useCardStore } from "../hooks/useCardStore";
+import { useCardStore, type CustomCard } from "../hooks/useCardStore";
 import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
 import { useAuth } from "../contexts/AuthContext";
 import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
 import { HskLevelButtons } from "./HskLevelButtons";
+import { usePersistedState } from "../hooks/usePersistedState";
+import { readJSON, writeJSON, removeJSON } from "../utils/localStorageJson";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
+type FlashcardDirection = "zh-en" | "en-zh";
 
 interface FlashcardModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
-  wordStatusFilter: FlashcardFilter;
   /** Levels the current user can access (from App.tsx's hasAccessToLevel) */
   accessibleLevels: number[];
   lockReasonForLevel: (level: number) => string | null;
@@ -41,6 +43,21 @@ interface FlashcardItem {
   examples: VocabWord["examples"];
 }
 
+interface FlashcardItemRef {
+  key: string;
+  source: "hsk" | "custom";
+  id: number;
+}
+
+interface StoredFlashcardSession {
+  refs: FlashcardItemRef[];
+  activeDeckIds: number[];
+  currentIndex: number;
+  isShuffled: boolean;
+  shuffledKeys: string[];
+}
+
+const STORAGE_KEY = "hanyu-flashcard-session";
 const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
 
 function hskWordToItem(w: VocabWord): FlashcardItem {
@@ -57,21 +74,46 @@ function hskWordToItem(w: VocabWord): FlashcardItem {
   };
 }
 
+function customCardToItem(card: CustomCard): FlashcardItem {
+  return {
+    key: `custom_${card.id}`,
+    source: "custom",
+    id: card.id,
+    hanzi: card.hanzi,
+    pinyin: card.pinyin,
+    english: card.english,
+    hskLevel: 0,
+    category: "Custom",
+    examples: card.examples,
+  };
+}
+
 const ADD_COUNTS = [5, 10, 20, 50] as const;
 
-export function FlashcardMode({ allWords, learnedState, wordStatusFilter, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick, onNavigateToSupport, onOpenAuth }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick, onNavigateToSupport, onOpenAuth }: FlashcardModeProps) {
   const isMobile = useIsMobile();
   const store = useCardStore();
   const noChineseVoice = useTtsVoiceCheck();
   const { user } = useAuth();
   const isLoggedIn = !!user;
 
-  const { toggleLearned, isLearned, learnedCount } = learnedState;
+  const { toggleLearned, isLearned } = learnedState;
 
   // Session items — the unified pool of cards in play
   const [sessionItems, setSessionItems] = useState<FlashcardItem[]>([]);
   const [activeDeckIds, setActiveDeckIds] = useState<Set<number>>(new Set());
   const [setupOpen, setSetupOpen] = useState(true);
+
+  // Word-status filter — governs which cards get ADDED to the session (from both the HSK
+  // catalogue and toggled decks below), never what's displayed once a card is in the session.
+  const [wordStatusFilter, setWordStatusFilter] = usePersistedState<FlashcardFilter>("hanyu-word-status-flashcards", "all");
+
+  const [direction, setDirection] = usePersistedState<FlashcardDirection>("hanyu-direction-flashcards", "zh-en");
+  const isChinese = direction === "zh-en";
+  const toggleDirection = () => {
+    setDirection(isChinese ? "en-zh" : "zh-en");
+    setIsFlipped(false);
+  };
 
   // HSK level selection — only controls which pool addHskCards draws new cards from below;
   // never a live filter over sessionItems (there's no "no cards in session" state this can
@@ -91,9 +133,82 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
   // Stable pre-computed key order so toggling Learned doesn't re-randomise
   const [shuffledKeys, setShuffledKeys] = useState<string[]>([]);
 
+  const isItemLearned = useCallback(
+    (item: FlashcardItem) =>
+      item.source === "hsk" ? isLearned(item.id) : (store.cards.find((c) => c.id === item.id)?.learned ?? false),
+    [isLearned, store.cards]
+  );
+
+  const matchesStatusFilter = useCallback(
+    (learned: boolean) => {
+      if (wordStatusFilter === "still-learning") return !learned;
+      if (wordStatusFilter === "learned") return learned;
+      return true;
+    },
+    [wordStatusFilter]
+  );
+
+  // ── Session persistence (thin refs, re-resolved against allWords/store.cards on restore) ──
+
+  const removeStoredSession = () => removeJSON(STORAGE_KEY);
+
+  const saveSession = (
+    items: FlashcardItem[],
+    deckIds: Set<number>,
+    index: number,
+    shuffled: boolean,
+    shuffleOrder: string[]
+  ) => {
+    writeJSON<StoredFlashcardSession>(STORAGE_KEY, {
+      refs: items.map((item) => ({ key: item.key, source: item.source, id: item.id })),
+      activeDeckIds: Array.from(deckIds),
+      currentIndex: index,
+      isShuffled: shuffled,
+      shuffledKeys: shuffleOrder,
+    });
+  };
+
+  const resolveItemRef = (ref: FlashcardItemRef): FlashcardItem | null => {
+    if (ref.source === "hsk") {
+      const word = allWords.find((w) => w.id === ref.id);
+      return word ? hskWordToItem(word) : null;
+    }
+    const card = store.cards.find((c) => c.id === ref.id);
+    return card ? customCardToItem(card) : null;
+  };
+
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    if (isResolving) return;
+    if (allWords.length === 0) return;
+    hasRestoredRef.current = true;
+
+    const stored = readJSON<StoredFlashcardSession>(STORAGE_KEY);
+    if (!stored || !Array.isArray(stored.refs)) return;
+    const resolvedItems = stored.refs.map(resolveItemRef).filter((item): item is FlashcardItem => Boolean(item));
+    if (resolvedItems.length === 0) return;
+
+    setSessionItems(resolvedItems);
+    setActiveDeckIds(new Set(stored.activeDeckIds ?? []));
+    setIsShuffled(Boolean(stored.isShuffled));
+    setShuffledKeys(stored.shuffledKeys ?? []);
+    setCurrentIndex(Math.max(0, Math.min(stored.currentIndex ?? 0, resolvedItems.length - 1)));
+    setSetupOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allWords, isResolving]);
+
+  useEffect(() => {
+    if (sessionItems.length === 0) {
+      removeStoredSession();
+      return;
+    }
+    saveSession(sessionItems, activeDeckIds, currentIndex, isShuffled, shuffledKeys);
+  }, [sessionItems, activeDeckIds, currentIndex, isShuffled, shuffledKeys]);
+
   // Add N random HSK cards from the current level filter pool
   const addHskCards = (count: number | "all") => {
-    const pool = allWords.filter((w) => hskFilterLevels.includes(w.hskLevel));
+    const pool = allWords.filter((w) => hskFilterLevels.includes(w.hskLevel) && matchesStatusFilter(isLearned(w.id)));
     const existingKeys = new Set(sessionItems.map((i) => i.key));
     const candidates = pool.filter((w) => !existingKeys.has(`hsk_${w.id}`));
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
@@ -118,7 +233,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
       const keysToRemove = new Set(deckEntries.map((dc) => `${dc.cardType}_${dc.cardId}`));
       setSessionItems((prev) => prev.filter((item) => !keysToRemove.has(item.key)));
     } else {
-      // Add cards from this deck (dedup)
+      // Add cards from this deck (dedup), subject to the word-status filter
       const deckEntries = store.getCardsForDeck(deckId);
       const existingKeys = new Set(sessionItems.map((i) => i.key));
       const toAdd: FlashcardItem[] = [];
@@ -127,22 +242,10 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
         if (existingKeys.has(key)) continue;
         if (dc.cardType === "custom") {
           const card = store.cards.find((c) => c.id === dc.cardId);
-          if (card) {
-            toAdd.push({
-              key,
-              source: "custom",
-              id: card.id,
-              hanzi: card.hanzi,
-              pinyin: card.pinyin,
-              english: card.english,
-              hskLevel: 0,
-              category: "Custom",
-              examples: card.examples,
-            });
-          }
+          if (card && matchesStatusFilter(card.learned ?? false)) toAdd.push(customCardToItem(card));
         } else {
           const word = allWords.find((w) => w.id === dc.cardId);
-          if (word) toAdd.push(hskWordToItem(word));
+          if (word && matchesStatusFilter(isLearned(word.id))) toAdd.push(hskWordToItem(word));
         }
       }
       if (toAdd.length > 0) setSessionItems((prev) => [...prev, ...toAdd]);
@@ -155,30 +258,20 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
     setActiveDeckIds(new Set());
     setCurrentIndex(0);
     setIsFlipped(false);
+    removeStoredSession();
   };
 
-  // Apply wordStatusFilter
   const displayItems = useMemo(() => {
-    let items = sessionItems;
-    if (wordStatusFilter === "still-learning") {
-      items = items.filter((item) =>
-        item.source === "hsk" ? !isLearned(item.id) : !(store.cards.find((c) => c.id === item.id)?.learned ?? false)
-      );
-    } else if (wordStatusFilter === "learned") {
-      items = items.filter((item) =>
-        item.source === "hsk" ? isLearned(item.id) : (store.cards.find((c) => c.id === item.id)?.learned ?? false)
-      );
-    }
     if (isShuffled && shuffledKeys.length > 0) {
       const keyOrder = new Map(shuffledKeys.map((key, i) => [key, i]));
-      return [...items].sort((a, b) => {
+      return [...sessionItems].sort((a, b) => {
         const ai = keyOrder.get(a.key) ?? Infinity;
         const bi = keyOrder.get(b.key) ?? Infinity;
         return ai - bi;
       });
     }
-    return items;
-  }, [sessionItems, wordStatusFilter, isLearned, isShuffled, shuffledKeys, store.cards]);
+    return sessionItems;
+  }, [sessionItems, isShuffled, shuffledKeys]);
 
   const currentItem = displayItems[currentIndex];
 
@@ -237,15 +330,11 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
     setIsFlipped(false);
   }, [currentItem, displayItems.length]);
 
-  const currentIsLearned = currentItem
-    ? currentItem.source === "hsk"
-      ? isLearned(currentItem.id)
-      : (store.cards.find((c) => c.id === currentItem.id)?.learned ?? false)
-    : false;
+  const currentIsLearned = currentItem ? isItemLearned(currentItem) : false;
 
   const progress = displayItems.length > 0 ? ((currentIndex + 1) / displayItems.length) * 100 : 0;
-  const totalLearned = learnedCount;
-  const totalLearning = allWords.length - learnedCount;
+  const sessionLearnedCount = sessionItems.filter(isItemLearned).length;
+  const sessionNotLearnedCount = sessionItems.length - sessionLearnedCount;
 
   // ── Session Setup Panel ───────────────────────────────────────────────────
 
@@ -263,6 +352,30 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
 
       {setupOpen && (
         <div className="border-t border-neutral-800 p-4 space-y-5">
+          {/* Word-status filter — governs which cards get added below, not what's displayed */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Add cards as</p>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { value: "all", label: "All Words" },
+                { value: "still-learning", label: "📖 Still Learning" },
+                { value: "learned", label: "✅ Learned" },
+              ] as { value: FlashcardFilter; label: string }[]).map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setWordStatusFilter(filter.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    wordStatusFilter === filter.value
+                      ? "bg-red-600 border-red-500 text-white"
+                      : "bg-neutral-800 border-neutral-700 text-gray-400 hover:border-neutral-600 hover:text-white"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Decks section */}
           {!isLoggedIn ? (
             <button
@@ -362,23 +475,6 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
     );
   }
 
-  if (displayItems.length === 0) {
-    return (
-      <div className="max-w-lg mx-auto">
-        <SessionPanel />
-        <div className="text-center py-12 text-gray-500">
-          <p className="text-4xl mb-3">📭</p>
-          <p className="font-medium">No cards match the current filter</p>
-          <p className="text-sm mt-1">
-            {wordStatusFilter === "learned"
-              ? "No cards in this session are marked as learned yet."
-              : "All cards are marked as learned! Great job!"}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (!currentItem) {
     return (
       <div className="max-w-lg mx-auto">
@@ -393,12 +489,40 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
       {noChineseVoice && <TtsVoiceWarning onMoreInfo={onNavigateToSupport} className="mb-4" />}
       <SessionPanel />
 
+      {/* Direction toggle */}
+      <div className="mb-4 flex justify-center">
+        <button
+          onClick={toggleDirection}
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:border-neutral-700 transition-all"
+          title={isChinese ? "Switch to English → Chinese" : "Switch to Chinese → English"}
+        >
+          {isChinese ? (
+            <>
+              <span className="text-red-400">中</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <span>EN</span>
+            </>
+          ) : (
+            <>
+              <span>EN</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <span className="text-red-400">中</span>
+            </>
+          )}
+        </button>
+      </div>
+
       {/* Top bar */}
       <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-emerald-400 font-semibold">✅ {totalLearned}</span>
-          <span className="text-gray-600">·</span>
-          <span className="text-red-400 font-semibold">📖 {totalLearning}</span>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-white font-semibold">{sessionItems.length}</span>
+          <span className="text-gray-600">:</span>
+          <span className="text-emerald-400 font-semibold">✅ {sessionLearnedCount}</span>
+          <span className="text-red-400 font-semibold">📖 {sessionNotLearnedCount}</span>
         </div>
 
         <span className="text-sm text-gray-400 font-medium">
@@ -474,22 +598,31 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
 
         {/* Front */}
         <div className={`flex flex-col items-center ${isNavigating ? "" : "transition-all duration-300"} ${isFlipped ? "scale-75 -translate-y-12 opacity-40" : "scale-100 translate-y-0 opacity-100"}`}>
-          <div className="flex items-end gap-2 justify-center">
-            {currentItem.hanzi.split("").map((char, i) => (
-              <HoverCharacter
-                key={`${currentItem.key}-front-${i}`}
-                char={char}
-                pinyin={extractPinyinForChar(currentItem.pinyin, i, currentItem.hanzi.length)}
-                size="2xl"
-                wordId={currentItem.id}
-              />
-            ))}
-          </div>
-          <div className="mt-4">
-            <SpeakerButton text={currentItem.hanzi} size="md" />
-          </div>
+          {isChinese ? (
+            <>
+              <div className="flex items-end gap-2 justify-center">
+                {currentItem.hanzi.split("").map((char, i) => (
+                  <HoverCharacter
+                    key={`${currentItem.key}-front-${i}`}
+                    char={char}
+                    pinyin={extractPinyinForChar(currentItem.pinyin, i, currentItem.hanzi.length)}
+                    size="2xl"
+                    wordId={currentItem.id}
+                  />
+                ))}
+              </div>
+              <div className="mt-4">
+                <SpeakerButton text={currentItem.hanzi} size="md" />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-4xl font-bold text-white text-center px-6">{currentItem.english}</p>
+              <p className="text-gray-500 text-sm mt-2">(English → Chinese)</p>
+            </>
+          )}
           {!isFlipped && (
-            <p className="text-gray-600 text-sm mt-8">Tap to reveal · Hover characters for pinyin</p>
+            <p className="text-gray-600 text-sm mt-8">{isChinese ? "Tap to reveal · Hover characters for pinyin" : "Tap to reveal Chinese"}</p>
           )}
         </div>
 
@@ -499,8 +632,28 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, access
             isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-full pointer-events-none"
           }`}
         >
-          <p className="text-red-400 text-4xl font-medium mb-1">{currentItem.pinyin}</p>
-          <p className="text-white text-3xl font-bold mb-4 text-center">{currentItem.english}</p>
+          {isChinese ? (
+            <>
+              <p className="text-red-400 text-4xl font-medium mb-1">{currentItem.pinyin}</p>
+              <p className="text-white text-3xl font-bold mb-4 text-center">{currentItem.english}</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-end gap-2 justify-center mb-2">
+                {currentItem.hanzi.split("").map((char, i) => (
+                  <HoverCharacter
+                    key={`${currentItem.key}-back-${i}`}
+                    char={char}
+                    pinyin={extractPinyinForChar(currentItem.pinyin, i, currentItem.hanzi.length)}
+                    size="2xl"
+                    wordId={currentItem.id}
+                  />
+                ))}
+              </div>
+              <p className="text-red-400 text-4xl font-medium mb-2">{currentItem.pinyin}</p>
+              <SpeakerButton text={currentItem.hanzi} size="md" />
+            </>
+          )}
 
           {currentItem.examples.length > 0 && (
             <div className="space-y-3 mt-2 text-left w-full">

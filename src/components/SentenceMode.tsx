@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -9,6 +9,8 @@ import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
 import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
 import { HskLevelButtons } from "./HskLevelButtons";
+import { usePersistedState } from "../hooks/usePersistedState";
+import { readJSON, writeJSON, removeJSON } from "../utils/localStorageJson";
 
 interface SentenceModeProps {
   allWords: VocabWord[];
@@ -30,6 +32,14 @@ interface SessionSentence {
   sessionProgress: number;
 }
 
+interface StoredSentenceSession {
+  ids: string[];
+  currentIndex: number;
+  cycleCount: number;
+  progress?: Record<string, number>;
+}
+
+const STORAGE_KEY = "hanyu-sentence-session";
 const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
 
 const ANIMATION_DURATION = 330;
@@ -93,7 +103,7 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
-  const [direction, setDirection] = useState<SentenceDirection>("zh-en");
+  const [direction, setDirection] = usePersistedState<SentenceDirection>("hanyu-direction-sentences", "zh-en");
   const [infoMinimized, setInfoMinimized] = useState(true);
 
   // Animation state
@@ -132,14 +142,11 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     }, ANIMATION_DURATION);
   };
 
-  const toggleLevel = (level: number) => levelSelection.toggleLevel(level);
-  const toggleAllLevels = () => levelSelection.toggleAll();
-
-  // Collect all example sentences from filtered words
-  const allSentences = useMemo(() => {
+  // Collect all example sentences for a given level set
+  const buildSentencePool = (levels: number[]): SessionSentence[] => {
     const sentences: SessionSentence[] = [];
-    const filteredWords = allWords.filter((w) => selectedLevels.includes(w.hskLevel));
-    
+    const filteredWords = allWords.filter((w) => levels.includes(w.hskLevel));
+
     filteredWords.forEach((word) => {
       word.examples.forEach((example, idx) => {
         sentences.push({
@@ -154,7 +161,11 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     });
 
     return sentences;
-  }, [allWords, selectedLevels]);
+  };
+
+  // Informational only (drives the "no example sentences available" empty state) — session
+  // building itself goes through buildSentencePool with an explicit levels argument, see below.
+  const allSentences = useMemo(() => buildSentencePool(selectedLevels), [allWords, selectedLevels]);
 
   const shuffleArray = <T,>(arr: T[]): T[] => {
     const a = [...arr];
@@ -165,35 +176,109 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     return a;
   };
 
-  const startNewSession = useCallback(() => {
-    if (allSentences.length === 0) {
+  const saveSession = (sentences: SessionSentence[], index: number, cycle: number) => {
+    const progress: Record<string, number> = {};
+    sentences.forEach((s) => { progress[s.id] = s.sessionProgress; });
+    const payload: StoredSentenceSession = {
+      ids: sentences.map((s) => s.id),
+      currentIndex: index,
+      cycleCount: cycle,
+      progress,
+    };
+    writeJSON(STORAGE_KEY, payload);
+  };
+
+  const loadSession = (): StoredSentenceSession | null => {
+    const stored = readJSON<StoredSentenceSession>(STORAGE_KEY);
+    if (!stored || !Array.isArray(stored.ids)) return null;
+    return stored;
+  };
+
+  const clearSession = () => removeJSON(STORAGE_KEY);
+
+  const startNewSession = (levels: number[] = selectedLevels) => {
+    const pool = buildSentencePool(levels);
+    if (pool.length === 0) {
       setSessionSentences([]);
       setIsFinished(true);
+      clearSession();
       return;
     }
 
-    const shuffled = shuffleArray(allSentences);
+    const shuffled = shuffleArray(pool);
     const selected = shuffled.slice(0, 10).map((s) => ({ ...s, sessionProgress: 0 }));
-    
+
     setSessionSentences(selected);
     setCurrentIndex(0);
     setIsFlipped(false);
     setIsFinished(false);
     setCycleCount(0);
-  }, [allSentences]);
+    saveSession(selected, 0, 0);
+  };
 
-  // Start session when levels change or on mount
-  useEffect(() => {
-    if (allSentences.length > 0 && sessionSentences.length === 0 && !isFinished) {
-      startNewSession();
+  const toggleLevel = (level: number) => {
+    const wasSelected = selectedLevels.includes(level);
+    const newLevels = wasSelected ? selectedLevels.filter((l) => l !== level) : [...selectedLevels, level].sort((a, b) => a - b);
+    levelSelection.toggleLevel(level);
+    clearSession();
+    startNewSession(newLevels);
+  };
+
+  const toggleAllLevels = () => {
+    const newLevels = levelSelection.allSelected ? [] : [...accessibleLevels].sort((a, b) => a - b);
+    levelSelection.toggleAll();
+    clearSession();
+    if (newLevels.length === 0) {
+      setSessionSentences([]);
+    } else {
+      startNewSession(newLevels);
     }
-  }, [allSentences, sessionSentences.length, isFinished, startNewSession]);
+  };
 
-  // Restart session when selected levels change
+  // One-time restore on mount, once both word data and the persisted level selection are
+  // settled — gated on isResolving so a returning user's session is never rebuilt from the
+  // transiently-narrow access shown mid auth-resolve (see App.tsx's accessInfo.isResolving).
+  const hasRestoredRef = useRef(false);
   useEffect(() => {
-    startNewSession();
+    if (hasRestoredRef.current) return;
+    if (isResolving) return;
+    if (allWords.length === 0) return;
+    if (selectedLevels.length === 0) return;
+    hasRestoredRef.current = true;
+
+    const stored = loadSession();
+    if (stored && stored.ids.length > 0) {
+      const pool = buildSentencePool(selectedLevels);
+      const poolById = new Map(pool.map((s) => [s.id, s]));
+      const storedSentences = stored.ids
+        .map((id) => poolById.get(id))
+        .filter((s): s is SessionSentence => Boolean(s));
+
+      if (storedSentences.length > 0) {
+        const safeIndex = Math.min(stored.currentIndex ?? 0, storedSentences.length - 1);
+        const restored: SessionSentence[] = storedSentences.map((s) => ({
+          ...s,
+          sessionProgress: stored.progress?.[s.id] ?? 0,
+        }));
+        setSessionSentences(restored);
+        setCurrentIndex(safeIndex);
+        setCycleCount(stored.cycleCount ?? 0);
+        setIsFlipped(false);
+        setIsFinished(false);
+        return;
+      }
+    }
+
+    startNewSession(selectedLevels);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLevels]);
+  }, [allWords, selectedLevels, isResolving]);
+
+  // Autosave whenever the active session changes
+  useEffect(() => {
+    if (sessionSentences.length > 0 && !isFinished) {
+      saveSession(sessionSentences, currentIndex, cycleCount);
+    }
+  }, [sessionSentences, currentIndex, cycleCount, isFinished]);
 
   useEffect(() => {
     return () => {
@@ -207,6 +292,7 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     if (sentences.length === 0) {
       setIsFinished(true);
       setSessionSentences([]);
+      clearSession();
       return;
     }
 
@@ -305,6 +391,7 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     if (newSession.length === 0) {
       setIsFinished(true);
       setSessionSentences([]);
+      clearSession();
     } else {
       const newIndex = currentIndex >= newSession.length ? 0 : currentIndex;
       setSessionSentences(newSession);
@@ -450,7 +537,7 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
           <h2 className="text-3xl font-bold text-white mb-2">Great work!</h2>
           <p className="text-gray-400 mb-10">You've completed all sentences in this session.</p>
           <button
-            onClick={startNewSession}
+            onClick={() => startNewSession()}
             className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2"
           >
             Start Another Session
@@ -733,7 +820,7 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
       </div>
 
       <div className="mt-10 text-center">
-        <button onClick={startNewSession} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
+        <button onClick={() => startNewSession()} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
           Start New Session
         </button>
       </div>

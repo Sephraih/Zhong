@@ -15,7 +15,6 @@ import { VocabCard } from "./components/VocabCard";
 const logoImages = import.meta.glob("./assets/ham.png", { eager: true, import: "default" }) as Record<string, string>;
 const logoImage = Object.values(logoImages)[0] ?? null;
 import { FlashcardMode } from "./components/FlashcardMode";
-import type { FlashcardFilter } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
 import { SentenceMode } from "./components/SentenceMode";
@@ -40,6 +39,7 @@ import { primeVoices } from "./utils/tts";
 import { addWordToDeckDirect, getHskWordIdsForDeck } from "./hooks/useCardStore";
 import { DeckPickerModal } from "./components/DeckPickerModal";
 import { useHskLevelSelection } from "./hooks/useHskLevelSelection";
+import { usePersistedState } from "./hooks/usePersistedState";
 import { HskLevelButtons } from "./components/HskLevelButtons";
 
 // Mobile-only compact user button
@@ -490,10 +490,7 @@ function AppContent() {
   });
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [flashcardKey, setFlashcardKey] = useState(0);
-  const [flashcardStatusFilter, setFlashcardStatusFilter] = useState<FlashcardFilter>("all");
-  // Quiz key is managed inside QuizMode now
+  const [statusFilter, setStatusFilter] = usePersistedState<StatusFilter>("hanyu-word-status-browse", "all");
 
   // Browse pagination (major perf win)
   const [browsePage, setBrowsePage] = useState(1);
@@ -1284,40 +1281,11 @@ function AppContent() {
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">🃏 Flashcard Mode</h2>
               <p className="text-gray-400">Tap to reveal · Hover characters for pinyin</p>
-
-              {/* Word status filter (learned/still-learning) */}
-              <div className="flex flex-wrap justify-center gap-2 mt-4">
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Words:</span>
-                {[
-                  { value: "all" as FlashcardFilter, label: "All Words", icon: "📋" },
-                  { value: "still-learning" as FlashcardFilter, label: "Still Learning", icon: "📖" },
-                  { value: "learned" as FlashcardFilter, label: "Learned", icon: "✅" },
-                ].map((filter) => (
-                  <button
-                    key={filter.value}
-                    onClick={() => {
-                      setFlashcardStatusFilter(filter.value);
-                      setFlashcardKey((k) => k + 1);
-                    }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      flashcardStatusFilter === filter.value
-                        ? filter.value === "learned"
-                          ? "bg-emerald-700 text-white"
-                          : "bg-red-600 text-white"
-                        : "bg-neutral-900 text-gray-400 border border-neutral-800"
-                    }`}
-                  >
-                    {filter.icon} {filter.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <FlashcardMode
-              key={`fc-${flashcardKey}`}
               allWords={visibleVocabulary}
               learnedState={learnedState}
-              wordStatusFilter={flashcardStatusFilter}
               accessibleLevels={allAccessibleLevels}
               lockReasonForLevel={lockReasonForLevel}
               isResolving={accessInfo.isResolving}

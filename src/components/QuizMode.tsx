@@ -6,6 +6,8 @@ import type { VocabWord } from "../data/vocabulary";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
 import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
 import { HskLevelButtons } from "./HskLevelButtons";
+import { usePersistedState } from "../hooks/usePersistedState";
+import { readJSON, writeJSON, removeJSON } from "../utils/localStorageJson";
 
 interface QuizModeProps {
   allWords: VocabWord[];
@@ -18,13 +20,52 @@ interface QuizModeProps {
   onLockedLevelClick?: () => void;
 }
 
+interface QuizOptionWord {
+  id: number;
+  hanzi: string;
+  pinyin: string;
+  english: string;
+}
+
 interface QuizQuestion {
   word: VocabWord;
-  options: string[];
+  options: QuizOptionWord[];
   correctIndex: number;
 }
 
+interface StoredQuizQuestion {
+  wordId: number;
+  optionWordIds: number[];
+  correctIndex: number;
+}
+
+interface StoredQuizSession {
+  questions: StoredQuizQuestion[];
+  currentIndex: number;
+  score: number;
+  answered: number;
+}
+
+type QuizDirection = "zh-en" | "en-zh";
+
+const STORAGE_KEY = "hanyu-quiz-session";
 const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
+
+function toOptionWord(w: VocabWord): QuizOptionWord {
+  return { id: w.id, hanzi: w.hanzi, pinyin: w.pinyin, english: w.english };
+}
+
+function buildQuizQuestions(pool: VocabWord[]): QuizQuestion[] {
+  const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, 10);
+  return shuffled.map((word) => {
+    const otherWords = pool.filter((w) => w.id !== word.id);
+    const wrongWords = [...otherWords].sort(() => Math.random() - 0.5).slice(0, 3);
+    const correctIndex = Math.floor(Math.random() * 4);
+    const options = wrongWords.map(toOptionWord);
+    options.splice(correctIndex, 0, toOptionWord(word));
+    return { word, options, correctIndex };
+  });
+}
 
 export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick }: QuizModeProps) {
   const isMobile = useIsMobile();
@@ -34,55 +75,108 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
     isResolving,
   });
   const { selectedLevels } = levelSelection;
+
+  const [direction, setDirection] = usePersistedState<QuizDirection>("hanyu-direction-quiz", "zh-en");
+  const isChinese = direction === "zh-en";
+
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
-  const [quizKey, setQuizKey] = useState(0);
-
-  // Restart the quiz whenever the level selection actually changes (not on every render).
-  const prevSelectedRef = useRef<number[]>(selectedLevels);
-  useEffect(() => {
-    if (prevSelectedRef.current.join(",") !== selectedLevels.join(",")) {
-      prevSelectedRef.current = selectedLevels;
-      setCurrentIndex(0);
-      setSelectedAnswer(null);
-      setScore(0);
-      setAnswered(0);
-      setQuizKey((k) => k + 1);
-    }
-  }, [selectedLevels]);
-
-  const toggleLevel = (level: number) => levelSelection.toggleLevel(level);
-  const toggleAllLevels = () => levelSelection.toggleAll();
 
   const filteredWords = useMemo(() => {
     return allWords.filter((w) => selectedLevels.includes(w.hskLevel));
   }, [allWords, selectedLevels]);
 
-  const questions: QuizQuestion[] = useMemo(() => {
-    const shuffled = [...filteredWords].sort(() => Math.random() - 0.5).slice(0, 10);
-    return shuffled.map((word) => {
-      const otherWords = filteredWords.filter((w) => w.id !== word.id);
-      const wrongOptions = otherWords
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
-        .map((w) => w.english);
+  const removeStoredSession = () => removeJSON(STORAGE_KEY);
 
-      const correctIndex = Math.floor(Math.random() * 4);
-      const options = [...wrongOptions];
-      options.splice(correctIndex, 0, word.english);
-
-      return { word, options, correctIndex };
+  const saveSession = (qs: QuizQuestion[], index: number, sc: number, ans: number) => {
+    writeJSON<StoredQuizSession>(STORAGE_KEY, {
+      questions: qs.map((q) => ({ wordId: q.word.id, optionWordIds: q.options.map((o) => o.id), correctIndex: q.correctIndex })),
+      currentIndex: index,
+      score: sc,
+      answered: ans,
     });
-  }, [filteredWords, quizKey]);
+  };
+
+  const resolveStoredQuestion = (sq: StoredQuizQuestion): QuizQuestion | null => {
+    const word = allWords.find((w) => w.id === sq.wordId);
+    if (!word) return null;
+    const optionWords = sq.optionWordIds.map((id) => allWords.find((w) => w.id === id)).filter((w): w is VocabWord => Boolean(w));
+    if (optionWords.length !== sq.optionWordIds.length) return null;
+    return { word, options: optionWords.map(toOptionWord), correctIndex: sq.correctIndex };
+  };
+
+  const startNewQuiz = (levels: number[] = selectedLevels) => {
+    const pool = allWords.filter((w) => levels.includes(w.hskLevel));
+    const newQuestions = buildQuizQuestions(pool);
+    setQuestions(newQuestions);
+    setCurrentIndex(0);
+    setSelectedAnswer(null);
+    setScore(0);
+    setAnswered(0);
+    if (newQuestions.length > 0) saveSession(newQuestions, 0, 0, 0);
+    else removeStoredSession();
+  };
+
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    if (isResolving) return;
+    if (allWords.length === 0) return;
+    if (selectedLevels.length === 0) return;
+    hasRestoredRef.current = true;
+
+    const stored = readJSON<StoredQuizSession>(STORAGE_KEY);
+    if (stored && Array.isArray(stored.questions) && stored.questions.length > 0) {
+      const resolved = stored.questions.map(resolveStoredQuestion).filter((q): q is QuizQuestion => Boolean(q));
+      if (resolved.length === stored.questions.length) {
+        setQuestions(resolved);
+        setCurrentIndex(Math.min(stored.currentIndex ?? 0, resolved.length));
+        setScore(stored.score ?? 0);
+        setAnswered(stored.answered ?? 0);
+        return;
+      }
+    }
+    startNewQuiz(selectedLevels);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allWords, selectedLevels, isResolving]);
 
   const currentQuestion = questions[currentIndex];
-  const isComplete = currentIndex >= questions.length;
+  const isComplete = questions.length > 0 && currentIndex >= questions.length;
+
+  useEffect(() => {
+    if (questions.length === 0) return;
+    if (isComplete) {
+      removeStoredSession();
+      return;
+    }
+    saveSession(questions, currentIndex, score, answered);
+  }, [questions, currentIndex, score, answered, isComplete]);
+
+  const handleLevelToggle = (level: number) => {
+    const newLevels = selectedLevels.includes(level)
+      ? selectedLevels.filter((l) => l !== level)
+      : [...selectedLevels, level].sort((a, b) => a - b);
+    levelSelection.toggleLevel(level);
+    startNewQuiz(newLevels);
+  };
+
+  const handleToggleAllLevels = () => {
+    const newLevels = levelSelection.allSelected ? [] : accessibleLevels;
+    levelSelection.toggleAll();
+    startNewQuiz(newLevels);
+  };
+
+  const toggleDirection = () => {
+    setDirection(isChinese ? "en-zh" : "zh-en");
+    startNewQuiz(selectedLevels);
+  };
 
   const handleAnswer = useCallback(
     (index: number) => {
-      if (selectedAnswer !== null) return;
+      if (selectedAnswer !== null || !currentQuestion) return;
       setSelectedAnswer(index);
       setAnswered((prev) => prev + 1);
       if (index === currentQuestion.correctIndex) {
@@ -97,28 +191,48 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
     [selectedAnswer, currentQuestion]
   );
 
-  const restart = () => {
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setScore(0);
-    setAnswered(0);
-    setQuizKey((k) => k + 1);
-  };
+  const restart = () => startNewQuiz(selectedLevels);
 
-  const progress = ((currentIndex + 1) / questions.length) * 100;
+  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
 
   const HskFilterButtons = () => (
-    <div className="mb-6">
+    <div className="mb-6 space-y-3">
       <HskLevelButtons
         shownLevels={SHOWN_LEVELS}
         accessibleLevels={accessibleLevels}
         selectedLevels={selectedLevels}
-        onToggleLevel={toggleLevel}
-        onToggleAll={toggleAllLevels}
+        onToggleLevel={handleLevelToggle}
+        onToggleAll={handleToggleAllLevels}
         lockReasonForLevel={lockReasonForLevel}
         isResolving={isResolving}
         onLockedClick={onLockedLevelClick}
       />
+
+      <div className="flex justify-center">
+        <button
+          onClick={toggleDirection}
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-neutral-950 border border-neutral-800 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:border-neutral-700 transition-all"
+          title={isChinese ? "Switch to English → Chinese" : "Switch to Chinese → English"}
+        >
+          {isChinese ? (
+            <>
+              <span className="text-red-400">中</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <span>EN</span>
+            </>
+          ) : (
+            <>
+              <span>EN</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <span className="text-red-400">中</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 
@@ -171,6 +285,15 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
     );
   }
 
+  if (!currentQuestion) {
+    return (
+      <div className="max-w-lg mx-auto">
+        <HskFilterButtons />
+        <div className="text-center py-12 text-gray-400">Loading quiz...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto">
       <HskFilterButtons />
@@ -196,24 +319,31 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
             HSK {currentQuestion.word.hskLevel}
           </span>
         </div>
-        
-        <p className="text-sm text-gray-500 mb-4">What does this mean?</p>
-        
-        <div className="flex items-end gap-1 justify-center mb-2">
-          {currentQuestion.word.hanzi.split("").map((char, i) => (
-            <HoverCharacter
-              key={`${currentQuestion.word.id}-${i}`}
-              char={char}
-              pinyin={extractPinyinForChar(currentQuestion.word.pinyin, i, currentQuestion.word.hanzi.length)}
-              size="xl"
-              wordId={currentQuestion.word.id}
-            />
-          ))}
-        </div>
 
-        <p className="text-gray-600 text-xs mt-2">
-          {isMobile ? "Tap characters for pinyin" : "Hover for pinyin"}
-        </p>
+        {isChinese ? (
+          <>
+            <p className="text-sm text-gray-500 mb-4">What does this mean?</p>
+            <div className="flex items-end gap-1 justify-center mb-2">
+              {currentQuestion.word.hanzi.split("").map((char, i) => (
+                <HoverCharacter
+                  key={`${currentQuestion.word.id}-${i}`}
+                  char={char}
+                  pinyin={extractPinyinForChar(currentQuestion.word.pinyin, i, currentQuestion.word.hanzi.length)}
+                  size="xl"
+                  wordId={currentQuestion.word.id}
+                />
+              ))}
+            </div>
+            <p className="text-gray-600 text-xs mt-2">
+              {isMobile ? "Tap characters for pinyin" : "Hover for pinyin"}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 mb-4">Which word means this?</p>
+            <p className="text-2xl font-bold text-white px-4">{currentQuestion.word.english}</p>
+          </>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -234,7 +364,21 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
           return (
             <button key={idx} onClick={() => handleAnswer(idx)} className={btnClass}>
               <span className="mr-3 text-gray-600 font-mono">{String.fromCharCode(65 + idx)}.</span>
-              {option}
+              {isChinese ? (
+                option.english
+              ) : (
+                <span className="inline-flex items-end gap-0.5">
+                  {option.hanzi.split("").map((char, i) => (
+                    <HoverCharacter
+                      key={`opt-${option.id}-${i}`}
+                      char={char}
+                      pinyin={extractPinyinForChar(option.pinyin, i, option.hanzi.length)}
+                      size="md"
+                      wordId={option.id}
+                    />
+                  ))}
+                </span>
+              )}
             </button>
           );
         })}
