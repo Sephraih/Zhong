@@ -1,6 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { accountHasPassword } from '../_authHelpers';
+import type { User } from '@supabase/supabase-js';
+
+// An account whose own created_at meaningfully predates its Apple/Google identity's created_at
+// existed before this sign-in — i.e. Supabase's auto-linking-by-verified-email attached this
+// OAuth sign-in to a pre-existing account that already has its own email/password. A fresh
+// OAuth signup creates both rows together, so the gap there is near-zero.
+// Duplicated in api/auth/me.ts and mobile/contexts/AuthContext.tsx (separate repo) — Vercel's
+// ESM runtime doesn't resolve cross-file imports within api/ in this project, so this can't be
+// a shared helper; keep all three in sync if this threshold or logic changes.
+const PRE_EXISTING_ACCOUNT_THRESHOLD_MS = 60 * 1000;
+
+function accountHasPassword(user: User): boolean {
+  const oauthIdentity = (user.identities ?? []).find((id) => ['apple', 'google'].includes(id.provider));
+  if (!oauthIdentity) return true;
+  const accountCreatedMs = new Date(user.created_at).getTime();
+  const identityCreatedMs = oauthIdentity.created_at
+    ? new Date(oauthIdentity.created_at).getTime()
+    : accountCreatedMs;
+  return accountCreatedMs < identityCreatedMs - PRE_EXISTING_ACCOUNT_THRESHOLD_MS;
+}
 
 const ALLOWED_ORIGINS = new Set(
   ['https://hamhao.com', 'https://www.hamhao.com', process.env.FRONTEND_URL].filter(Boolean) as string[]
