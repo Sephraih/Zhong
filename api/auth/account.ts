@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { accountHasPassword } from '../_authHelpers';
 
 const ALLOWED_ORIGINS = new Set(
   ['https://hamhao.com', 'https://www.hamhao.com', process.env.FRONTEND_URL].filter(Boolean) as string[]
@@ -70,23 +71,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Verify current password for sensitive actions. For delete-account, the question isn't
   // "did they sign in via Apple/Google" but "does this account currently have a password at
-  // all" — an OAuth account that pre-existed before the identity was attached has a real web
-  // account/password that deletion would also destroy, so it's gated the same as a plain
-  // email/password account. A fresh OAuth-only account never has a password to verify.
-  const oauthIdentity = (user.identities ?? []).find((id: any) => ['apple', 'google'].includes(id.provider));
-  const isOAuthUser = !!oauthIdentity || ['apple', 'google'].includes(user.app_metadata?.provider ?? '');
-
+  // all" — a fresh OAuth-only account never has one to verify.
   let requiresPassword = action === 'change-password';
   if (action === 'delete-account') {
-    if (!isOAuthUser) {
-      requiresPassword = true;
-    } else {
-      const accountCreatedMs = new Date(user.created_at).getTime();
-      const identityCreatedMs = oauthIdentity?.created_at
-        ? new Date(oauthIdentity.created_at).getTime()
-        : accountCreatedMs;
-      requiresPassword = accountCreatedMs < identityCreatedMs - 60_000;
-    }
+    requiresPassword = accountHasPassword(user);
   }
 
   if (requiresPassword) {

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { accountHasPassword } from '../_authHelpers';
 
 const ALLOWED_ORIGINS = new Set(
   ['https://hamhao.com', 'https://www.hamhao.com', process.env.FRONTEND_URL].filter(Boolean) as string[]
@@ -97,12 +98,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       accountTier = 'premium';
     }
 
-    console.log(`/api/auth/me user=${user.id} profile.account_tier=${profile?.account_tier} profile.is_premium=${profile?.is_premium} app_metadata=${JSON.stringify(user.app_metadata)} -> resolved=${accountTier}`);
-
     res.json({
       user,
       account_tier: accountTier,
       stripe_customer_id: profile?.stripe_customer_id || null,
+      has_password: accountHasPassword(user),
     });
   } catch (error) {
     console.error('Get user error:', error);

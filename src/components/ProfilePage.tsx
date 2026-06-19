@@ -15,7 +15,15 @@ interface ProfilePageProps {
 }
 
 export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack, onOpenAuth }: ProfilePageProps) {
-  const { user, isLoading, accountTier, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
+  const { user, isLoading, accountTier, hasPassword, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
+
+  // Only blank the whole page for the *initial* auth check (avoids the sign-in flash). Once
+  // we've rendered real content once, isLoading flipping true again later — e.g. while
+  // changeEmail/changePassword/deleteAccount are in flight — must not hide the page again.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  useEffect(() => {
+    if (!isLoading) setHasLoadedOnce(true);
+  }, [isLoading]);
 
   const [premiumPrice, setPremiumPrice] = useState<string>("$9.99");
 
@@ -85,7 +93,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
     return () => { cancelled = true; };
   }, []);
 
-  if (isLoading) {
+  if (isLoading && !hasLoadedOnce) {
     return (
       <div className="max-w-3xl mx-auto text-center py-20">
         <div className="w-8 h-8 mx-auto border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
@@ -281,7 +289,9 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
         </div>
       )}
 
-      {/* Account Settings */}
+      {/* Account Settings — only relevant for accounts with their own email/password; a fresh
+          OAuth-only account has no password to change anything against. */}
+      {hasPassword && (
       <div className="mt-10 mb-8">
         <h3 className="text-xl font-bold text-white mb-6">Account Settings</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -487,6 +497,7 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
           </div>
         </div>
       </div>
+      )}
 
       {/* Your Data + Legal */}
       <div>
@@ -576,19 +587,21 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                    Confirm password
-                  </label>
-                  <input
-                    type="password"
-                    value={deletePassword}
-                    onChange={(e) => setDeletePassword(e.target.value)}
-                    className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
-                    placeholder="Your password"
-                  />
-                </div>
+              <div className={hasPassword ? "mt-4 grid grid-cols-1 md:grid-cols-2 gap-4" : "mt-4"}>
+                {hasPassword && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      Confirm password
+                    </label>
+                    <input
+                      type="password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      className="w-full px-4 py-3 bg-black border border-neutral-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600/40 focus:border-red-600/50"
+                      placeholder="Your password"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
@@ -604,9 +617,11 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
               </div>
 
               <div className="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-                <p className="text-xs text-gray-500">
-                  We require your password to prevent accidental or unauthorized deletion.
-                </p>
+                {hasPassword && (
+                  <p className="text-xs text-gray-500">
+                    We require your password to prevent accidental or unauthorized deletion.
+                  </p>
+                )}
 
                 <button
                   onClick={async () => {
@@ -615,13 +630,13 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                       setDeleteError("Please type DELETE to confirm.");
                       return;
                     }
-                    if (!deletePassword) {
+                    if (hasPassword && !deletePassword) {
                       setDeleteError("Please enter your password.");
                       return;
                     }
                     try {
                       setDeleteBusy(true);
-                      await deleteAccount(deletePassword);
+                      await deleteAccount(hasPassword ? deletePassword : undefined);
                       // After deletion, user is logged out; return to home.
                       window.history.pushState({}, "", "/");
                       window.dispatchEvent(new PopStateEvent("popstate"));

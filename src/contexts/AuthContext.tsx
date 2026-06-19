@@ -30,6 +30,8 @@ interface AuthContextType {
   isLoading: boolean;
   isCheckingOut: boolean;
   accountTier: AccountTier;
+  /** Whether this account currently has its own email/password (false for a fresh OAuth-only signup). */
+  hasPassword: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (
     email: string,
@@ -44,7 +46,7 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
   setNewPassword: (newPassword: string) => Promise<void>;
-  deleteAccount: (password: string) => Promise<void>;
+  deleteAccount: (password?: string) => Promise<void>;
   exportMyData: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   error: string | null;
@@ -91,6 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return storageGetItem("hanyu_auth_token");
   });
   const [accountTier, setAccountTier] = useState<AccountTier>('free');
+  // Defaults true (require a password) until /api/auth/me says otherwise — the safe default,
+  // since wrongly requiring a password is a UX nit but wrongly skipping it isn't.
+  const [hasPassword, setHasPassword] = useState(true);
   const [isLoading, setIsLoading] = useState(() => !getCachedIsSandboxed());
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(data.user);
         setAccountTier(data.account_tier || 'free');
+        setHasPassword(data.has_password !== false);
         console.log("Auth refreshed. Tier:", data.account_tier);
         return data;
       } else if (response.status === 401) {
@@ -499,7 +505,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteAccount = async (password: string) => {
+  const deleteAccount = async (password?: string) => {
     if (getCachedIsSandboxed()) {
       setError("Account deletion unavailable in preview mode");
       return;
@@ -743,6 +749,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isCheckingOut,
         accountTier,
+        hasPassword,
         login,
         signup,
         signInWithApple,
