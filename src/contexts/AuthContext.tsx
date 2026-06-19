@@ -247,7 +247,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, [fetchUser]);
 
-  // Re-fetch when tab becomes visible
+  // Re-fetch when tab becomes visible/focused — but no more often than once per
+  // MIN_RECHECK_INTERVAL_MS. Without this, "visibilitychange" and "focus" both fire (often
+  // within milliseconds of each other) for a single alt-tab/refocus, doubling every check; and
+  // a user who glances between windows every few seconds would otherwise re-hit /api/auth/me
+  // just as often, even though the access token stays valid for ~1h.
+  const lastAuthCheckRef = useRef(0);
+  const MIN_RECHECK_INTERVAL_MS = 60_000;
+
   useEffect(() => {
     // Skip in sandbox mode
     if (getCachedIsSandboxed()) return;
@@ -255,23 +262,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Read storage first, not the closed-over accessToken — this effect only runs once (deps
     // are just [fetchUser], which never changes), so accessToken here is frozen at whatever it
     // was on mount. Storage is always current since every token write goes through it.
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        const token = storageGetItem("hanyu_auth_token") || accessToken;
-        if (token) fetchUser(token);
-      }
-    };
-
-    const handleFocus = () => {
+    const maybeRefetch = () => {
+      const now = Date.now();
+      if (now - lastAuthCheckRef.current < MIN_RECHECK_INTERVAL_MS) return;
+      lastAuthCheckRef.current = now;
       const token = storageGetItem("hanyu_auth_token") || accessToken;
       if (token) fetchUser(token);
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") maybeRefetch();
+    };
+
     window.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener("focus", maybeRefetch);
     return () => {
       window.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("focus", maybeRefetch);
     };
   }, [fetchUser]);
 

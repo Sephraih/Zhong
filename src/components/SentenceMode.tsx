@@ -244,32 +244,39 @@ export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, i
     if (isResolving) return;
     if (allWords.length === 0) return;
     if (selectedLevels.length === 0) return;
-    hasRestoredRef.current = true;
 
     const stored = loadSession();
-    if (stored && stored.ids.length > 0) {
-      const pool = buildSentencePool(selectedLevels);
-      const poolById = new Map(pool.map((s) => [s.id, s]));
-      const storedSentences = stored.ids
-        .map((id) => poolById.get(id))
-        .filter((s): s is SessionSentence => Boolean(s));
-
-      if (storedSentences.length > 0) {
-        const safeIndex = Math.min(stored.currentIndex ?? 0, storedSentences.length - 1);
-        const restored: SessionSentence[] = storedSentences.map((s) => ({
-          ...s,
-          sessionProgress: stored.progress?.[s.id] ?? 0,
-        }));
-        setSessionSentences(restored);
-        setCurrentIndex(safeIndex);
-        setCycleCount(stored.cycleCount ?? 0);
-        setIsFlipped(false);
-        setIsFinished(false);
-        return;
-      }
+    if (!stored || stored.ids.length === 0) {
+      // Nothing was ever saved — a confident, permanent decision, safe to latch.
+      hasRestoredRef.current = true;
+      startNewSession(selectedLevels);
+      return;
     }
 
-    startNewSession(selectedLevels);
+    const pool = buildSentencePool(selectedLevels);
+    const poolById = new Map(pool.map((s) => [s.id, s]));
+    const storedSentences = stored.ids
+      .map((id) => poolById.get(id))
+      .filter((s): s is SessionSentence => Boolean(s));
+
+    if (storedSentences.length === 0) {
+      // A session WAS saved but none of its sentences resolve against the current pool yet —
+      // this can happen transiently while access is still settling. Don't latch: retry on the
+      // next allWords/level change instead of overwriting a real session with a fresh one.
+      return;
+    }
+
+    hasRestoredRef.current = true;
+    const safeIndex = Math.min(stored.currentIndex ?? 0, storedSentences.length - 1);
+    const restored: SessionSentence[] = storedSentences.map((s) => ({
+      ...s,
+      sessionProgress: stored.progress?.[s.id] ?? 0,
+    }));
+    setSessionSentences(restored);
+    setCurrentIndex(safeIndex);
+    setCycleCount(stored.cycleCount ?? 0);
+    setIsFlipped(false);
+    setIsFinished(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords, selectedLevels, isResolving]);
 

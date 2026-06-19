@@ -126,20 +126,28 @@ export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isRes
     if (isResolving) return;
     if (allWords.length === 0) return;
     if (selectedLevels.length === 0) return;
-    hasRestoredRef.current = true;
 
     const stored = readJSON<StoredQuizSession>(STORAGE_KEY);
-    if (stored && Array.isArray(stored.questions) && stored.questions.length > 0) {
-      const resolved = stored.questions.map(resolveStoredQuestion).filter((q): q is QuizQuestion => Boolean(q));
-      if (resolved.length === stored.questions.length) {
-        setQuestions(resolved);
-        setCurrentIndex(Math.min(stored.currentIndex ?? 0, resolved.length));
-        setScore(stored.score ?? 0);
-        setAnswered(stored.answered ?? 0);
-        return;
-      }
+    if (!stored || !Array.isArray(stored.questions) || stored.questions.length === 0) {
+      // Nothing was ever saved — a confident, permanent decision, safe to latch.
+      hasRestoredRef.current = true;
+      startNewQuiz(selectedLevels);
+      return;
     }
-    startNewQuiz(selectedLevels);
+
+    const resolved = stored.questions.map(resolveStoredQuestion).filter((q): q is QuizQuestion => Boolean(q));
+    if (resolved.length !== stored.questions.length) {
+      // A session WAS saved but some of its words don't resolve against allWords yet — this can
+      // happen transiently while access is still settling. Don't latch: retry on the next
+      // allWords/level change instead of discarding a real session for a mismatched fresh one.
+      return;
+    }
+
+    hasRestoredRef.current = true;
+    setQuestions(resolved);
+    setCurrentIndex(Math.min(stored.currentIndex ?? 0, resolved.length));
+    setScore(stored.score ?? 0);
+    setAnswered(stored.answered ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords, selectedLevels, isResolving]);
 

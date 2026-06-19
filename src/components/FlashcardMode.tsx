@@ -182,13 +182,23 @@ export function FlashcardMode({ allWords, learnedState, accessibleLevels, lockRe
     if (hasRestoredRef.current) return;
     if (isResolving) return;
     if (allWords.length === 0) return;
-    hasRestoredRef.current = true;
 
     const stored = readJSON<StoredFlashcardSession>(STORAGE_KEY);
-    if (!stored || !Array.isArray(stored.refs)) return;
-    const resolvedItems = stored.refs.map(resolveItemRef).filter((item): item is FlashcardItem => Boolean(item));
-    if (resolvedItems.length === 0) return;
+    if (!stored || !Array.isArray(stored.refs) || stored.refs.length === 0) {
+      // Nothing was ever saved — a confident, permanent decision, safe to latch.
+      hasRestoredRef.current = true;
+      return;
+    }
 
+    const resolvedItems = stored.refs.map(resolveItemRef).filter((item): item is FlashcardItem => Boolean(item));
+    if (resolvedItems.length === 0) {
+      // A session WAS saved but none of its refs resolve against allWords/store.cards yet — this
+      // can happen transiently while access is still settling. Don't latch: retry on the next
+      // allWords change instead of permanently giving up on a real session.
+      return;
+    }
+
+    hasRestoredRef.current = true;
     setSessionItems(resolvedItems);
     setActiveDeckIds(new Set(stored.activeDeckIds ?? []));
     setIsShuffled(Boolean(stored.isShuffled));

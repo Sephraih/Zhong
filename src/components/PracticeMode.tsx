@@ -247,33 +247,39 @@ export function PracticeMode({ allWords, learnedState, accessibleLevels, lockRea
     if (isResolving) return;
     if (allWords.length === 0) return;
     if (levelSelection.selectedLevels.length === 0) return;
-    hasRestoredRef.current = true;
 
     const stored = loadSession();
-    if (stored && stored.ids.length > 0) {
-      setInfoMinimized(Boolean(stored.infoMinimized));
-
-      const pool = filterWordsByLevels(allWords, levelSelection.selectedLevels);
-      const storedWords = stored.ids
-        .map((id) => pool.find((w) => w.id === id))
-        .filter((w): w is VocabWord => Boolean(w));
-
-      if (storedWords.length > 0) {
-        const safeIndex = Math.min(stored.currentIndex ?? 0, storedWords.length - 1);
-        const restoredWords: SessionWord[] = storedWords.map((w) => ({
-          ...w,
-          sessionProgress: stored.progress?.[w.id] ?? (isLearned(w.id) ? 3 : 0),
-        }));
-        setSessionWords(restoredWords);
-        setCurrentIndex(safeIndex);
-        setCycleCount(stored.cycleCount ?? 0);
-        setIsFlipped(false);
-        setIsFinished(false);
-        return;
-      }
+    if (!stored || stored.ids.length === 0) {
+      // Nothing was ever saved — a confident, permanent decision, safe to latch.
+      hasRestoredRef.current = true;
+      startNewSession(levelSelection.selectedLevels);
+      return;
     }
 
-    startNewSession(levelSelection.selectedLevels);
+    const pool = filterWordsByLevels(allWords, levelSelection.selectedLevels);
+    const storedWords = stored.ids
+      .map((id) => pool.find((w) => w.id === id))
+      .filter((w): w is VocabWord => Boolean(w));
+
+    if (storedWords.length === 0) {
+      // A session WAS saved but none of its words resolve against the current pool yet — this
+      // can happen transiently while access is still settling. Don't latch: retry on the next
+      // allWords/level change instead of overwriting a real session with a fresh, narrowed one.
+      return;
+    }
+
+    hasRestoredRef.current = true;
+    setInfoMinimized(Boolean(stored.infoMinimized));
+    const safeIndex = Math.min(stored.currentIndex ?? 0, storedWords.length - 1);
+    const restoredWords: SessionWord[] = storedWords.map((w) => ({
+      ...w,
+      sessionProgress: stored.progress?.[w.id] ?? (isLearned(w.id) ? 3 : 0),
+    }));
+    setSessionWords(restoredWords);
+    setCurrentIndex(safeIndex);
+    setCycleCount(stored.cycleCount ?? 0);
+    setIsFlipped(false);
+    setIsFinished(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allWords, levelSelection.selectedLevels, isResolving]);
 
