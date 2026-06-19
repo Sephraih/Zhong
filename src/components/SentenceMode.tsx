@@ -7,9 +7,16 @@ import type { VocabWord } from "../data/vocabulary";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
+import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
+import { HskLevelButtons } from "./HskLevelButtons";
 
 interface SentenceModeProps {
   allWords: VocabWord[];
+  /** Levels the current user can access (from App.tsx's hasAccessToLevel) */
+  accessibleLevels: number[];
+  lockReasonForLevel: (level: number) => string | null;
+  /** True while the real access tier is still resolving (see App.tsx's accessInfo.isResolving) */
+  isResolving?: boolean;
   onLockedLevelClick?: () => void;
   onNavigateToSupport?: () => void;
 }
@@ -23,8 +30,7 @@ interface SessionSentence {
   sessionProgress: number;
 }
 
-const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
-type HskLevel = (typeof HSK_LEVELS)[number];
+const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
 
 const ANIMATION_DURATION = 330;
 
@@ -70,45 +76,23 @@ function getCardGlowClass(
   }
 }
 
-function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
-  if (!isSelected) {
-    return "text-gray-400 hover:text-white hover:bg-neutral-800";
-  }
-  switch (level) {
-    case 1: return "bg-emerald-600 text-white";
-    case 2: return "bg-blue-600 text-white";
-    case 3: return "bg-purple-600 text-white";
-    case 4: return "bg-orange-600 text-white";
-    case 5: return "bg-pink-600 text-white";
-    case 6: return "bg-cyan-600 text-white";
-    default: return "bg-red-600 text-white";
-  }
-}
-
-function getLockedHskButtonClasses(level: HskLevel): string {
-  switch (level) {
-    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
-  }
-}
-
 type SentenceDirection = "zh-en" | "en-zh";
 
-export function SentenceMode({ allWords, onLockedLevelClick, onNavigateToSupport }: SentenceModeProps) {
+export function SentenceMode({ allWords, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick, onNavigateToSupport }: SentenceModeProps) {
   const isMobile = useIsMobile();
   const noChineseVoice = useTtsVoiceCheck();
+  const levelSelection = useHskLevelSelection({
+    storageKey: "sentences",
+    accessibleLevels,
+    isResolving,
+  });
+  const { selectedLevels } = levelSelection;
 
   const [sessionSentences, setSessionSentences] = useState<SessionSentence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(() => new Set(HSK_LEVELS));
   const [direction, setDirection] = useState<SentenceDirection>("zh-en");
   const [infoMinimized, setInfoMinimized] = useState(true);
 
@@ -148,48 +132,13 @@ export function SentenceMode({ allWords, onLockedLevelClick, onNavigateToSupport
     }, ANIMATION_DURATION);
   };
 
-  // Get accessible levels from allWords
-  const accessibleLevels = useMemo(() => {
-    const levels = new Set<HskLevel>();
-    allWords.forEach((w) => {
-      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) levels.add(w.hskLevel as HskLevel);
-    });
-    return Array.from(levels).sort((a, b) => a - b);
-  }, [allWords]);
-
-  const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
-
-  const allLevelsSelected = useMemo(() => {
-    return accessibleLevels.every((l) => selectedLevels.has(l));
-  }, [accessibleLevels, selectedLevels]);
-
-  const toggleLevel = (level: HskLevel) => {
-    if (!isLevelEnabled(level)) {
-      onLockedLevelClick?.();
-      return;
-    }
-
-    const next = new Set(selectedLevels);
-    if (next.has(level)) {
-      next.delete(level);
-    } else {
-      next.add(level);
-    }
-    setSelectedLevels(next);
-  };
-
-  const toggleAllLevels = () => {
-    if (allLevelsSelected) {
-      setSelectedLevels(new Set());
-    } else {
-      setSelectedLevels(new Set(accessibleLevels));
-    }
-  };
+  const toggleLevel = (level: number) => levelSelection.toggleLevel(level);
+  const toggleAllLevels = () => levelSelection.toggleAll();
 
   // Collect all example sentences from filtered words
   const allSentences = useMemo(() => {
     const sentences: SessionSentence[] = [];
-    const filteredWords = allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
+    const filteredWords = allWords.filter((w) => selectedLevels.includes(w.hskLevel));
     
     filteredWords.forEach((word) => {
       word.examples.forEach((example, idx) => {
@@ -378,42 +327,16 @@ export function SentenceMode({ allWords, onLockedLevelClick, onNavigateToSupport
   const HskFilterButtons = () => (
     <div className="mb-6 space-y-3">
       {/* HSK Level multi-select */}
-      <div className="flex justify-center">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            onClick={toggleAllLevels}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-              allLevelsSelected
-                ? "bg-red-600 text-white shadow-sm shadow-red-900/20"
-                : "bg-neutral-900 text-gray-400 border border-neutral-800 hover:border-neutral-700"
-            }`}
-            title={allLevelsSelected ? "Deselect all levels" : "Select all levels"}
-          >
-            All
-          </button>
-
-          {HSK_LEVELS.map((level) => {
-            const enabled = isLevelEnabled(level);
-            const selected = selectedLevels.has(level);
-            return (
-              <button
-                key={level}
-                onClick={() => toggleLevel(level)}
-                title={enabled ? undefined : "Sign in or upgrade to Premium to unlock"}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  !enabled
-                    ? getLockedHskButtonClasses(level)
-                    : selected
-                    ? getHskButtonClasses(level, true)
-                    : `${getHskButtonClasses(level, false)} border border-neutral-800`
-                }`}
-              >
-                {!enabled ? "🔒 " : ""}HSK {level}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <HskLevelButtons
+        shownLevels={SHOWN_LEVELS}
+        accessibleLevels={accessibleLevels}
+        selectedLevels={selectedLevels}
+        onToggleLevel={toggleLevel}
+        onToggleAll={toggleAllLevels}
+        lockReasonForLevel={lockReasonForLevel}
+        isResolving={isResolving}
+        onLockedClick={onLockedLevelClick}
+      />
 
       {/* Direction toggle + help toggle */}
       <div className="flex justify-center">
@@ -482,7 +405,7 @@ export function SentenceMode({ allWords, onLockedLevelClick, onNavigateToSupport
   );
 
   // Empty selection state
-  if (selectedLevels.size === 0) {
+  if (selectedLevels.length === 0) {
     return (
       <div className="max-w-lg mx-auto">
         <HskFilterButtons />

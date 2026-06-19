@@ -1,12 +1,19 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { getHskBadgeClasses } from "../utils/hskColors";
 import type { VocabWord } from "../data/vocabulary";
 import { extractPinyinForChar } from "../utils/pinyinUtils";
+import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
+import { HskLevelButtons } from "./HskLevelButtons";
 
 interface QuizModeProps {
   allWords: VocabWord[];
+  /** Levels the current user can access (from App.tsx's hasAccessToLevel) */
+  accessibleLevels: number[];
+  lockReasonForLevel: (level: number) => string | null;
+  /** True while the real access tier is still resolving (see App.tsx's accessInfo.isResolving) */
+  isResolving?: boolean;
   /** Called when the user taps a locked HSK level button (should open login or profile) */
   onLockedLevelClick?: () => void;
 }
@@ -17,89 +24,40 @@ interface QuizQuestion {
   correctIndex: number;
 }
 
-const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
-type HskLevel = (typeof HSK_LEVELS)[number];
+const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
 
-function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
-  if (!isSelected) {
-    return "text-gray-400 hover:text-white hover:bg-neutral-900";
-  }
-  switch (level) {
-    case 1: return "bg-emerald-600 text-white";
-    case 2: return "bg-blue-600 text-white";
-    case 3: return "bg-purple-600 text-white";
-    case 4: return "bg-orange-600 text-white";
-    case 5: return "bg-pink-600 text-white";
-    case 6: return "bg-cyan-600 text-white";
-    default: return "bg-red-600 text-white";
-  }
-}
-
-function getLockedHskButtonClasses(level: HskLevel): string {
-  switch (level) {
-    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
-  }
-}
-
-export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
+export function QuizMode({ allWords, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick }: QuizModeProps) {
   const isMobile = useIsMobile();
-  const [selectedLevels, setSelectedLevels] = useState<Set<HskLevel>>(new Set([1, 2, 3, 4]));
+  const levelSelection = useHskLevelSelection({
+    storageKey: "quiz",
+    accessibleLevels,
+    isResolving,
+  });
+  const { selectedLevels } = levelSelection;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
   const [quizKey, setQuizKey] = useState(0);
 
-  const accessibleLevels = useMemo(() => {
-    const levels = new Set<HskLevel>();
-    allWords.forEach((w) => {
-      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) levels.add(w.hskLevel as HskLevel);
-    });
-    return Array.from(levels).sort((a, b) => a - b);
-  }, [allWords]);
-
-  const shownLevels: HskLevel[] = [1, 2, 3, 4, 5, 6];
-
-  const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
-
-  const toggleLevel = (level: HskLevel) => {
-    if (!isLevelEnabled(level)) return;
-    const next = new Set(selectedLevels);
-    if (next.has(level)) {
-      next.delete(level);
-    } else {
-      next.add(level);
+  // Restart the quiz whenever the level selection actually changes (not on every render).
+  const prevSelectedRef = useRef<number[]>(selectedLevels);
+  useEffect(() => {
+    if (prevSelectedRef.current.join(",") !== selectedLevels.join(",")) {
+      prevSelectedRef.current = selectedLevels;
+      setCurrentIndex(0);
+      setSelectedAnswer(null);
+      setScore(0);
+      setAnswered(0);
+      setQuizKey((k) => k + 1);
     }
-    setSelectedLevels(next);
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setScore(0);
-    setAnswered(0);
-    setQuizKey((k) => k + 1);
-  };
+  }, [selectedLevels]);
 
-  const toggleAllLevels = () => {
-    const allAccessibleSelected = accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l));
-    if (allAccessibleSelected) {
-      setSelectedLevels(new Set());
-    } else {
-      setSelectedLevels(new Set(accessibleLevels));
-    }
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setScore(0);
-    setAnswered(0);
-    setQuizKey((k) => k + 1);
-  };
+  const toggleLevel = (level: number) => levelSelection.toggleLevel(level);
+  const toggleAllLevels = () => levelSelection.toggleAll();
 
   const filteredWords = useMemo(() => {
-    return allWords.filter((w) => selectedLevels.has(w.hskLevel as HskLevel));
+    return allWords.filter((w) => selectedLevels.includes(w.hskLevel));
   }, [allWords, selectedLevels]);
 
   const questions: QuizQuestion[] = useMemo(() => {
@@ -150,53 +108,21 @@ export function QuizMode({ allWords, onLockedLevelClick }: QuizModeProps) {
   const progress = ((currentIndex + 1) / questions.length) * 100;
 
   const HskFilterButtons = () => (
-    <div className="mb-6 flex justify-center">
-      <div className="max-w-full">
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            onClick={toggleAllLevels}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-              accessibleLevels.length > 0 && accessibleLevels.every(l => selectedLevels.has(l))
-                ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
-                : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
-            }`}
-            title="Toggle all available levels"
-          >
-            All
-          </button>
-
-          {shownLevels.map((level) => {
-            const enabled = isLevelEnabled(level);
-            const selected = selectedLevels.has(level);
-            return (
-              <button
-                key={level}
-                onClick={() => {
-                  if (!enabled) {
-                    onLockedLevelClick?.();
-                    return;
-                  }
-                  toggleLevel(level);
-                }}
-                title={enabled ? undefined : "Sign in or upgrade to Premium to unlock"}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-                  !enabled
-                    ? `${getLockedHskButtonClasses(level)}`
-                    : selected
-                    ? `${getHskButtonClasses(level, true)} border-transparent`
-                    : `${getHskButtonClasses(level, false)} border-neutral-800`
-                }`}
-              >
-                {!enabled ? "🔒 " : ""}HSK {level}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+    <div className="mb-6">
+      <HskLevelButtons
+        shownLevels={SHOWN_LEVELS}
+        accessibleLevels={accessibleLevels}
+        selectedLevels={selectedLevels}
+        onToggleLevel={toggleLevel}
+        onToggleAll={toggleAllLevels}
+        lockReasonForLevel={lockReasonForLevel}
+        isResolving={isResolving}
+        onLockedClick={onLockedLevelClick}
+      />
     </div>
   );
 
-  if (selectedLevels.size === 0) {
+  if (selectedLevels.length === 0) {
     return (
       <div className="max-w-lg mx-auto">
         <HskFilterButtons />

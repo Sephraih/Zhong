@@ -39,6 +39,8 @@ import { PinyinMode } from "./components/PinyinMode";
 import { primeVoices } from "./utils/tts";
 import { addWordToDeckDirect, getHskWordIdsForDeck } from "./hooks/useCardStore";
 import { DeckPickerModal } from "./components/DeckPickerModal";
+import { useHskLevelSelection } from "./hooks/useHskLevelSelection";
+import { HskLevelButtons } from "./components/HskLevelButtons";
 
 // Mobile-only compact user button
 function MobileUserButton({
@@ -191,7 +193,6 @@ function getInitialViewMode(): ViewMode {
   }
   return "home";
 }
-type HSKFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6;
 type StatusFilter = "all" | "learned" | "still-learning";
 
 const FALLBACK_VOCABULARY = buildFallbackVocabulary();
@@ -204,9 +205,17 @@ function signature(words: VocabWord[]): string {
 }
 
 function AppContent() {
-  const { user, accountTier, accessToken } = useAuth();
+  const { user, accountTier, accessToken, isLoading: authLoading } = useAuth();
   const isMobile = useIsMobile();
   const [isPending, startTransition] = useTransition();
+
+  // True only while the initial /api/auth/me call is still in flight for a previously-signed-in
+  // user (a stored token exists) — read once on mount, same signal AuthContext itself bootstraps
+  // from. Used to tell level-selection UI to show a neutral "checking access…" state instead of
+  // a hard lock, without ever changing what content/levels are actually granted below.
+  const hasStoredToken = useMemo(() => {
+    try { return Boolean(storageGetItem("hanyu_auth_token")); } catch { return false; }
+  }, []);
 
   // Access rules:
   // - Anonymous: HSK 1 only, top 200 words
@@ -216,8 +225,9 @@ function AppContent() {
     () => ({
       isLoggedIn: Boolean(user),
       accountTier,
+      isResolving: authLoading && hasStoredToken,
     }),
-    [user, accountTier]
+    [user, accountTier, authLoading, hasStoredToken]
   );
   // 1) Load from localStorage cache synchronously if present.
   // 2) Otherwise show fallback immediately.
@@ -469,7 +479,15 @@ function AppContent() {
     };
   }, [startTransition]);
 
-  const [hskFilter, setHskFilter] = useState<HSKFilter>("all");
+  const allAccessibleLevels = useMemo(
+    () => [1, 2, 3, 4, 5, 6].filter((l) => hasAccessToLevel(l)),
+    [hasAccessToLevel]
+  );
+  const browseLevels = useHskLevelSelection({
+    storageKey: "browse",
+    accessibleLevels: allAccessibleLevels,
+    isResolving: accessInfo.isResolving,
+  });
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -542,8 +560,9 @@ function AppContent() {
   }, [vocabulary]);
 
   const filteredWords = useMemo(() => {
+    if (browseLevels.selectedLevels.length === 0) return [];
     return visibleVocabulary.filter((word) => {
-      if (hskFilter !== "all" && word.hskLevel !== hskFilter) return false;
+      if (!browseLevels.selectedLevels.includes(word.hskLevel)) return false;
       if (categoryFilter !== "all" && word.category !== categoryFilter) return false;
       if (statusFilter === "learned" && !isLearned(word.id)) return false;
       if (statusFilter === "still-learning" && isLearned(word.id)) return false;
@@ -557,12 +576,12 @@ function AppContent() {
       }
       return true;
     });
-  }, [vocabulary, hskFilter, categoryFilter, searchQuery, statusFilter, isLearned]);
+  }, [vocabulary, browseLevels.selectedLevels, categoryFilter, searchQuery, statusFilter, isLearned]);
 
   // Reset pagination when the user changes filters/search.
   useEffect(() => {
     setBrowsePage(1);
-  }, [hskFilter, categoryFilter, searchQuery, statusFilter]);
+  }, [browseLevels.selectedLevels, categoryFilter, searchQuery, statusFilter]);
 
   const visibleWords = useMemo(() => {
     return filteredWords.slice(0, browsePage * browsePageSize);
@@ -1087,44 +1106,20 @@ function AppContent() {
               </div>
 
               {/* Level filter */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Level:</span>
-                {[
-                  { value: "all" as HSKFilter, label: "All Levels" },
-                  { value: 1 as HSKFilter, label: `HSK 1 (${hsk1Count})` },
-                  { value: 2 as HSKFilter, label: `HSK 2 (${hsk2Count})` },
-                  { value: 3 as HSKFilter, label: `HSK 3 (${hsk3Count})` },
-                  { value: 4 as HSKFilter, label: `HSK 4 (${hsk4Count})` },
-                  { value: 5 as HSKFilter, label: `HSK 5 (${hsk5Count})` },
-                  { value: 6 as HSKFilter, label: `HSK 6 (${hsk6Count})` },
-                ].map((filter) => {
-                  const val = filter.value;
-                  const isLocked = val !== "all" && !hasAccessToLevel(val);
-                  const lockReason = val === "all" ? null : lockReasonForLevel(val);
-                  return (
-                    <button
-                      key={String(filter.value)}
-                      onClick={() => {
-                        if (isLocked) {
-                          handleLockedLevelClick();
-                          return;
-                        }
-                        setHskFilter(filter.value);
-                      }}
-                      title={isLocked && lockReason ? lockReason : undefined}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
-                        hskFilter === filter.value
-                          ? "bg-red-600 text-white shadow-sm border-red-500"
-                          : isLocked
-                          ? "bg-neutral-900/50 text-gray-600 border-neutral-800 hover:border-neutral-700 hover:text-gray-300"
-                          : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-red-800/60 hover:text-white"
-                      }`}
-                    >
-                      {isLocked ? "🔒 " : ""}
-                      {filter.label}
-                    </button>
-                  );
-                })}
+                <HskLevelButtons
+                  shownLevels={[1, 2, 3, 4, 5, 6]}
+                  accessibleLevels={allAccessibleLevels}
+                  selectedLevels={browseLevels.selectedLevels}
+                  onToggleLevel={browseLevels.toggleLevel}
+                  onToggleAll={browseLevels.toggleAll}
+                  lockReasonForLevel={lockReasonForLevel}
+                  isResolving={accessInfo.isResolving}
+                  onLockedClick={handleLockedLevelClick}
+                  levelCounts={{ 1: hsk1Count, 2: hsk2Count, 3: hsk3Count, 4: hsk4Count, 5: hsk5Count, 6: hsk6Count }}
+                  className="!justify-start"
+                />
               </div>
 
               {/* Category filter */}
@@ -1160,8 +1155,8 @@ function AppContent() {
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider self-center mr-1">Status:</span>
                 {(() => {
                   // Compute counts based on current HSK and category filters (but not status filter)
-                  const baseFiltered = visibleVocabulary.filter((word) => {
-                    if (hskFilter !== "all" && word.hskLevel !== hskFilter) return false;
+                  const baseFiltered = browseLevels.selectedLevels.length === 0 ? [] : visibleVocabulary.filter((word) => {
+                    if (!browseLevels.selectedLevels.includes(word.hskLevel)) return false;
                     if (categoryFilter !== "all" && word.category !== categoryFilter) return false;
                     if (searchQuery) {
                       const q = searchQuery.toLowerCase();
@@ -1216,7 +1211,12 @@ function AppContent() {
             </div>
 
             {/* Word Grid */}
-            {filteredWords.length > 0 ? (
+            {browseLevels.selectedLevels.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-5xl mb-4">👆</div>
+                <p className="text-gray-400 text-lg">Please select at least one HSK level to browse.</p>
+              </div>
+            ) : filteredWords.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {visibleWords.map((word) => (
@@ -1249,7 +1249,7 @@ function AppContent() {
                 <button
                   onClick={() => {
                     setSearchQuery("");
-                    setHskFilter("all");
+                    browseLevels.selectAll();
                     setCategoryFilter("all");
                     setStatusFilter("all");
                   }}
@@ -1270,6 +1270,9 @@ function AppContent() {
             <PracticeMode
               allWords={visibleVocabulary}
               learnedState={learnedState}
+              accessibleLevels={allAccessibleLevels}
+              lockReasonForLevel={lockReasonForLevel}
+              isResolving={accessInfo.isResolving}
               onLockedLevelClick={handleLockedLevelClick}
               onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
             />
@@ -1315,6 +1318,9 @@ function AppContent() {
               allWords={visibleVocabulary}
               learnedState={learnedState}
               wordStatusFilter={flashcardStatusFilter}
+              accessibleLevels={allAccessibleLevels}
+              lockReasonForLevel={lockReasonForLevel}
+              isResolving={accessInfo.isResolving}
               onLockedLevelClick={handleLockedLevelClick}
               onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
               onOpenAuth={() => openAuthModal("login")}
@@ -1329,7 +1335,13 @@ function AppContent() {
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
             </div>
 
-            <QuizMode allWords={visibleVocabulary} onLockedLevelClick={handleLockedLevelClick} />
+            <QuizMode
+              allWords={visibleVocabulary}
+              accessibleLevels={allAccessibleLevels}
+              lockReasonForLevel={lockReasonForLevel}
+              isResolving={accessInfo.isResolving}
+              onLockedLevelClick={handleLockedLevelClick}
+            />
           </div>
         )}
 
@@ -1342,6 +1354,9 @@ function AppContent() {
 
             <SentenceMode
               allWords={visibleVocabulary}
+              accessibleLevels={allAccessibleLevels}
+              lockReasonForLevel={lockReasonForLevel}
+              isResolving={accessInfo.isResolving}
               onLockedLevelClick={handleLockedLevelClick}
               onNavigateToSupport={() => navigateToSupportFaq("tts-voice")}
             />

@@ -10,6 +10,8 @@ import { useCardStore } from "../hooks/useCardStore";
 import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
 import { useAuth } from "../contexts/AuthContext";
+import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
+import { HskLevelButtons } from "./HskLevelButtons";
 
 export type FlashcardFilter = "all" | "still-learning" | "learned";
 
@@ -17,6 +19,11 @@ interface FlashcardModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
   wordStatusFilter: FlashcardFilter;
+  /** Levels the current user can access (from App.tsx's hasAccessToLevel) */
+  accessibleLevels: number[];
+  lockReasonForLevel: (level: number) => string | null;
+  /** True while the real access tier is still resolving (see App.tsx's accessInfo.isResolving) */
+  isResolving?: boolean;
   onLockedLevelClick?: () => void;
   onNavigateToSupport?: () => void;
   onOpenAuth?: () => void;
@@ -34,33 +41,7 @@ interface FlashcardItem {
   examples: VocabWord["examples"];
 }
 
-const HSK_LEVELS = [1, 2, 3, 4, 5, 6] as const;
-type HskLevel = (typeof HSK_LEVELS)[number];
-
-function getHskButtonClasses(level: HskLevel, isSelected: boolean): string {
-  if (!isSelected) return "text-gray-400 hover:text-white hover:bg-neutral-900";
-  switch (level) {
-    case 1: return "bg-emerald-600 text-white";
-    case 2: return "bg-blue-600 text-white";
-    case 3: return "bg-purple-600 text-white";
-    case 4: return "bg-orange-600 text-white";
-    case 5: return "bg-pink-600 text-white";
-    case 6: return "bg-cyan-600 text-white";
-    default: return "bg-red-600 text-white";
-  }
-}
-
-function getLockedHskButtonClasses(level: HskLevel): string {
-  switch (level) {
-    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
-  }
-}
+const SHOWN_LEVELS = [1, 2, 3, 4, 5, 6];
 
 function hskWordToItem(w: VocabWord): FlashcardItem {
   return {
@@ -78,7 +59,7 @@ function hskWordToItem(w: VocabWord): FlashcardItem {
 
 const ADD_COUNTS = [5, 10, 20, 50] as const;
 
-export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLockedLevelClick, onNavigateToSupport, onOpenAuth }: FlashcardModeProps) {
+export function FlashcardMode({ allWords, learnedState, wordStatusFilter, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick, onNavigateToSupport, onOpenAuth }: FlashcardModeProps) {
   const isMobile = useIsMobile();
   const store = useCardStore();
   const noChineseVoice = useTtsVoiceCheck();
@@ -92,16 +73,15 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   const [activeDeckIds, setActiveDeckIds] = useState<Set<number>>(new Set());
   const [setupOpen, setSetupOpen] = useState(true);
 
-  // HSK level selection (for drawing random cards)
-  const accessibleLevels = useMemo(() => {
-    const levels = new Set<HskLevel>();
-    allWords.forEach((w) => {
-      if (HSK_LEVELS.includes(w.hskLevel as HskLevel)) levels.add(w.hskLevel as HskLevel);
-    });
-    return Array.from(levels).sort((a, b) => a - b);
-  }, [allWords]);
-
-  const [hskFilterLevels, setHskFilterLevels] = useState<Set<HskLevel>>(() => new Set([1]));
+  // HSK level selection — only controls which pool addHskCards draws new cards from below;
+  // never a live filter over sessionItems (there's no "no cards in session" state this can
+  // cause — that's gated on sessionItems itself, see the empty states near the bottom).
+  const hskLevelSelection = useHskLevelSelection({
+    storageKey: "flashcards",
+    accessibleLevels,
+    isResolving,
+  });
+  const hskFilterLevels = hskLevelSelection.selectedLevels;
 
   // Card navigation state
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -111,20 +91,9 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
   // Stable pre-computed key order so toggling Learned doesn't re-randomise
   const [shuffledKeys, setShuffledKeys] = useState<string[]>([]);
 
-  const isLevelEnabled = (level: HskLevel) => accessibleLevels.includes(level);
-
-  const toggleHskFilterLevel = (level: HskLevel) => {
-    if (!isLevelEnabled(level)) return;
-    setHskFilterLevels((prev) => {
-      const next = new Set(prev);
-      if (next.has(level)) next.delete(level); else next.add(level);
-      return next;
-    });
-  };
-
   // Add N random HSK cards from the current level filter pool
   const addHskCards = (count: number | "all") => {
-    const pool = allWords.filter((w) => hskFilterLevels.has(w.hskLevel as HskLevel));
+    const pool = allWords.filter((w) => hskFilterLevels.includes(w.hskLevel));
     const existingKeys = new Set(sessionItems.map((i) => i.key));
     const candidates = pool.filter((w) => !existingKeys.has(`hsk_${w.id}`));
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
@@ -335,34 +304,23 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
           {/* HSK section */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">HSK Catalogue</p>
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {([1, 2, 3, 4, 5, 6] as HskLevel[]).map((level) => {
-                const enabled = isLevelEnabled(level);
-                const selected = hskFilterLevels.has(level);
-                return (
-                  <button
-                    key={level}
-                    onClick={() => { if (!enabled) { onLockedLevelClick?.(); return; } toggleHskFilterLevel(level); }}
-                    title={enabled ? undefined : "Sign in or upgrade to Premium to unlock"}
-                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
-                      !enabled
-                        ? getLockedHskButtonClasses(level)
-                        : selected
-                        ? `${getHskButtonClasses(level, true)} border-transparent`
-                        : `${getHskButtonClasses(level, false)} border-neutral-800`
-                    }`}
-                  >
-                    {!enabled ? "🔒 " : ""}HSK {level}
-                  </button>
-                );
-              })}
-            </div>
+            <HskLevelButtons
+              shownLevels={SHOWN_LEVELS}
+              accessibleLevels={accessibleLevels}
+              selectedLevels={hskFilterLevels}
+              onToggleLevel={hskLevelSelection.toggleLevel}
+              onToggleAll={hskLevelSelection.toggleAll}
+              lockReasonForLevel={lockReasonForLevel}
+              isResolving={isResolving}
+              onLockedClick={onLockedLevelClick}
+              className="!justify-start mb-3"
+            />
             <div className="flex flex-wrap gap-2">
               {ADD_COUNTS.map((n) => (
                 <button
                   key={n}
                   onClick={() => addHskCards(n)}
-                  disabled={hskFilterLevels.size === 0}
+                  disabled={hskFilterLevels.length === 0}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-gray-300 border border-neutral-700 transition-colors"
                 >
                   +{n} cards
@@ -370,7 +328,7 @@ export function FlashcardMode({ allWords, learnedState, wordStatusFilter, onLock
               ))}
               <button
                 onClick={() => addHskCards("all")}
-                disabled={hskFilterLevels.size === 0}
+                disabled={hskFilterLevels.length === 0}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-gray-300 border border-neutral-700 transition-colors"
               >
                 + All

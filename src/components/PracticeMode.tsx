@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { HoverCharacter, isHoverCharacterEvent } from "./HoverCharacter";
 import { SpeakerButton } from "./SpeakerButton";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -8,10 +8,17 @@ import type { LearnedState } from "../hooks/useLearnedState";
 import { extractPinyinForChar, groupByTrailingPunctuation } from "../utils/pinyinUtils";
 import { useTtsVoiceCheck } from "../hooks/useTtsVoiceCheck";
 import { TtsVoiceWarning } from "./TtsVoiceWarning";
+import { useHskLevelSelection } from "../hooks/useHskLevelSelection";
+import { HskLevelButtons } from "./HskLevelButtons";
 
 interface PracticeModeProps {
   allWords: VocabWord[];
   learnedState: LearnedState;
+  /** Levels the current user can access (from App.tsx's hasAccessToLevel) */
+  accessibleLevels: number[];
+  lockReasonForLevel: (level: number) => string | null;
+  /** True while the real access tier is still resolving (see App.tsx's accessInfo.isResolving) */
+  isResolving?: boolean;
   /** Called when the user taps a locked HSK level button (should open login or profile) */
   onLockedLevelClick?: () => void;
   onNavigateToSupport?: () => void;
@@ -25,7 +32,6 @@ interface StoredSession {
   ids: number[];
   currentIndex: number;
   cycleCount: number;
-  hskLevels: HskLevelFilter;
   infoMinimized?: boolean;
   progress?: Record<number, number>;
   direction?: PracticeDirection;
@@ -94,33 +100,20 @@ function getFilterLabel(levels: HskLevelFilter): string {
   return levels.map(l => `HSK ${l}`).join(", ");
 }
 
-function getLockedHskButtonClasses(level: number): string {
-  // Disabled, but with a subtle hint of the level color
-  switch (level) {
-    case 1: return "bg-neutral-900/55 text-emerald-200/35 border border-emerald-900/30";
-    case 2: return "bg-neutral-900/55 text-blue-200/35 border border-blue-900/30";
-    case 3: return "bg-neutral-900/55 text-purple-200/35 border border-purple-900/30";
-    case 4: return "bg-neutral-900/55 text-orange-200/35 border border-orange-900/30";
-    case 5: return "bg-neutral-900/55 text-pink-200/35 border border-pink-900/30";
-    case 6: return "bg-neutral-900/55 text-cyan-200/35 border border-cyan-900/30";
-    default: return "bg-neutral-900/55 text-gray-600 border border-neutral-800";
-  }
-}
-
-export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNavigateToSupport }: PracticeModeProps) {
+export function PracticeMode({ allWords, learnedState, accessibleLevels, lockReasonForLevel, isResolving, onLockedLevelClick, onNavigateToSupport }: PracticeModeProps) {
   const isMobile = useIsMobile();
   const noChineseVoice = useTtsVoiceCheck();
-
-  const accessibleLevels = useMemo(() => {
-    return [1, 2, 3, 4, 5, 6].filter((l) => allWords.some((w) => w.hskLevel === l));
-  }, [allWords]);
+  const levelSelection = useHskLevelSelection({
+    storageKey: "practice",
+    accessibleLevels,
+    isResolving,
+  });
 
   const [sessionWords, setSessionWords] = useState<SessionWord[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [cycleCount, setCycleCount] = useState(0);
-  const [hskLevels, setHskLevels] = useState<HskLevelFilter>([]);
   const [infoMinimized, setInfoMinimized] = useState(false);
   const [direction, setDirection] = useState<PracticeDirection>("zh-en");
 
@@ -175,7 +168,6 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
     words: SessionWord[],
     index: number,
     cycle: number,
-    levels: HskLevelFilter,
     minimized: boolean,
     dir: PracticeDirection
   ) => {
@@ -186,7 +178,6 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
         ids: words.map((w) => w.id),
         currentIndex: index,
         cycleCount: cycle,
-        hskLevels: levels,
         infoMinimized: minimized,
         progress,
         direction: dir,
@@ -214,7 +205,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
     return words.filter((w) => levels.includes(w.hskLevel));
   };
 
-  const startNewSession = (levels: HskLevelFilter = hskLevels) => {
+  const startNewSession = (levels: HskLevelFilter = levelSelection.selectedLevels) => {
     const pool = filterWordsByLevels(allWords, levels);
     if (pool.length === 0) {
       setSessionWords([]);
@@ -246,20 +237,26 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
     setIsFlipped(false);
     setIsFinished(false);
     setCycleCount(0);
-    saveSession(finalSession, 0, 0, levels, infoMinimized, direction);
+    saveSession(finalSession, 0, 0, infoMinimized, direction);
   };
 
+  // One-time restore on mount, once both word data and the persisted level selection are
+  // settled — gated on isResolving so a returning user's session is never rebuilt from the
+  // transiently-narrow access shown mid auth-resolve (see App.tsx's accessInfo.isResolving).
+  const hasRestoredRef = useRef(false);
   useEffect(() => {
+    if (hasRestoredRef.current) return;
+    if (isResolving) return;
     if (allWords.length === 0) return;
+    if (levelSelection.selectedLevels.length === 0) return;
+    hasRestoredRef.current = true;
 
     const stored = loadSession();
     if (stored && stored.ids.length > 0) {
-      const storedLevels: HskLevelFilter = stored.hskLevels ?? [];
-      setHskLevels(storedLevels);
       setInfoMinimized(Boolean(stored.infoMinimized));
       setDirection(stored.direction ?? "zh-en");
 
-      const pool = filterWordsByLevels(allWords, storedLevels);
+      const pool = filterWordsByLevels(allWords, levelSelection.selectedLevels);
       const storedWords = stored.ids
         .map((id) => pool.find((w) => w.id === id))
         .filter((w): w is VocabWord => Boolean(w));
@@ -279,14 +276,9 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
       }
     }
 
-    // Default initialization: if no session, select all accessible levels and start
-    if (sessionWords.length === 0 && !isFinished) {
-      const defaultLevels = accessibleLevels;
-      setHskLevels(defaultLevels);
-      startNewSession(defaultLevels);
-    }
+    startNewSession(levelSelection.selectedLevels);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allWords]);
+  }, [allWords, levelSelection.selectedLevels, isResolving]);
 
   useEffect(() => {
     return () => {
@@ -298,9 +290,9 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
 
   useEffect(() => {
     if (sessionWords.length > 0 && !isFinished) {
-      saveSession(sessionWords, currentIndex, cycleCount, hskLevels, infoMinimized, direction);
+      saveSession(sessionWords, currentIndex, cycleCount, infoMinimized, direction);
     }
-  }, [sessionWords, currentIndex, cycleCount, isFinished, hskLevels, infoMinimized, direction]);
+  }, [sessionWords, currentIndex, cycleCount, isFinished, infoMinimized, direction]);
 
   const advanceToNext = (words: SessionWord[], fromIndex: number) => {
     if (words.length === 0) {
@@ -428,21 +420,20 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
   };
 
   const handleLevelToggle = (level: number) => {
-    const newLevels = toggleLevel(hskLevels, level);
-    setHskLevels(newLevels);
+    const newLevels = toggleLevel(levelSelection.selectedLevels, level);
+    levelSelection.toggleLevel(level);
     clearSession();
     startNewSession(newLevels);
   };
 
   const handleToggleAll = () => {
-    const allAccessibleSelected = accessibleLevels.length > 0 && accessibleLevels.every(l => hskLevels.includes(l));
-    if (allAccessibleSelected) {
-      setHskLevels([]);
+    if (levelSelection.allSelected) {
+      levelSelection.toggleAll();
       clearSession();
       setSessionWords([]);
     } else {
       const all = [...accessibleLevels].sort((a, b) => a - b);
-      setHskLevels(all);
+      levelSelection.toggleAll();
       clearSession();
       startNewSession(all);
     }
@@ -461,7 +452,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
         <h2 className="text-3xl font-bold text-white mb-2">Nice, that's all!</h2>
         <p className="text-gray-400 mb-10">You've cleared every card in this session. Great work!</p>
         <button
-          onClick={() => { clearSession(); startNewSession(hskLevels); }}
+          onClick={() => { clearSession(); startNewSession(levelSelection.selectedLevels); }}
           className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2"
         >
           Start Another Session
@@ -543,65 +534,16 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
             {/* Controls */}
             <div className="mb-6 space-y-3">
               {/* HSK Level multi-select */}
-              <div className="flex justify-center">
-                <div className="max-w-full">
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <button
-                      onClick={handleToggleAll}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-                        accessibleLevels.length > 0 && accessibleLevels.every(l => hskLevels.includes(l))
-                          ? "bg-red-600 text-white border-red-600 shadow-sm shadow-red-900/20"
-                          : "bg-neutral-900 text-gray-400 border-neutral-800 hover:border-neutral-700 hover:text-white"
-                      }`}
-                      title="Toggle all available levels"
-                    >
-                      All
-                    </button>
-                    {shownLevels.map((level) => {
-                      const enabled = accessibleLevels.includes(level);
-                      const selected = hskLevels.includes(level);
-                      return (
-                        <button
-                          key={level}
-                          onClick={() => {
-                            if (!enabled) {
-                              onLockedLevelClick?.();
-                              return;
-                            }
-                            handleLevelToggle(level);
-                          }}
-                          title={
-                            enabled
-                              ? undefined
-                              : level >= 5
-                              ? `HSK ${level} not available yet`
-                              : "Sign in or upgrade to Premium to unlock"
-                          }
-                          className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all border ${
-                            !enabled
-                              ? `${getLockedHskButtonClasses(level)}`
-                              : selected
-                              ? level === 1
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : level === 2
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : level === 3
-                                ? "bg-purple-600 text-white border-purple-600"
-                                : level === 4
-                                ? "bg-orange-600 text-white border-orange-600"
-                                : level === 5
-                                ? "bg-pink-600 text-white border-pink-600"
-                                : "bg-cyan-600 text-white border-cyan-600"
-                              : "bg-neutral-900 text-gray-400 border-neutral-800 hover:text-white hover:bg-neutral-800"
-                          }`}
-                        >
-                          {!enabled ? "🔒 " : ""}HSK {level}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              <HskLevelButtons
+                shownLevels={shownLevels}
+                accessibleLevels={accessibleLevels}
+                selectedLevels={levelSelection.selectedLevels}
+                onToggleLevel={handleLevelToggle}
+                onToggleAll={handleToggleAll}
+                lockReasonForLevel={lockReasonForLevel}
+                isResolving={isResolving}
+                onLockedClick={onLockedLevelClick}
+              />
 
               {/* Direction & Help */}
               <div className="flex justify-center">
@@ -634,7 +576,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
                     onClick={() => {
                       const next = !infoMinimized;
                       setInfoMinimized(next);
-                      saveSession(sessionWords, currentIndex, cycleCount, hskLevels, next, direction);
+                      saveSession(sessionWords, currentIndex, cycleCount, next, direction);
                     }}
                     className={`w-8 h-8 sm:w-10 sm:h-10 inline-flex items-center justify-center rounded-lg sm:rounded-xl border transition-all text-sm font-bold ${
                       infoMinimized
@@ -669,7 +611,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
             )}
 
             {/* Main Content States */}
-            {hskLevels.length === 0 ? (
+            {levelSelection.selectedLevels.length === 0 ? (
               <div className="text-center py-16">
                 <div className="text-5xl mb-4">👆</div>
                 <p className="text-gray-400 text-lg">Please select at least one HSK level to start practicing.</p>
@@ -683,7 +625,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
                   <div className="flex justify-between items-center text-sm text-gray-400 mb-2">
                     <span>Card {currentIndex + 1} of {sessionWords.length}</span>
                     <span className="bg-neutral-800 px-2 py-1 rounded text-xs">
-                      {getFilterLabel(hskLevels)}{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
+                      {getFilterLabel(levelSelection.selectedLevels)}{cycleCount > 0 ? ` · Cycle ${cycleCount + 1}` : ""}
                     </span>
                   </div>
                   <div className={`h-2 bg-neutral-800 rounded-full overflow-hidden flex transition-all duration-300 ${
@@ -841,7 +783,7 @@ export function PracticeMode({ allWords, learnedState, onLockedLevelClick, onNav
                 </div>
 
                 <div className="mt-10 text-center">
-                  <button onClick={() => { clearSession(); startNewSession(hskLevels); }} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
+                  <button onClick={() => { clearSession(); startNewSession(levelSelection.selectedLevels); }} className="text-gray-600 hover:text-gray-400 text-xs font-medium uppercase tracking-widest transition-colors">
                     Start New Session
                   </button>
                 </div>
