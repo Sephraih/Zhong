@@ -7,7 +7,7 @@ interface AuthHeaderProps {
 }
 
 export function AuthHeader({ onOpenAuth, onOpenProfile }: AuthHeaderProps) {
-  const { user, logout, accountTier, purchasePremium } = useAuth();
+  const { user, logout, accountTier, purchasePremium, isLoading } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
 
   const isPremium = accountTier === 'premium';
@@ -117,6 +117,13 @@ export function AuthHeader({ onOpenAuth, onOpenProfile }: AuthHeaderProps) {
         )}
       </div>
     );
+  }
+
+  // Auth state isn't resolved yet (initial mount, or a token check in flight) — showing
+  // "Sign In / Sign Up" here would be wrong for an already-signed-in user on refresh, and would
+  // let a click open the auth form while a session might still turn out to exist.
+  if (isLoading) {
+    return <div className="w-[148px] h-9" />;
   }
 
   return (

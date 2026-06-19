@@ -642,15 +642,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Goes through the client SDK directly (like changeEmail) rather than the /api/auth/account
+  // admin endpoint: that endpoint changes the password via the service-role key with no session
+  // context at all, so Supabase's "revoke other sessions on password change" security behavior
+  // has no "current" session to exempt and revokes every session — including this tab's, causing
+  // a sign-out a short while after a successful change. Doing it on the user's own active session
+  // here lets Supabase revoke every *other* session while leaving this one alive, matching
+  // changeEmail's behavior and standard practice elsewhere (Google, GitHub, etc.).
   const changePassword = async (currentPassword: string, newPassword: string) => {
     if (getCachedIsSandboxed()) {
       setError("Password change unavailable in preview mode");
       return;
     }
-
-    const token = safeLocalStorageGet("hanyu_auth_token");
-    if (!token) {
+    if (!user?.email) {
       setError("Please sign in to change your password");
+      return;
+    }
+    if (!supabase) {
+      setError("Password change is currently unavailable");
       return;
     }
 
@@ -658,18 +667,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const res = await apiFetch(`/api/auth/account`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
       });
+      if (signInErr) throw new Error("Current password is incorrect");
 
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to change password");
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateErr) throw new Error(updateErr.message);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.access_token) {
+        setAccessToken(sessionData.session.access_token);
+        storageSetItem("hanyu_auth_token", sessionData.session.access_token);
+        if (sessionData.session.refresh_token) {
+          storageSetItem("hanyu_refresh_token", sessionData.session.refresh_token);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to change password";
