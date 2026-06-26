@@ -9,37 +9,41 @@ function getSupabaseClient(): SupabaseClient {
   return createClient(url, key);
 }
 
-async function setUserPremium(supabase: SupabaseClient, userId: string) {
-  console.log(`🔧 [RC] Upgrading user ${userId} to premium`);
+// Stripe and RevenueCat each own one independent flag (premium_via_stripe /
+// premium_via_revenuecat); account_tier/is_premium are always the OR of both, recomputed here
+// on every write. This means a RevenueCat entitlement transferring away (e.g. to a different
+// account signing in on the same shared device) or being refunded can never strip premium that
+// was separately purchased via Stripe, and vice versa — each webhook only ever touches its own
+// flag and trusts the OR to do the right thing with whatever the other source's flag says.
+async function setRevenueCatPremiumFlag(supabase: SupabaseClient, userId: string, granted: boolean) {
+  console.log(`🔧 [RC] Setting premium_via_revenuecat=${granted} for user ${userId}`);
+
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select('premium_via_stripe')
+    .eq('id', userId)
+    .maybeSingle();
+  if (readError) console.error('❌ [RC] Failed to read premium_via_stripe:', readError);
+
+  const otherFlag = Boolean((existing as { premium_via_stripe?: boolean } | null)?.premium_via_stripe);
+  const isPremium = granted || otherFlag;
 
   const { error: authErr } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { account_tier: 'premium' },
+    app_metadata: { account_tier: isPremium ? 'premium' : 'free' },
   });
   if (authErr) console.error('❌ [RC] Auth metadata update error:', authErr);
-  else console.log('✅ [RC] Auth metadata updated to premium');
+  else console.log(`✅ [RC] Auth metadata updated to ${isPremium ? 'premium' : 'free'}`);
 
   const { error: profileErr } = await supabase
     .from('profiles')
-    .update({ account_tier: 'premium', is_premium: true } as Record<string, unknown>)
+    .update({
+      premium_via_revenuecat: granted,
+      account_tier: isPremium ? 'premium' : 'free',
+      is_premium: isPremium,
+    } as Record<string, unknown>)
     .eq('id', userId);
   if (profileErr) console.error('❌ [RC] Profile update error:', profileErr);
-  else console.log('✅ [RC] Profile updated to premium');
-}
-
-async function revokeUserPremium(supabase: SupabaseClient, userId: string) {
-  console.log(`🔒 [RC] Revoking premium for user ${userId}`);
-
-  const { error: authErr } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { account_tier: 'free' },
-  });
-  if (authErr) console.error('❌ [RC] Failed to update auth metadata:', authErr);
-
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
-    .eq('id', userId);
-  if (profileErr) console.error('❌ [RC] Failed to update profile:', profileErr);
-  else console.log('✅ [RC] Premium revoked');
+  else console.log(`✅ [RC] Profile updated — premium_via_revenuecat=${granted}, account_tier=${isPremium ? 'premium' : 'free'}`);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -90,7 +94,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const targetUserId = transferredTo?.[0] ?? userId;
     if (!targetUserId) return res.status(400).json({ error: 'Missing transfer target' });
     try {
-      await setUserPremium(supabase, targetUserId);
+      await setRevenueCatPremiumFlag(supabase, targetUserId, true);
+      // Safe to revoke the source unconditionally now: if it's a real account with its own
+      // Stripe premium, the OR inside setRevenueCatPremiumFlag keeps them premium regardless;
+      // if it's an anonymous RC-only id with no profile row, this is just a harmless no-op.
+      if (userId && userId !== targetUserId) {
+        await setRevenueCatPremiumFlag(supabase, userId, false);
+      }
       return res.status(200).json({ received: true });
     } catch (err) {
       console.error('❌ [RC] Webhook error:', err);
@@ -138,13 +148,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }).then(({ error }) => { if (error) console.warn('⚠️ [RC] purchases insert warning:', error.message); });
         }
 
-        await setUserPremium(supabase, userId);
+        await setRevenueCatPremiumFlag(supabase, userId, true);
         break;
       }
 
       case 'REFUND':
       case 'CANCELLATION': {
-        await revokeUserPremium(supabase, userId);
+        await setRevenueCatPremiumFlag(supabase, userId, false);
         if (transactionId) {
           await supabase
             .from('purchases')

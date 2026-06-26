@@ -39,31 +39,40 @@ function getStripeClient(): Stripe {
   return new Stripe(secretKey);
 }
 
-async function setUserPremium(supabase: SupabaseClient, userId: string) {
-  console.log(`🔧 Upgrading user ${userId} to premium`);
-  
-  // Update auth metadata
-  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { account_tier: 'premium' },
-  });
-  
-  if (authError) {
-    console.error('❌ Auth metadata update error:', authError);
-  } else {
-    console.log('✅ Auth metadata updated to premium');
-  }
+// Stripe and RevenueCat each own one independent flag (premium_via_stripe /
+// premium_via_revenuecat); account_tier/is_premium are always the OR of both, recomputed here
+// on every write. This means revoking one source can never strip premium granted by the other —
+// e.g. an IAP refund or a RevenueCat entitlement transferring to a different account on a shared
+// device won't touch a user's separately-purchased Stripe subscription, and vice versa.
+async function setStripePremiumFlag(supabase: SupabaseClient, userId: string, granted: boolean) {
+  console.log(`🔧 Setting premium_via_stripe=${granted} for user ${userId}`);
 
-  // Update profiles table
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select('premium_via_revenuecat')
+    .eq('id', userId)
+    .maybeSingle();
+  if (readError) console.error('❌ Failed to read premium_via_revenuecat:', readError);
+
+  const otherFlag = Boolean((existing as { premium_via_revenuecat?: boolean } | null)?.premium_via_revenuecat);
+  const isPremium = granted || otherFlag;
+
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+    app_metadata: { account_tier: isPremium ? 'premium' : 'free' },
+  });
+  if (authError) console.error('❌ Auth metadata update error:', authError);
+  else console.log(`✅ Auth metadata updated to ${isPremium ? 'premium' : 'free'}`);
+
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ account_tier: 'premium', is_premium: true } as Record<string, unknown>)
+    .update({
+      premium_via_stripe: granted,
+      account_tier: isPremium ? 'premium' : 'free',
+      is_premium: isPremium,
+    } as Record<string, unknown>)
     .eq('id', userId);
-    
-  if (profileError) {
-    console.error('❌ Profile update error:', profileError);
-  } else {
-    console.log('✅ Profile updated to premium');
-  }
+  if (profileError) console.error('❌ Profile update error:', profileError);
+  else console.log(`✅ Profile updated — premium_via_stripe=${granted}, account_tier=${isPremium ? 'premium' : 'free'}`);
 }
 
 async function updatePurchaseRecord(
@@ -101,29 +110,6 @@ async function updatePurchaseRecord(
     console.error('❌ Error updating purchase record:', error);
   } else {
     console.log(`📝 Updated purchase record for session ${sessionId} to status: ${status}`);
-  }
-}
-
-async function revokeAccessForUser(supabase: SupabaseClient, userId: string) {
-  console.log(`🔒 Revoking premium access for user ${userId}`);
-
-  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-    app_metadata: { account_tier: 'free' },
-  });
-  if (authError) {
-    console.error('❌ Failed to update auth metadata:', authError);
-  } else {
-    console.log('✅ Revoked premium from auth metadata');
-  }
-
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ account_tier: 'free', is_premium: false } as Record<string, unknown>)
-    .eq('id', userId);
-  if (profileError) {
-    console.error('❌ Failed to update profile:', profileError);
-  } else {
-    console.log('✅ Revoked premium from profile');
   }
 }
 
@@ -272,6 +258,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               email: userData.user.email,
               account_tier: 'free',
               is_premium: false,
+              premium_via_stripe: false,
+              premium_via_revenuecat: false,
             };
             const { error: insertError } = await supabase.from('profiles').insert(newProfile as Record<string, unknown>);
             if (insertError) {
@@ -286,7 +274,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Grant premium access (always — only premium purchases are accepted)
         console.log('🔄 Processing Premium purchase...');
-        await setUserPremium(supabase, userId);
+        await setStripePremiumFlag(supabase, userId, true);
 
         // Verify the update worked
         const { data: verifyProfile } = await supabase
@@ -352,7 +340,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             );
             
             // Revoke access
-            await revokeAccessForUser(supabase, purchase.user_id);
+            await setStripePremiumFlag(supabase, purchase.user_id, false);
           } else {
             console.log('⚠️ Partial refund detected - logging for manual review');
             console.log(`   Refunded: ${charge.amount_refunded} of ${charge.amount} (${Math.round(charge.amount_refunded / charge.amount * 100)}%)`);
@@ -387,7 +375,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             'disputed'
           );
           
-          await revokeAccessForUser(supabase, purchase.user_id);
+          await setStripePremiumFlag(supabase, purchase.user_id, false);
 
           // Log evidence details for dispute response
           console.log('📋 Dispute evidence due by:', 
