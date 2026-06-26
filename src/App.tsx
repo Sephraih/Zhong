@@ -806,62 +806,30 @@ function AppContent() {
       {viewMode === "home" ? (
         <div className="border-b border-neutral-800/60 relative z-10 bg-neutral-950/70 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-wrap gap-4 items-center justify-between">
-              {/* Left: free preview indicator */}
-              <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
-                  <span className="text-sm text-gray-500">
-                    HSK 1: <span className="font-bold text-gray-300 tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
-                    {!accessInfo.isLoggedIn && (
-                      <span className="ml-1 text-gray-400" title="Sign in to see all">
-                        🔒
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                {dataSource === "fallback" && (
-                  <span className="inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
-                    ⚡ Preview
-                  </span>
-                )}
-
-                {!accessInfo.isLoggedIn && (
-                  <span className="text-xs text-gray-500">
-                    Try 200 words free — sign up to unlock full HSK 1 & save progress.
-                  </span>
-                )}
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
+                <span className="text-sm text-gray-300">
+                  HSK 1: <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
+                  {!accessInfo.isLoggedIn && (
+                    <span className="ml-1 text-gray-400" title="Sign in to see all">
+                      🔒
+                    </span>
+                  )}
+                </span>
               </div>
 
-              {/* Right: CTA */}
-              <div className="flex items-center gap-2 ml-auto">
-                <button
-                  onClick={() => navigate("browse")}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                  title="Browse your available words"
-                >
-                  Browse
-                </button>
+              {dataSource === "fallback" && (
+                <span className="inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
+                  ⚡ Preview
+                </span>
+              )}
 
-                {!accessInfo.isLoggedIn ? (
-                  <button
-                    onClick={() => openAuthModal("signup")}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                    title="Create a free account to unlock full HSK 1 and save your progress!"
-                  >
-                    🔓 Sign up to unlock
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => navigate("profile")}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                    title="View unlock options and your progress"
-                  >
-                    View unlocks
-                  </button>
-                )}
-              </div>
+              {!accessInfo.isLoggedIn && (
+                <span className="text-sm text-gray-200">
+                  <span className="font-semibold text-red-400">Try 200 words free</span> — sign up to unlock full HSK 1 & save progress.
+                </span>
+              )}
             </div>
           </div>
         </div>
