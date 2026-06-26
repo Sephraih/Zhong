@@ -176,7 +176,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Delete user data from tables (cascade should handle most)
         await supabaseAdmin.from('user_learned_words').delete().eq('user_id', user.id);
-        await supabaseAdmin.from('purchased_levels').delete().eq('user_id', user.id);
         await supabaseAdmin.from('profiles').delete().eq('id', user.id);
 
         // Delete the auth user

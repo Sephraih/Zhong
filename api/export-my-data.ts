@@ -100,12 +100,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // Gather purchased levels
-    const { data: purchasedLevels } = await supabase
-      .from('purchased_levels')
-      .select('hsk_level, purchased_at')
-      .eq('user_id', user.id);
-
     // Gather purchase history (if table exists)
     let purchases = null;
     try {
@@ -141,10 +135,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         learned_bits: learnedWords.learned_bits,
         updated_at: learnedWords.updated_at,
       } : null,
-      purchased_levels: purchasedLevels?.map(p => ({
-        hsk_level: p.hsk_level,
-        purchased_at: p.purchased_at,
-      })) ?? [],
       purchase_history: purchases?.map((p: Record<string, unknown>) => ({
         product_type: p.product_type,
         hsk_level: p.hsk_level,
