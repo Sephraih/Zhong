@@ -804,15 +804,15 @@ function AppContent() {
 
       {/* Stats / CTA Banner */}
       {viewMode === "home" ? (
-        <div className="border-b border-neutral-800/60 relative z-10 bg-neutral-950/70 backdrop-blur-sm">
+        <div className="border-b border-neutral-800/60 relative z-10 bg-neutral-950/95 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex flex-wrap gap-4 items-center">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
-                <span className="text-sm text-gray-300">
+                <span className="text-sm text-gray-200">
                   HSK 1: <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
                   {!accessInfo.isLoggedIn && (
-                    <span className="ml-1 text-gray-400" title="Sign in to see all">
+                    <span className="ml-1 text-gray-300" title="Sign in to see all">
                       🔒
                     </span>
                   )}
@@ -826,7 +826,7 @@ function AppContent() {
               )}
 
               {!accessInfo.isLoggedIn && (
-                <span className="text-sm text-gray-200">
+                <span className="text-sm text-gray-100">
                   <span className="font-semibold text-red-400">Try 200 words free</span> — sign up to unlock full HSK 1 & save progress.
                 </span>
               )}
