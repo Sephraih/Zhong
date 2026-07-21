@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support – sRemote</title>
+<meta name="description" content="Support and FAQ for sRemote, the Samsung Smart TV remote control app for iOS.">
+<link rel="canonical" href="https://hamhao.com/sremote/support">
+<style>
+  :root {
+    --bg: #000000;
+    --card-bg: rgba(23, 23, 23, 0.8);
+    --border: #262626;
+    --border-hover: #404040;
+    --input-bg: #262626;
+    --input-border: #404040;
+    --text-white: #ffffff;
+    --text-gray-200: #e5e7eb;
+    --text-gray-300: #d1d5db;
+    --text-gray-400: #9ca3af;
+    --text-gray-500: #6b7280;
+    --text-gray-600: #4b5563;
+    --accent: #dc2626;
+    --accent-hover: #ef4444;
+    --accent-ring: rgba(220, 38, 38, 0.4);
+    --radius-card: 1rem;
+    --radius-item: 0.75rem;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-gray-300);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .container { max-width: 760px; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  header.wordmark { margin-bottom: 2rem; }
+  header.wordmark .name { font-size: 1.25rem; font-weight: 700; color: var(--text-white); }
+  header.wordmark .caption { font-size: 0.8rem; color: var(--text-gray-500); margin-top: 0.15rem; }
+  h1 { color: var(--text-white); font-size: 1.75rem; font-weight: 700; margin: 0 0 0.75rem; }
+  h2 { color: var(--text-white); font-size: 1.15rem; font-weight: 700; margin: 2rem 0 1rem; }
+  p.intro { color: var(--text-gray-300); margin: 0 0 2rem; }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 1.5rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  hr { border: none; border-top: 1px solid var(--border-hover); margin: 2rem 0; }
+
+  /* FAQ accordion */
+  .faq-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .faq-item { border: 1px solid var(--border); border-radius: var(--radius-item); overflow: hidden; }
+  .faq-item button.faq-q {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: transparent;
+    border: none;
+    text-align: left;
+    padding: 1rem 1.25rem;
+    color: var(--text-gray-200);
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .faq-item button.faq-q:hover { background: rgba(64, 64, 64, 0.3); }
+  .faq-item .chevron { flex-shrink: 0; width: 16px; height: 16px; color: var(--text-gray-500); transition: transform 0.2s ease; }
+  .faq-item.open .chevron { transform: rotate(180deg); }
+  .faq-a { display: none; padding: 0 1.25rem 1rem; color: var(--text-gray-400); font-size: 0.875rem; border-top: 1px solid rgba(38, 38, 38, 0.6); }
+  .faq-a p { margin: 0.75rem 0 0; }
+  .faq-item.open .faq-a { display: block; }
+
+  /* Contact form */
+  label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-gray-300); margin-bottom: 0.4rem; }
+  input, select, textarea {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-item);
+    padding: 0.6rem 0.9rem;
+    color: var(--text-white);
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-gray-600); }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: rgba(220, 38, 38, 0.5);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  textarea { resize: vertical; }
+  .field { margin-bottom: 1.25rem; }
+  .hint { font-size: 0.75rem; color: var(--text-gray-600); margin-top: 0.25rem; }
+  .notice {
+    border-radius: var(--radius-item);
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+    display: none;
+  }
+  .notice.error { background: rgba(69, 10, 10, 0.4); border: 1px solid rgba(153, 27, 27, 0.5); color: #f87171; }
+  .notice.info { background: rgba(64, 64, 64, 0.4); border: 1px solid var(--border-hover); color: var(--text-gray-400); }
+  .notice.show { display: block; }
+  button.submit {
+    width: 100%;
+    background: var(--accent);
+    color: var(--text-white);
+    border: none;
+    border-radius: var(--radius-item);
+    padding: 0.8rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button.submit:hover { background: var(--accent-hover); }
+  a { color: #f87171; text-decoration: none; }
+  a:hover { color: #fca5a5; }
+  .form-note { font-size: 0.75rem; color: var(--text-gray-600); margin-top: 0.75rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="wordmark">
+    <div class="name">sRemote</div>
+    <div class="caption">iOS App · Support</div>
+  </header>
+
+  <h1>Support</h1>
+  <p class="intro">sRemote turns your iPhone into a remote control for Samsung Smart TVs, connecting directly over your home Wi-Fi network — no account, no cloud service required.</p>
+
+  <div class="card">
+    <h2 style="margin-top:0">Frequently Asked Questions</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>TV shows as unreachable / won't connect</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>Make sure your iPhone and TV are on the same Wi-Fi network. You can find your TV's IP address under <strong>TV Settings → General → Network → Network Status</strong>. Also check that iOS's Local Network permission was allowed for sRemote (Settings → sRemote → Local Network, on your iPhone).</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>First time connecting — TV asks "Allow this device?"</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>This is normal and only happens once per TV. The first time you connect, your TV shows an on-screen prompt asking whether to allow the connection. Select <strong>Allow</strong> on the TV itself using its own remote — sRemote can't accept this prompt for you.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>Power button doesn't turn the TV on from fully off</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>Turning a TV on remotely (Wake-on-LAN) needs the TV's MAC address entered for that device in sRemote, plus <strong>Power On with Mobile</strong> (and, on some models, <strong>IP Remote</strong>) turned on in the TV's own network settings. Even with both enabled, some models don't support waking over Wi-Fi reliably.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>HDMI direct-select buttons don't do anything</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>Direct HDMI input switching uses an undocumented Samsung feature that behaves inconsistently across models and firmware versions — on some TVs it may simply do nothing. It's off by default for this reason; if it doesn't work on your TV, switch inputs from the TV's own source menu instead.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>Direct channel number entry doesn't work</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>Direct channel entry uses the standard remote-control number-key commands and should work on most models, but hasn't been verified on every Samsung TV. If it doesn't respond, try changing channels with the up/down channel buttons instead.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>Managing multiple TVs, or changing a TV's IP/MAC after setup</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>Go to <strong>Settings → Manage TVs</strong> inside sRemote to add, edit, remove, or switch between remembered TVs.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button">
+          <span>Free trial and purchases</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-a"><p>sRemote includes a 7-day free trial; after that, a one-time purchase unlocks full access (no subscription). If you reinstall the app or switch devices, use the <strong>Restore Purchases</strong> button on the paywall screen to recover your purchase.</p></div>
+      </div>
+    </div>
+
+    <hr>
+
+    <h2>Contact Us</h2>
+    <p style="font-size:0.875rem;color:var(--text-gray-400);margin-top:0;margin-bottom:1.5rem;">Can't find an answer above? Send us a message and we'll reply from <a href="mailto:support@hamhao.com">support@hamhao.com</a>.</p>
+
+    <form id="contact-form">
+      <div class="field">
+        <label for="name">Your name (optional)</label>
+        <input type="text" id="name" placeholder="Jane Doe">
+      </div>
+      <div class="field">
+        <label for="topic">Topic</label>
+        <select id="topic" required>
+          <option value="" disabled selected>Select a topic…</option>
+          <option value="Connection / Pairing">Connection / Pairing</option>
+          <option value="Power-on (Wake-on-LAN)">Power-on (Wake-on-LAN)</option>
+          <option value="HDMI / Channel buttons">HDMI / Channel buttons</option>
+          <option value="Purchases / Free trial">Purchases / Free trial</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="email">Your email address</label>
+        <input type="email" id="email" required placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="message">Message</label>
+        <textarea id="message" required rows="5" placeholder="Describe your issue or question..."></textarea>
+        <p class="hint" id="char-count">0 / 10 characters minimum</p>
+      </div>
+
+      <div class="notice error" id="validation-error">Message must be at least 10 characters.</div>
+      <div class="notice info" id="opened-notice">Your email client should have opened with the message pre-filled. If it didn't, <a href="mailto:support@hamhao.com">email us directly</a>.</div>
+
+      <button type="submit" class="submit">Open Email Client</button>
+      <p class="form-note">This opens your email app with the message pre-filled — sRemote doesn't send anything on its own.</p>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.faq-item > .faq-q').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.closest('.faq-item').classList.toggle('open');
+    });
+  });
+
+  var messageEl = document.getElementById('message');
+  var charCount = document.getElementById('char-count');
+  messageEl.addEventListener('input', function () {
+    charCount.textContent = messageEl.value.trim().length + ' / 10 characters minimum';
+  });
+
+  document.getElementById('contact-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('name').value.trim();
+    var topic = document.getElementById('topic').value;
+    var email = document.getElementById('email').value.trim();
+    var message = messageEl.value.trim();
+    var errorEl = document.getElementById('validation-error');
+    var openedEl = document.getElementById('opened-notice');
+
+    if (message.length < 10) {
+      errorEl.classList.add('show');
+      openedEl.classList.remove('show');
+      return;
+    }
+    errorEl.classList.remove('show');
+
+    var subject = encodeURIComponent('Support [sRemote] from ' + email);
+    var lines = [];
+    if (name) lines.push('Name: ' + name);
+    lines.push('From: ' + email);
+    lines.push('Topic: ' + topic);
+    lines.push('');
+    lines.push(message);
+    var body = encodeURIComponent(lines.join('\n'));
+
+    window.location.href = 'mailto:support@hamhao.com?subject=' + subject + '&body=' + body;
+    openedEl.classList.add('show');
+  });
+</script>
+</body>
+</html>
