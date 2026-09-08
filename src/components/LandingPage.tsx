@@ -1563,7 +1563,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     </section>
   );
 
-  const androidMailto = `mailto:support@hamhao.com?subject=${encodeURIComponent("Android Beta Testing")}&body=${encodeURIComponent("Hi,\n\nI'm interested in joining the HamHao Android beta test.\n\nPlease send me an invite!\n\nThanks")}`;
+  const androidMailto = `mailto:support@hamhao.com?subject=${encodeURIComponent("Android Beta Testing")}&body=${encodeURIComponent("Hi,\n\nI'm interested in joining the HamHao Android beta test.\nHere's the email I want to join with: (this one / other: )\n\nPlease send me an invite!\n\nThanks")}`;
 
   return (
     <div className="relative w-screen -ml-[calc((100vw-100%)/2)] -mt-8 overflow-x-hidden z-10">
@@ -1661,7 +1661,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       )}
 
       {/* Floating download buttons — bottom-right, always visible */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end">
+      <div className="fixed bottom-5 right-5 z-50 flex flex-row gap-2 items-end">
         {/* iOS App Store */}
         <a
           href="https://apps.apple.com/us/app/hamhao-learn-chinese-with-hsk/id6773236841"

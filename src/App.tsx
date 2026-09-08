@@ -804,7 +804,7 @@ function AppContent() {
 
       {/* Stats / CTA Banner */}
       {viewMode === "home" ? (
-        <div className="border-b border-neutral-800/60 relative z-10 bg-neutral-950/95 backdrop-blur-sm">
+        <div className="border-b border-neutral-800/60 relative z-30 bg-neutral-950">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex flex-wrap gap-4 items-center">
               <div className="flex items-center gap-2">
