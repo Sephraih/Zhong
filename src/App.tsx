@@ -810,7 +810,8 @@ function AppContent() {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
                 <span className="text-sm text-gray-200">
-                  HSK 1: <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
+                  HSK 1{!accessInfo.isLoggedIn && <span className="text-emerald-400 font-medium"> (free)</span>}:{" "}
+                  <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
                   {!accessInfo.isLoggedIn && (
                     <span className="ml-1 text-gray-300" title="Sign in to see all">
                       🔒
@@ -826,8 +827,8 @@ function AppContent() {
               )}
 
               {!accessInfo.isLoggedIn && (
-                <span className="text-sm text-gray-100">
-                  <span className="font-semibold text-red-400">Try 200 words free</span> — sign up to unlock full HSK 1 & save progress.
+                <span className="text-sm text-white/90">
+                  <span className="font-semibold text-red-400">Try 200 words free</span> — sign up to unlock full HSK 1, save progress and unlock HSK levels 2–6.
                 </span>
               )}
             </div>

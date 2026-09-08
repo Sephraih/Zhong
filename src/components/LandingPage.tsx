@@ -1563,6 +1563,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     </section>
   );
 
+  const androidMailto = `mailto:support@hamhao.com?subject=${encodeURIComponent("Android Beta Testing")}&body=${encodeURIComponent("Hi,\n\nI'm interested in joining the HamHao Android beta test.\n\nPlease send me an invite!\n\nThanks")}`;
+
   return (
     <div className="relative w-screen -ml-[calc((100vw-100%)/2)] -mt-8 overflow-x-hidden z-10">
       {/*
@@ -1657,6 +1659,41 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           {footer}
         </div>
       )}
+
+      {/* Floating download buttons — bottom-right, always visible */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end">
+        {/* iOS App Store */}
+        <a
+          href="https://apps.apple.com/us/app/hamhao-learn-chinese-with-hsk/id6773236841"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-xl bg-neutral-950/90 border border-white/12 text-white hover:bg-neutral-800/90 hover:border-white/20 transition-all shadow-xl backdrop-blur-md"
+          title="Download HamHao on the App Store"
+        >
+          <svg className="w-5 h-5 shrink-0 fill-current" viewBox="0 0 814 1000">
+            <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 790.8 0 663.8 0 542.1c0-249.7 163.1-381.5 323.8-381.5 86.5 0 158.5 56.9 212.5 56.9 51.5 0 133.2-60.5 222-60.5 28.5 0 130.9 2.6 198.3 99.2zm-234.8-162.9c32.3-35.3 55.8-84.4 55.8-133.5 0-2.6-.2-5.2-.7-7.8-52.4 3.9-122.6 40.2-163.3 88.4-29.4 33.9-55.7 83.2-55.7 134.8 0 3.1.4 6.2 1.2 9.2 4.6.7 9.3 1 14 1 55.4 0 118-37 153.5-124.8z" />
+          </svg>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[9px] text-gray-400 font-normal tracking-wide">Download on the</span>
+            <span className="text-[13px] font-semibold">App Store</span>
+          </div>
+        </a>
+
+        {/* Android beta */}
+        <a
+          href={androidMailto}
+          className="flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-xl bg-neutral-950/90 border border-white/12 text-white hover:bg-neutral-800/90 hover:border-white/20 transition-all shadow-xl backdrop-blur-md"
+          title="Sign up for Android beta testing"
+        >
+          <svg className="w-5 h-5 shrink-0 text-green-400 fill-current" viewBox="0 0 24 24">
+            <path d="M17.523 15.341a.847.847 0 01-.848.848.847.847 0 01-.848-.848V10.5a.848.848 0 111.696 0v4.841zm-9.352 0a.847.847 0 01-1.696 0V10.5a.847.847 0 111.696 0v4.841zM16.55 5.418l1.244-2.287a.26.26 0 00-.453-.249L16.1 5.18A7.79 7.79 0 0012 4.027a7.79 7.79 0 00-4.1 1.153L6.659 2.882a.26.26 0 10-.453.249L7.45 5.418A7.827 7.827 0 004 12h16a7.827 7.827 0 00-3.45-6.582zM9.5 9a.75.75 0 110-1.5.75.75 0 010 1.5zm5 0a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+          </svg>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[9px] text-gray-400 font-normal tracking-wide">Android</span>
+            <span className="text-[13px] font-semibold">Join Beta</span>
+          </div>
+        </a>
+      </div>
     </div>
   );
 }
