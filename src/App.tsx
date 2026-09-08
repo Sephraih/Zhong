@@ -14,6 +14,7 @@ import { VocabCard } from "./components/VocabCard";
 // Logo image (ham.png) — imported via glob so the build doesn't fail if missing
 const logoImages = import.meta.glob("./assets/ham.png", { eager: true, import: "default" }) as Record<string, string>;
 const logoImage = Object.values(logoImages)[0] ?? null;
+import { modeIcons } from "./assets/modeIcons";
 import { FlashcardMode } from "./components/FlashcardMode";
 import { QuizMode } from "./components/QuizMode";
 import { PracticeMode } from "./components/PracticeMode";
@@ -762,14 +763,14 @@ function AppContent() {
             {/* Mode Nav — visible on both mobile and desktop */}
             <nav className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
               {[
-                { id: "browse" as ViewMode, label: "Browse", icon: "📚" },
-                { id: "practice" as ViewMode, label: "Practice", icon: "🔥" },
-                { id: "sentences" as ViewMode, label: "Sentences", icon: "💬" },
-                { id: "flashcards" as ViewMode, label: "Flashcards", icon: "🃏" },
-                { id: "quiz" as ViewMode, label: "Quiz", icon: "✏️" },
-                { id: "analyze" as ViewMode, label: "Analyze", icon: "🔍" },
-                { id: "cards" as ViewMode, label: "My Cards", icon: "🎴" },
-                { id: "pinyin" as ViewMode, label: "Pinyin", icon: "🔤" },
+                { id: "browse" as ViewMode, label: "Browse" },
+                { id: "practice" as ViewMode, label: "Practice" },
+                { id: "sentences" as ViewMode, label: "Sentences" },
+                { id: "flashcards" as ViewMode, label: "Flashcards" },
+                { id: "quiz" as ViewMode, label: "Quiz" },
+                { id: "analyze" as ViewMode, label: "Analyze" },
+                { id: "cards" as ViewMode, label: "My Cards" },
+                { id: "pinyin" as ViewMode, label: "Pinyin" },
               ].map((mode) => (
                 <button
                   key={mode.id}
@@ -782,8 +783,13 @@ function AppContent() {
                   title={mode.label}
                 >
                   {/* Show only icon on mobile, icon+label on desktop */}
-                  <span className="sm:hidden">{mode.icon}</span>
-                  <span className="hidden sm:inline">{mode.icon} {mode.label}</span>
+                  <span className="sm:hidden">
+                    <img src={modeIcons[mode.id]} alt={mode.label} className="w-5 h-5 object-contain" />
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1.5">
+                    <img src={modeIcons[mode.id]} alt="" className="w-4 h-4 object-contain" />
+                    {mode.label}
+                  </span>
                 </button>
               ))}
             </nav>
@@ -803,20 +809,16 @@ function AppContent() {
       </header>
 
       {/* Stats / CTA Banner */}
-      {viewMode === "home" ? (
+      {viewMode === "home" && !accessInfo.isLoggedIn ? (
         <div className="border-b border-neutral-800/60 relative z-30 bg-neutral-950">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-wrap gap-4 items-center">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
                 <span className="text-sm text-gray-200">
-                  HSK 1{!accessInfo.isLoggedIn && <span className="text-emerald-400 font-medium"> (free)</span>}:{" "}
+                  HSK 1:{" "}
                   <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
-                  {!accessInfo.isLoggedIn && (
-                    <span className="ml-1 text-gray-300" title="Sign in to see all">
-                      🔒
-                    </span>
-                  )}
+                  <span className="ml-1 text-gray-300" title="Sign in to see all">🔒</span>
                 </span>
               </div>
 
@@ -826,16 +828,15 @@ function AppContent() {
                 </span>
               )}
 
-              {!accessInfo.isLoggedIn && (
-                <span className="text-sm text-white/90">
-                  <span className="font-semibold text-red-400">Try 200 words free</span> — sign up to unlock full HSK 1, save progress and unlock HSK levels 2–6.
-                </span>
-              )}
+              <span className="text-sm text-white">
+                <span className="font-semibold text-red-400">Sign up</span> to unlock full HSK 1 for free, save progress and purchase HSK levels 2–6{" "}
+                <span className="text-gray-400">(lifetime access for $9.99)</span>.
+              </span>
             </div>
           </div>
         </div>
       ) : (
-        <div className={`border-b border-neutral-800/60 relative z-10 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
+        <div className={`border-b border-neutral-800/60 relative z-30 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <div className="flex flex-wrap gap-4 sm:gap-6 items-center">

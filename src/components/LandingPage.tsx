@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { HoverCharacter } from "./HoverCharacter";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { modeIcons } from "../assets/modeIcons";
 
 // Logo image (ham.png) — imported via glob so the build doesn't fail if missing
 const logoImages = import.meta.glob("../assets/ham.png", { eager: true, import: "default" }) as Record<string, string>;
@@ -827,7 +828,6 @@ function useActiveSection(containerRef: React.RefObject<HTMLDivElement | null>, 
 
 function ModeSectionDesktop({
   id,
-  icon,
   title,
   subtitle,
   description,
@@ -839,7 +839,6 @@ function ModeSectionDesktop({
   swap,
 }: {
   id: ModeId;
-  icon: string;
   title: string;
   subtitle: string;
   description: string;
@@ -881,7 +880,7 @@ function ModeSectionDesktop({
         >
           <div>
             <div className="flex items-center gap-3 mb-5">
-              <span className="text-4xl">{icon}</span>
+              <img src={modeIcons[id]} alt={title} className="w-9 h-9 object-contain" />
               <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
             </div>
             <h2 className="text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">{title}</h2>
@@ -944,7 +943,6 @@ function ModeSectionDesktop({
 
 function ModeSectionMobile({
   id,
-  icon,
   title,
   subtitle,
   description,
@@ -953,7 +951,6 @@ function ModeSectionMobile({
   onSelectMode,
 }: {
   id: ModeId;
-  icon: string;
   title: string;
   subtitle: string;
   description: string;
@@ -984,7 +981,7 @@ function ModeSectionMobile({
     <section id={id} className="relative overflow-hidden py-14">
       <div className="relative z-10 max-w-md mx-auto px-4">
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-3xl">{icon}</span>
+          <img src={modeIcons[id]} alt={title} className="w-8 h-8 object-contain" />
           <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
         </div>
 
@@ -1274,7 +1271,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
   const modes = [
     {
       id: "browse" as ModeId,
-      icon: "📚",
+
       title: "Browse",
       subtitle: "Search. Filter. Learn.",
       description:
@@ -1289,7 +1286,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "practice" as ModeId,
-      icon: "🔥",
+
       title: "Practice",
       subtitle: "Short sessions. Real progress.",
       description:
@@ -1304,7 +1301,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "sentences" as ModeId,
-      icon: "💬",
+
       title: "Sentences",
       subtitle: "Context is everything.",
       description:
@@ -1319,7 +1316,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "flashcards" as ModeId,
-      icon: "🃏",
+
       title: "Flashcards",
       subtitle: "Fast repetition. Instant recall.",
       description:
@@ -1334,7 +1331,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "quiz" as ModeId,
-      icon: "✏️",
+
       title: "Quiz",
       subtitle: "Test your recall.",
       description:
@@ -1349,7 +1346,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "analyze" as ModeId,
-      icon: "🔍",
+
       title: "Analyze",
       subtitle: "Paste any text. Understand it.",
       description:
@@ -1364,7 +1361,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "cards" as ModeId,
-      icon: "🎴",
+
       title: "My Cards",
       subtitle: "Your personal vocabulary.",
       description:
@@ -1379,7 +1376,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
     },
     {
       id: "pinyin" as ModeId,
-      icon: "🔤",
+
       title: "Pinyin",
       subtitle: "Master every syllable.",
       description:
@@ -1528,21 +1525,21 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
 
         <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { id: "browse" as ModeId, icon: "📚", label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
-            { id: "practice" as ModeId, icon: "🔥", label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
-            { id: "sentences" as ModeId, icon: "💬", label: "Sentences", cls: "border-teal-900/40 hover:border-teal-700/60 hover:bg-teal-950/20" },
-            { id: "flashcards" as ModeId, icon: "🃏", label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
-            { id: "quiz" as ModeId, icon: "✏️", label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
-            { id: "analyze" as ModeId, icon: "🔍", label: "Analyze", cls: "border-violet-900/40 hover:border-violet-700/60 hover:bg-violet-950/20" },
-            { id: "cards" as ModeId, icon: "🎴", label: "My Cards", cls: "border-rose-900/40 hover:border-rose-700/60 hover:bg-rose-950/20" },
-            { id: "pinyin" as ModeId, icon: "🔤", label: "Pinyin", cls: "border-cyan-900/40 hover:border-cyan-700/60 hover:bg-cyan-950/20" },
+            { id: "browse" as ModeId, label: "Browse", cls: "border-red-900/40 hover:border-red-700/60 hover:bg-red-950/20" },
+            { id: "practice" as ModeId, label: "Practice", cls: "border-orange-900/40 hover:border-orange-700/60 hover:bg-orange-950/20" },
+            { id: "sentences" as ModeId, label: "Sentences", cls: "border-teal-900/40 hover:border-teal-700/60 hover:bg-teal-950/20" },
+            { id: "flashcards" as ModeId, label: "Flashcards", cls: "border-blue-900/40 hover:border-blue-700/60 hover:bg-blue-950/20" },
+            { id: "quiz" as ModeId, label: "Quiz", cls: "border-yellow-900/40 hover:border-yellow-700/60 hover:bg-yellow-950/20" },
+            { id: "analyze" as ModeId, label: "Analyze", cls: "border-violet-900/40 hover:border-violet-700/60 hover:bg-violet-950/20" },
+            { id: "cards" as ModeId, label: "My Cards", cls: "border-rose-900/40 hover:border-rose-700/60 hover:bg-rose-950/20" },
+            { id: "pinyin" as ModeId, label: "Pinyin", cls: "border-cyan-900/40 hover:border-cyan-700/60 hover:bg-cyan-950/20" },
           ].map((m) => (
             <button
               key={m.id}
               onClick={() => onSelectMode(m.id)}
               className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-neutral-900 border transition-all ${m.cls}`}
             >
-              <span className="text-2xl">{m.icon}</span>
+              <img src={modeIcons[m.id]} alt={m.label} className="w-6 h-6 object-contain" />
               <span className="text-sm font-semibold text-gray-200">{m.label}</span>
             </button>
           ))}
@@ -1618,7 +1615,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
             <ModeSectionMobile
               key={m.id}
               id={m.id}
-              icon={m.icon}
               title={m.title}
               subtitle={m.subtitle}
               description={m.description}
@@ -1644,7 +1640,6 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
             <ModeSectionDesktop
               key={m.id}
               id={m.id}
-              icon={m.icon}
               title={m.title}
               subtitle={m.subtitle}
               description={m.description}
