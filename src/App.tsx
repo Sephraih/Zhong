@@ -784,10 +784,10 @@ function AppContent() {
                 >
                   {/* Show only icon on mobile, icon+label on desktop */}
                   <span className="sm:hidden">
-                    <img src={modeIcons[mode.id]} alt={mode.label} className="w-5 h-5 object-contain" />
+                    <img src={modeIcons[mode.id]} alt={mode.label} className="w-6 h-6 object-contain" />
                   </span>
                   <span className="hidden sm:inline-flex items-center gap-1.5">
-                    <img src={modeIcons[mode.id]} alt="" className="w-4 h-4 object-contain" />
+                    <img src={modeIcons[mode.id]} alt="" className="w-5 h-5 object-contain" />
                     {mode.label}
                   </span>
                 </button>
@@ -838,7 +838,7 @@ function AppContent() {
       ) : (
         <div className={`border-b border-neutral-800/60 relative z-30 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex gap-4 items-center justify-between overflow-x-auto scrollbar-none">
               <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
@@ -1232,7 +1232,10 @@ function AppContent() {
         {viewMode === "practice" && (
           <div>
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">🔥 Practice Session</h2>
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+                <img src={modeIcons.practice} alt="" className="w-8 h-8 object-contain" />
+                Practice Session
+              </h2>
             </div>
             <PracticeMode
               allWords={visibleVocabulary}
@@ -1249,7 +1252,10 @@ function AppContent() {
         {viewMode === "flashcards" && (
           <div>
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">🃏 Flashcard Mode</h2>
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+                <img src={modeIcons.flashcards} alt="" className="w-8 h-8 object-contain" />
+                Flashcard Mode
+              </h2>
               <p className="text-gray-400">Tap to reveal · Hover characters for pinyin</p>
             </div>
 
@@ -1269,7 +1275,10 @@ function AppContent() {
         {viewMode === "quiz" && (
           <div>
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">✏️ Quiz Mode</h2>
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+                <img src={modeIcons.quiz} alt="" className="w-8 h-8 object-contain" />
+                Quiz Mode
+              </h2>
               <p className="text-gray-400">Test your knowledge with multiple choice questions!</p>
             </div>
 
@@ -1286,7 +1295,10 @@ function AppContent() {
         {viewMode === "sentences" && (
           <div>
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">💬 Sentence Practice</h2>
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+                <img src={modeIcons.sentences} alt="" className="w-8 h-8 object-contain" />
+                Sentence Practice
+              </h2>
               <p className="text-gray-400">Practice reading and understanding example sentences</p>
             </div>
 

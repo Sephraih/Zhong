@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { modeIcons } from "../assets/modeIcons";
 import type { VocabWord } from "../data/vocabulary";
 import { buildDictionarySet, buildLookupMap, enrichTokens } from "../utils/analyzeUtils";
 import { segmentText, type Token } from "../utils/segment";
@@ -383,7 +384,10 @@ export function AnalyzeMode({ vocabulary, onPremiumRequired, onSignIn, onNavigat
   return (
     <div className="max-w-5xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">🔍 Analyze</h2>
+        <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+          <img src={modeIcons.analyze} alt="" className="w-8 h-8 object-contain" />
+          Analyze
+        </h2>
         <p className="text-gray-400 text-sm">Paste Chinese text to reveal pinyin, look up words, and listen</p>
       </div>
 

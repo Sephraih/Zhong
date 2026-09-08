@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { modeIcons } from "../assets/modeIcons";
 import { useCardStore, type CustomCard, type Deck, type DeckCard } from "../hooks/useCardStore";
 import type { VocabWord } from "../data/vocabulary";
 import { buildLookupMap } from "../utils/analyzeUtils";
@@ -452,7 +453,7 @@ export function CardsDecksMode({ vocabulary, onNavigateToBrowse, onOpenAuth }: C
   if (!user) {
     return (
       <div className="max-w-lg mx-auto text-center py-16 px-4">
-        <p className="text-5xl mb-5">🎴</p>
+        <img src={modeIcons.cards} alt="" className="w-14 h-14 object-contain mx-auto mb-5" />
         <h2 className="text-2xl font-bold text-white mb-3">Sign in to use My Cards & Decks</h2>
         <p className="text-gray-400 mb-5">
           Create custom flashcards and organise them into decks that sync with Flashcard mode.
@@ -471,7 +472,10 @@ export function CardsDecksMode({ vocabulary, onNavigateToBrowse, onOpenAuth }: C
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-white mb-2">🎴 My Cards & Decks</h2>
+        <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+          <img src={modeIcons.cards} alt="" className="w-8 h-8 object-contain" />
+          My Cards & Decks
+        </h2>
         <p className="text-gray-400 text-sm">Build custom flashcard decks — saved in your browser</p>
       </div>
 

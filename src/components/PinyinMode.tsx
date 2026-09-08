@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { modeIcons } from "../assets/modeIcons";
 import type { VocabWord } from "../data/vocabulary";
 import {
   SYLLABLE_TABLE,
@@ -139,7 +140,10 @@ export function PinyinMode({ vocabulary, onNavigateToSupport }: PinyinModeProps)
   return (
     <div className="max-w-5xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-white mb-2">🔤 Pinyin Builder</h2>
+        <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+          <img src={modeIcons.pinyin} alt="" className="w-8 h-8 object-contain" />
+          Pinyin Builder
+        </h2>
         <p className="text-gray-400">Select an initial, final, and tone to build a syllable</p>
       </div>
 

@@ -880,7 +880,7 @@ function ModeSectionDesktop({
         >
           <div>
             <div className="flex items-center gap-3 mb-5">
-              <img src={modeIcons[id]} alt={title} className="w-9 h-9 object-contain" />
+              <img src={modeIcons[id]} alt={title} className="w-14 h-14 object-contain" />
               <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
             </div>
             <h2 className="text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">{title}</h2>
@@ -981,7 +981,7 @@ function ModeSectionMobile({
     <section id={id} className="relative overflow-hidden py-14">
       <div className="relative z-10 max-w-md mx-auto px-4">
         <div className="flex items-center gap-3 mb-4">
-          <img src={modeIcons[id]} alt={title} className="w-8 h-8 object-contain" />
+          <img src={modeIcons[id]} alt={title} className="w-12 h-12 object-contain" />
           <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
         </div>
 
