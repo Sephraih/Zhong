@@ -728,19 +728,19 @@ function AppContent() {
         className={`sticky top-0 z-50 backdrop-blur-xl border-b border-neutral-800 transition-all duration-300 ${
           showAppBackground ? "bg-neutral-950/80" : "bg-neutral-950/90"
         } ${
-          !headerVisible && isMobile
+          !headerVisible && isMobile && viewMode !== "home"
             ? "-translate-y-full opacity-0 pointer-events-none"
             : "translate-y-0 opacity-100"
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-16 gap-2">
             {/* Logo */}
             <button
               onClick={() => {
                 navigate("home");
               }}
-              className="flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
+              className="flex-shrink-0 flex items-center gap-2 sm:gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600/40"
               title="Go to Home"
             >
               {logoImage ? (
@@ -761,7 +761,7 @@ function AppContent() {
             </button>
 
             {/* Mode Nav — visible on both mobile and desktop */}
-            <nav className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
+            <nav className="flex-1 min-w-0 flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
               {[
                 { id: "browse" as ViewMode, label: "Browse" },
                 { id: "practice" as ViewMode, label: "Practice" },
@@ -795,7 +795,7 @@ function AppContent() {
             </nav>
 
             {/* Auth Section — compact on mobile */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex-shrink-0 flex items-center gap-1 sm:gap-2">
               {/* Desktop: full auth header */}
               <div className="hidden sm:block">
                 <AuthHeader onOpenAuth={openAuthModal} onOpenProfile={() => navigate("profile")} />
@@ -838,7 +838,7 @@ function AppContent() {
       ) : (
         <div className={`border-b border-neutral-800/60 relative z-30 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex gap-4 items-center justify-between overflow-x-auto scrollbar-none">
+            <div className="flex flex-wrap gap-3 items-center justify-between">
               <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
@@ -855,7 +855,7 @@ function AppContent() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30" />
                   <span className="text-sm text-gray-500">
                     HSK 2{" "}
@@ -872,7 +872,7 @@ function AppContent() {
                 </div>
 
                 {totalHsk3 > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
                     <span className="text-sm text-gray-500">
                       HSK 3{" "}
@@ -890,7 +890,7 @@ function AppContent() {
                 )}
 
                 {totalHsk4 > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
                     <span className="text-sm text-gray-500">
                       HSK 4{" "}
@@ -908,7 +908,7 @@ function AppContent() {
                 )}
 
                 {totalHsk5 > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-pink-500 shadow-sm shadow-pink-500/30" />
                     <span className="text-sm text-gray-500">
                       HSK 5{" "}
@@ -926,7 +926,7 @@ function AppContent() {
                 )}
 
                 {totalHsk6 > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500/30" />
                     <span className="text-sm text-gray-500">
                       HSK 6{" "}
@@ -943,7 +943,7 @@ function AppContent() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
                   <span className="text-sm text-gray-500">
                     Available{" "}
