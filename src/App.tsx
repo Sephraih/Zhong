@@ -504,11 +504,6 @@ function AppContent() {
   const availableTotal = visibleVocabulary.length;
 
   // Total words in dataset (regardless of access)
-  const totalHsk3 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 3).length, [vocabulary]);
-  const totalHsk4 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 4).length, [vocabulary]);
-  const totalHsk5 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 5).length, [vocabulary]);
-  const totalHsk6 = useMemo(() => vocabulary.filter((w) => w.hskLevel === 6).length, [vocabulary]);
-
   // Available words per level
   const hsk1Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 1).length, [visibleVocabulary]);
   const hsk2Count = useMemo(() => visibleVocabulary.filter((w) => w.hskLevel === 2).length, [visibleVocabulary]);
@@ -808,195 +803,16 @@ function AppContent() {
         </div>
       </header>
 
-      {/* Stats / CTA Banner */}
-      {viewMode === "home" && !accessInfo.isLoggedIn ? (
-        <div className="border-b border-neutral-800/60 relative z-30 bg-neutral-950">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
-                <span className="text-sm text-gray-200">
-                  HSK 1:{" "}
-                  <span className="font-bold text-white tabular-nums">{hsk1Count}/{vocabulary.filter((w) => w.hskLevel === 1).length}</span>
-                  <span className="ml-1 text-gray-300" title="Sign in to see all">🔒</span>
-                </span>
-              </div>
-
-              {dataSource === "fallback" && (
-                <span className="inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
-                  ⚡ Preview
-                </span>
-              )}
-
-              <span className="text-sm text-white">
-                <span className="font-semibold text-red-400">Sign up</span> to unlock full HSK 1 for free, save progress and purchase HSK levels 2–6{" "}
-                <span className="text-gray-400">(lifetime access for $9.99)</span>.
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className={`border-b border-neutral-800/60 relative z-30 ${showAppBackground ? "bg-neutral-950/70 backdrop-blur-sm" : "bg-neutral-950"}`}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex flex-wrap gap-3 items-center justify-between">
-              <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30" />
-                  <span className="text-sm text-gray-500">
-                    HSK 1{" "}
-                    <span className="font-bold text-gray-300 tabular-nums">
-                      {learnedHsk1Count}/{hsk1Count}
-                    </span>
-                    {!accessInfo.isLoggedIn && (
-                      <span className="ml-1 text-gray-400" title="Sign in to see all">
-                        🔒
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                <div className="hidden sm:flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30" />
-                  <span className="text-sm text-gray-500">
-                    HSK 2{" "}
-                    {hasAccessToLevel(2) ? (
-                      <span className="font-bold text-gray-300 tabular-nums">
-                        {learnedHsk2Count}/{hsk2Count}
-                      </span>
-                    ) : (
-                      <span className="font-bold text-gray-400" title={lockReasonForLevel(2) || undefined}>
-                        🔒
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                {totalHsk3 > 0 && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 3{" "}
-                      {hasAccessToLevel(3) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk3Count}/{hsk3Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(3) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {totalHsk4 > 0 && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm shadow-orange-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 4{" "}
-                      {hasAccessToLevel(4) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk4Count}/{hsk4Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(4) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {totalHsk5 > 0 && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-pink-500 shadow-sm shadow-pink-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 5{" "}
-                      {hasAccessToLevel(5) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk5Count}/{hsk5Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(5) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {totalHsk6 > 0 && (
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500/30" />
-                    <span className="text-sm text-gray-500">
-                      HSK 6{" "}
-                      {hasAccessToLevel(6) ? (
-                        <span className="font-bold text-gray-300 tabular-nums">
-                          {learnedHsk6Count}/{hsk6Count}
-                        </span>
-                      ) : (
-                        <span className="font-bold text-gray-400" title={lockReasonForLevel(6) || undefined}>
-                          🔒
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                <div className="hidden sm:flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/30" />
-                  <span className="text-sm text-gray-500">
-                    Available{" "}
-                    <span className="font-bold text-gray-300 tabular-nums">{availableTotal}</span>
-                    <span className="text-gray-600">/{vocabulary.length}</span>
-                  </span>
-                </div>
-
-                {/* Data source indicator */}
-                {dataSource === "fallback" && (
-                  <span className="hidden sm:inline-flex text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded-full border border-yellow-800/50">
-                    ⚡ Preview
-                  </span>
-                )}
-
-                {isPending && (
-                  <span className="hidden sm:inline-flex text-xs text-gray-400 bg-neutral-900 px-2 py-0.5 rounded-full border border-neutral-800">
-                    Syncing…
-                  </span>
-                )}
-              </div>
-
-              {/* Right side: Learned + progress + CTA aligned to the far right */}
-              <div className="flex items-center gap-3 ml-auto">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">
-                    ✅ Learned{" "}
-                    <span className="font-bold text-emerald-400 tabular-nums">
-                      {learnedAvailableCount}/{availableTotal}
-                    </span>
-                  </span>
-                  <div className="w-24 sm:w-32 h-2 bg-neutral-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                      style={{ width: `${availableTotal > 0 ? (learnedAvailableCount / availableTotal) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <span className="hidden sm:inline text-xs text-gray-500 font-medium">
-                    {availableTotal > 0 ? Math.round((learnedAvailableCount / availableTotal) * 100) : 0}%
-                  </span>
-                </div>
-
-                {!accessInfo.isLoggedIn && (
-                  <button
-                    onClick={() => openAuthModal("signup")}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-900/70 border border-neutral-800 text-gray-200 hover:bg-neutral-800 hover:border-neutral-700 transition-colors"
-                    title="Create a free account to unlock full HSK 1 and save your progress!"
-                  >
-                    🔓 Sign up to unlock
-                  </button>
-                )}
-              </div>
-            </div>
+      {/* Anonymous sign-in nudge — disappears once logged in */}
+      {!accessInfo.isLoggedIn && (
+        <div className="relative z-30 bg-neutral-950 border-b border-neutral-800/60">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 flex items-center justify-center">
+            <button
+              onClick={() => openAuthModal("signup")}
+              className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors"
+            >
+              🔒 Sign in to access all words
+            </button>
           </div>
         </div>
       )}
@@ -1006,9 +822,17 @@ function AppContent() {
 
         {viewMode === "profile" && (
           <ProfilePage
-            totalWords={vocabulary.length}
+            totalWords={availableTotal}
             learnedCount={learnedCount}
             stillLearningCount={stillLearningCount}
+            perLevelCounts={[
+              { level: 1, learned: learnedHsk1Count, total: hsk1Count },
+              { level: 2, learned: learnedHsk2Count, total: hsk2Count },
+              { level: 3, learned: learnedHsk3Count, total: hsk3Count },
+              { level: 4, learned: learnedHsk4Count, total: hsk4Count },
+              { level: 5, learned: learnedHsk5Count, total: hsk5Count },
+              { level: 6, learned: learnedHsk6Count, total: hsk6Count },
+            ].filter(({ total }) => total > 0)}
             onBack={() => navigate("browse")}
             onOpenAuth={() => openAuthModal("login")}
           />

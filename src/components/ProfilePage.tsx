@@ -6,15 +6,31 @@ import {
   AVAILABLE_LEVELS,
 } from "../utils/hskAccess";
 
+interface LevelCount {
+  level: number;
+  learned: number;
+  total: number;
+}
+
+const LEVEL_COLORS: Record<number, { bar: string; text: string }> = {
+  1: { bar: "from-emerald-500 to-emerald-400", text: "text-emerald-400" },
+  2: { bar: "from-blue-500 to-blue-400", text: "text-blue-400" },
+  3: { bar: "from-purple-500 to-purple-400", text: "text-purple-400" },
+  4: { bar: "from-orange-500 to-orange-400", text: "text-orange-400" },
+  5: { bar: "from-pink-500 to-pink-400", text: "text-pink-400" },
+  6: { bar: "from-cyan-500 to-cyan-400", text: "text-cyan-400" },
+};
+
 interface ProfilePageProps {
   totalWords: number;
   learnedCount: number;
   stillLearningCount: number;
+  perLevelCounts: LevelCount[];
   onBack: () => void;
   onOpenAuth?: () => void;
 }
 
-export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBack, onOpenAuth }: ProfilePageProps) {
+export function ProfilePage({ totalWords, learnedCount, stillLearningCount, perLevelCounts, onBack, onOpenAuth }: ProfilePageProps) {
   const { user, isLoading, accountTier, hasPassword, purchasePremium, changeEmail, changePassword, deleteAccount, exportMyData, isCheckingOut, error: authError, clearError } = useAuth();
 
   // Only blank the whole page for the *initial* auth check (avoids the sign-in flash). Once
@@ -222,6 +238,31 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, onBa
                 />
               </div>
             </div>
+
+            {perLevelCounts.length > 0 && (
+              <>
+                <div className="border-t border-neutral-800 my-1" />
+                {perLevelCounts.map(({ level, learned, total }) => {
+                  const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
+                  const colors = LEVEL_COLORS[level] ?? LEVEL_COLORS[1];
+                  return (
+                    <div key={level}>
+                      <div className="flex justify-between text-sm text-gray-400 mb-1">
+                        <span>HSK {level}</span>
+                        <span className={colors.text}>{learned}/{total} · {pct}%</span>
+                      </div>
+                      <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full bg-gradient-to-r ${colors.bar}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             <div className="text-xs text-gray-500 pt-2">
               Total words available: <span className="text-gray-300 font-semibold">{totalWords}</span>
             </div>
