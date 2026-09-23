@@ -1511,7 +1511,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
           <img
             src={logoImage}
             alt="HamHao Logo"
-            className="w-16 h-16 rounded-2xl shadow-xl shadow-red-900/40 mb-6 object-cover"
+            className="w-16 h-16 rounded-2xl shadow-xl shadow-red-900/40 mb-6 object-cover mx-auto"
           />
         ) : (
           <div className="inline-flex items-center justify-center w-16 h-16 bg-red-600 rounded-2xl shadow-xl shadow-red-900/40 mb-6">
