@@ -879,12 +879,11 @@ function ModeSectionDesktop({
           }`}
         >
           <div>
-            <div className="flex items-center gap-3 mb-5">
-              <img src={modeIcons[id]} alt={title} className="w-14 h-14 object-contain" />
-              <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
+            <div className="flex items-center gap-4 mb-5">
+              <img src={modeIcons[id]} alt={title} className="w-14 h-14 object-contain flex-shrink-0" />
+              <h2 className={`text-5xl lg:text-6xl font-black tracking-tight leading-none ${accentText}`}>{title}</h2>
             </div>
-            <h2 className="text-5xl lg:text-6xl font-black text-white tracking-tight leading-none">{title}</h2>
-            <p className={`mt-2 text-lg font-semibold ${accentText}`}>{subtitle}</p>
+            <p className={`text-lg font-semibold ${accentText}`}>{subtitle}</p>
             <p className="mt-4 text-gray-400 leading-relaxed max-w-lg">{description}</p>
 
             <ul className="mt-6 space-y-2.5">
@@ -981,12 +980,11 @@ function ModeSectionMobile({
     <section id={id} className="relative overflow-hidden py-14">
       <div className="relative z-10 max-w-md mx-auto px-4">
         <div className="flex items-center gap-3 mb-4">
-          <img src={modeIcons[id]} alt={title} className="w-12 h-12 object-contain" />
-          <span className={`text-xs font-bold tracking-widest uppercase ${accentText}`}>Study Mode</span>
+          <img src={modeIcons[id]} alt={title} className="w-12 h-12 object-contain flex-shrink-0" />
+          <h2 className={`text-4xl font-black tracking-tight leading-none ${accentText}`}>{title}</h2>
         </div>
 
-        <h2 className="text-4xl font-black text-white tracking-tight leading-none">{title}</h2>
-        <p className={`mt-2 text-base font-semibold ${accentText}`}>{subtitle}</p>
+        <p className={`text-base font-semibold ${accentText}`}>{subtitle}</p>
         <p className="mt-4 text-gray-400 leading-relaxed">{description}</p>
 
         <ul className="mt-5 space-y-2 text-sm text-gray-300">
@@ -1656,7 +1654,8 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
       )}
 
       {/* Floating download buttons — bottom-right, always visible */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-row gap-2 items-end">
+      <div className="fixed bottom-5 right-5 sm:right-5 left-0 sm:left-auto z-50 flex flex-row gap-2 items-end justify-center sm:justify-end pointer-events-none">
+        <div className="flex flex-row gap-2 items-end pointer-events-auto">
         {/* iOS App Store */}
         <a
           href="https://apps.apple.com/us/app/hamhao-learn-chinese-with-hsk/id6773236841"
@@ -1688,6 +1687,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
             <span className="text-[13px] font-semibold">Join Beta</span>
           </div>
         </a>
+        </div>
       </div>
     </div>
   );
