@@ -399,6 +399,28 @@ function AppContent() {
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollY = useRef(0);
 
+  // Nav overflow indicator
+  const navRef = useRef<HTMLElement>(null);
+  const [showNavChevron, setShowNavChevron] = useState(false);
+
+  const checkNavOverflow = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    setShowNavChevron(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    checkNavOverflow();
+    el.addEventListener("scroll", checkNavOverflow, { passive: true });
+    window.addEventListener("resize", checkNavOverflow, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", checkNavOverflow);
+      window.removeEventListener("resize", checkNavOverflow);
+    };
+  }, [checkNavOverflow]);
+
   const handleScroll = useCallback(() => {
     if (!isMobile) return;
     const currentY = window.scrollY;
@@ -756,38 +778,46 @@ function AppContent() {
             </button>
 
             {/* Mode Nav — visible on both mobile and desktop */}
-            <nav className="flex-1 min-w-0 flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
-              {[
-                { id: "browse" as ViewMode, label: "Browse" },
-                { id: "practice" as ViewMode, label: "Practice" },
-                { id: "sentences" as ViewMode, label: "Sentences" },
-                { id: "flashcards" as ViewMode, label: "Flashcards" },
-                { id: "quiz" as ViewMode, label: "Quiz" },
-                { id: "analyze" as ViewMode, label: "Analyze" },
-                { id: "cards" as ViewMode, label: "My Cards" },
-                { id: "pinyin" as ViewMode, label: "Pinyin" },
-              ].map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() => navigate(mode.id)}
-                  className={`flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
-                    viewMode === mode.id
-                      ? "bg-red-600 text-white shadow-md shadow-red-900/30"
-                      : "text-gray-400 hover:bg-neutral-800 hover:text-white"
-                  }`}
-                  title={mode.label}
-                >
-                  {/* Show only icon on mobile, icon+label on desktop */}
-                  <span className="sm:hidden">
-                    <img src={modeIcons[mode.id]} alt={mode.label} className="w-6 h-6 object-contain" />
-                  </span>
-                  <span className="hidden sm:inline-flex items-center gap-1.5">
-                    <img src={modeIcons[mode.id]} alt="" className="w-5 h-5 object-contain" />
-                    {mode.label}
-                  </span>
-                </button>
-              ))}
-            </nav>
+            <div className="flex-1 min-w-0 relative">
+              <nav ref={navRef} className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
+                {[
+                  { id: "browse" as ViewMode, label: "Browse" },
+                  { id: "practice" as ViewMode, label: "Practice" },
+                  { id: "sentences" as ViewMode, label: "Sentences" },
+                  { id: "flashcards" as ViewMode, label: "Flashcards" },
+                  { id: "quiz" as ViewMode, label: "Quiz" },
+                  { id: "analyze" as ViewMode, label: "Analyze" },
+                  { id: "cards" as ViewMode, label: "My Cards" },
+                  { id: "pinyin" as ViewMode, label: "Pinyin" },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => navigate(mode.id)}
+                    className={`flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                      viewMode === mode.id
+                        ? "bg-red-600 text-white shadow-md shadow-red-900/30"
+                        : "text-gray-400 hover:bg-neutral-800 hover:text-white"
+                    }`}
+                    title={mode.label}
+                  >
+                    {/* Show only icon on mobile, icon+label on desktop */}
+                    <span className="sm:hidden">
+                      <img src={modeIcons[mode.id]} alt={mode.label} className="w-6 h-6 object-contain" />
+                    </span>
+                    <span className="hidden sm:inline-flex items-center gap-1.5">
+                      <img src={modeIcons[mode.id]} alt="" className="w-5 h-5 object-contain" />
+                      {mode.label}
+                    </span>
+                  </button>
+                ))}
+              </nav>
+              {showNavChevron && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 flex items-center justify-end pr-1">
+                  <div className="absolute inset-0 bg-gradient-to-l from-neutral-950 to-transparent" />
+                  <span className="relative text-gray-500 text-sm leading-none select-none">›</span>
+                </div>
+              )}
+            </div>
 
             {/* Auth Section — compact on mobile */}
             <div className="flex-shrink-0 flex items-center gap-1 sm:gap-2">

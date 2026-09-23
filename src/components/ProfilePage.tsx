@@ -146,12 +146,12 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, perL
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-1">👤 Your Profile</h2>
+          <h2 className="text-3xl font-bold text-white mb-1">My Profile</h2>
           <p className="text-gray-400">Manage your learning progress and unlock more levels.</p>
         </div>
         <button
           onClick={onBack}
-          className="px-4 py-2 text-sm font-semibold bg-neutral-900 text-gray-300 rounded-lg border border-neutral-800 hover:border-neutral-700 hover:text-white transition-colors"
+          className="hidden sm:block px-4 py-2 text-sm font-semibold bg-neutral-900 text-gray-300 rounded-lg border border-neutral-800 hover:border-neutral-700 hover:text-white transition-colors"
         >
           ← Back to Learning
         </button>
