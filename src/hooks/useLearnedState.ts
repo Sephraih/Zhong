@@ -39,11 +39,12 @@ export interface LearnedState {
 export function useLearnedState(
   userId?: string,
   vocabulary: VocabWord[] = [],
-  accessToken?: string | null
+  accessToken?: string | null,
+  dataSource: "fallback" | "supabase" = "supabase"
 ): LearnedState {
   // Initialize from localStorage synchronously
   const [learned, setLearned] = useState<Set<number>>(() => loadFromStorage());
-  
+
   // Track if we should attempt cloud sync
   const cloudSyncAttempted = useRef(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +68,15 @@ export function useLearnedState(
 
     // Skip if no vocabulary yet
     if (vocabulary.length === 0) {
+      return;
+    }
+
+    // Wait for the full Supabase vocabulary before decoding learned bits.
+    // If we decode against the fallback subset we'll silently lose any words
+    // that aren't in the fallback, and cloudSyncAttempted prevents a re-try
+    // once the real vocabulary arrives — causing mobile browsers (which start
+    // without a local cache) to show no progress until the next page load.
+    if (dataSource !== "supabase") {
       return;
     }
 
@@ -106,7 +116,7 @@ export function useLearnedState(
         // Cloud sync failed - continue with local state
       }
     }
-  }, [userId, accessToken, vocabulary]);
+  }, [userId, accessToken, vocabulary, dataSource]);
 
   // Debounced cloud save
   const saveToCloud = useCallback(() => {
