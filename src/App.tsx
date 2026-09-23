@@ -1170,7 +1170,14 @@ function AppContent() {
       <footer className={`border-t border-neutral-800 mt-16 relative z-10 ${showAppBackground ? "bg-neutral-950/80 backdrop-blur-sm" : "bg-neutral-950"}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center">
-            <p className="text-sm text-gray-500">🇨🇳 HamHao — Chinese Language Learning — HSK 1-6 Vocabulary</p>
+            <p className="text-sm text-gray-500 flex items-center justify-center gap-2">
+              {logoImage ? (
+                <img src={logoImage} alt="HamHao" className="w-5 h-5 rounded object-cover" />
+              ) : (
+                <span>🇨🇳</span>
+              )}
+              HamHao — Chinese Language Learning — HSK 1-6 Vocabulary
+            </p>
             <p className="text-xs text-gray-600 mt-1">
               {vocabulary.length} words • ✅ {learnedAvailableCount}/{availableTotal} learned
               {dataSource === "fallback" && " • ⚡ Preview mode"}

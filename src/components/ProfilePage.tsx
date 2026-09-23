@@ -188,27 +188,44 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, perL
           </div>
         </div>
 
-        {/* Unlocked Levels */}
-        <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
-          <h3 className="text-lg font-semibold text-white mb-4">Unlocked Levels</h3>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {AVAILABLE_LEVELS.map((level) => {
-              const isUnlocked = accessibleLevels.includes(level);
-              return (
-                <span
-                  key={level}
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
-                    isUnlocked
-                      ? getHskBadgeClasses(level)
-                      : "bg-neutral-800 text-gray-600 border border-neutral-700"
-                  }`}
-                >
-                  {isUnlocked ? "✓ " : "🔒 "}HSK {level}
+        {/* Unlocked Levels — merged with premium status for premium users */}
+        {isPremium ? (
+          <div className="bg-gradient-to-br from-yellow-900/30 to-amber-900/30 border-2 border-yellow-600/50 rounded-2xl p-6 shadow-lg">
+            <div className="text-center mb-4">
+              <div className="text-3xl mb-2">⭐</div>
+              <h3 className="text-lg font-bold text-white">You're a Premium Member!</h3>
+              <p className="text-sm text-gray-400 mt-1">You have access to all available HSK levels, including all future content.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_LEVELS.map((level) => (
+                <span key={level} className={`px-3 py-1.5 rounded-full text-sm font-semibold ${getHskBadgeClasses(level)}`}>
+                  ✓ HSK {level}
                 </span>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-4">Unlocked Levels</h3>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {AVAILABLE_LEVELS.map((level) => {
+                const isUnlocked = accessibleLevels.includes(level);
+                return (
+                  <span
+                    key={level}
+                    className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                      isUnlocked
+                        ? getHskBadgeClasses(level)
+                        : "bg-neutral-800 text-gray-600 border border-neutral-700"
+                    }`}
+                  >
+                    {isUnlocked ? "✓ " : "🔒 "}HSK {level}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Learning Progress */}
         <div className="bg-neutral-900/80 backdrop-blur border border-neutral-800 rounded-2xl p-6 shadow-lg">
@@ -316,17 +333,6 @@ export function ProfilePage({ totalWords, learnedCount, stillLearningCount, perL
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Premium User Message */}
-      {isPremium && (
-        <div className="bg-gradient-to-r from-yellow-900/20 to-amber-900/20 border border-yellow-600/30 rounded-2xl p-6 text-center">
-          <div className="text-4xl mb-3">⭐</div>
-          <h3 className="text-xl font-bold text-white mb-2">You're a Premium Member!</h3>
-          <p className="text-gray-400">
-            You have access to all available HSK levels, including all future content.
-          </p>
         </div>
       )}
 
