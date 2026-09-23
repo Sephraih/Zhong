@@ -737,7 +737,7 @@ function AppContent() {
   const showAppBackground = viewMode !== "home";
 
   return (
-    <div className="min-h-screen bg-black text-white relative">
+    <div className="min-h-screen bg-black text-white relative overflow-x-clip">
       {/* Global background for all modes except landing page */}
       {showAppBackground && <AppBackground darken />}
       {/* Header — hides on scroll down on mobile */}
@@ -812,9 +812,9 @@ function AppContent() {
                 ))}
               </nav>
               {showNavChevron && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-8 flex items-center justify-end pr-1">
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-16 flex items-center justify-end pr-1.5">
                   <div className="absolute inset-0 bg-gradient-to-l from-neutral-950 to-transparent" />
-                  <span className="relative text-gray-500 text-sm leading-none select-none">›</span>
+                  <span className="relative flex items-center text-gray-500 text-sm leading-[0] select-none translate-y-0">›</span>
                 </div>
               )}
             </div>
