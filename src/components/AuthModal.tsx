@@ -142,29 +142,31 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      {/* Backdrop — fixed so it always covers the full screen even when scrolling */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
 
+      {/* Scrollable centering wrapper */}
+      <div className="flex min-h-full items-center justify-center p-4 py-6">
       {/* Modal */}
-      <div className="relative w-full max-w-md mx-4 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-900/50 to-neutral-900 px-8 pt-8 pb-6">
+        <div className="bg-gradient-to-r from-red-900/50 to-neutral-900 px-5 sm:px-8 pt-5 sm:pt-8 pb-4 sm:pb-6">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <div className="flex items-center justify-center w-12 h-12 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
-              <span className="text-white text-xl font-bold">汉</span>
+            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 bg-red-600 rounded-xl shadow-lg shadow-red-900/40">
+              <span className="text-white text-lg sm:text-xl font-bold">汉</span>
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-white text-center">
+          <h2 className="text-xl sm:text-2xl font-bold text-white text-center">
             {mode === "login" ? "Welcome Back"
               : mode === "signup" ? "Create Account"
               : mode === "forgot" ? "Forgot Password"
               : "Set New Password"}
           </h2>
-          <p className="text-gray-400 text-center mt-1">
+          <p className="text-gray-400 text-center mt-1 text-sm sm:text-base">
             {mode === "login" ? "Sign in to continue your learning"
               : mode === "signup" ? "Start your Chinese learning journey"
               : mode === "forgot" ? "Enter your email and we'll send a reset link"
@@ -173,7 +175,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-8 py-6">
+        <form onSubmit={handleSubmit} className="px-5 sm:px-8 py-4 sm:py-6">
           {error && (
             <div className="mb-4 p-3 bg-red-950/50 border border-red-900/50 rounded-lg text-red-400 text-sm">
               {error}
@@ -415,6 +417,7 @@ export function AuthModal({ isOpen, onClose, initialMode = "login" }: AuthModalP
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   );
